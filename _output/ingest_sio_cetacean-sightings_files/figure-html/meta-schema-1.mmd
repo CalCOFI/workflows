@@ -1,0 +1,103 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    cetacean_segment {
+        int segment_id PK
+        varchar cruise_label_effort
+        varchar cruise_label
+        varchar season
+        varchar datetime_start_local
+        varchar datetime_end_local
+        timestamp datetime_start_utc
+        timestamp datetime_end_utc
+        double latitude_start
+        double longitude_start
+        double latitude_end
+        double longitude_end
+        double latitude
+        double longitude
+        varchar comment
+        varchar analyst_comment
+        varchar station_from
+        varchar station_to
+        double segment_length_km
+        int transect_number
+        double transect_length_km
+        double line
+        double line_length_km
+        geometry geom
+        varchar grid_key
+        varchar cruise_key
+    }
+    cetacean_sighting {
+        int sighting_id PK
+        varchar cruise_label
+        varchar season
+        varchar datetime_local
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
+        int segment_id FK
+        varchar observer_port
+        varchar observer_starboard
+        double group_size_best
+        double group_size_min
+        double group_size_max
+        varchar calf_raw
+        int calf_count
+        varchar species_code FK
+        varchar species2_raw
+        varchar effort_flag_original
+        varchar off_effort_code
+        varchar transect_flag_original
+        varchar off_transect_code
+        varchar effort_status
+        varchar behavior_primary
+        varchar behavior_other1
+        varchar behavior_other2
+        varchar comments
+        double speed_over_ground_kn
+        varchar analyst_comment
+        geometry geom
+        varchar grid_key
+        varchar cruise_key
+    }
+    cetacean_species {
+        varchar species_code PK
+        varchar common_name
+        varchar suborder
+        varchar scientific_name
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar dataset_name_short
+        varchar category
+        varchar color
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+        varchar doi
+        varchar license_url
+        varchar acknowledgement
+        varchar contact
+    }
+    cetacean_segment ||--o{ cetacean_sighting : "segment_id"
+    cetacean_species ||--o{ cetacean_sighting : "species_code"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class cetacean_segment,cetacean_sighting lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class cetacean_species lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white

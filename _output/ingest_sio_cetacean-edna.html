@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.25">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Ingest SIO Cetacean eDNA Detections</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="ingest_sio_cetacean-edna_files/libs/clipboard/clipboard.min.js"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-html/popper.min.js"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-html/anchor.min.js"></script>
+<link href="ingest_sio_cetacean-edna_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="ingest_sio_cetacean-edna_files/libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="ingest_sio_cetacean-edna_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="ingest_sio_cetacean-edna_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="ingest_sio_cetacean-edna_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-diagram/mermaid.min.js"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/quarto-diagram/mermaid-init.js"></script>
+<link href="ingest_sio_cetacean-edna_files/libs/quarto-diagram/mermaid.css" rel="stylesheet">
+<link href="ingest_sio_cetacean-edna_files/libs/htmltools-fill-0.5.9/fill.css" rel="stylesheet">
+<script src="ingest_sio_cetacean-edna_files/libs/htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<link href="ingest_sio_cetacean-edna_files/libs/datatables-css-0.0.0/datatables-crosstalk.css" rel="stylesheet">
+<script src="ingest_sio_cetacean-edna_files/libs/datatables-binding-0.34.0/datatables.js"></script>
+<script src="ingest_sio_cetacean-edna_files/libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<link href="ingest_sio_cetacean-edna_files/libs/dt-core-1.13.6/css/jquery.dataTables.min.css" rel="stylesheet">
+<link href="ingest_sio_cetacean-edna_files/libs/dt-core-1.13.6/css/jquery.dataTables.extra.css" rel="stylesheet">
+<script src="ingest_sio_cetacean-edna_files/libs/dt-core-1.13.6/js/jquery.dataTables.min.js"></script>
+<link href="ingest_sio_cetacean-edna_files/libs/crosstalk-1.2.2/css/crosstalk.min.css" rel="stylesheet">
+<script src="ingest_sio_cetacean-edna_files/libs/crosstalk-1.2.2/js/crosstalk.min.js"></script>
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Ingest SIO Cetacean eDNA Detections</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="overview" class="level2">
+<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<p><strong>Source</strong>: <code>data/edna_data/edna.csv</code> in <a href="https://github.com/CalCOFI/marmam-app">CalCOFI/marmam-app</a>, read from a pinned commit. One row per NOAA CalCOFI Genomics Program (NCOG) seawater sample screened for cetaceans: 136 rows over 12 cruises (2014-02 to 2016-11), mostly 10 m. Seven species columns (<code>Gg</code>, <code>Tt</code>, <code>Mn</code>, <code>Dc</code>, <code>Lb</code>, <code>Lo</code>, <code>Dd</code>) hold an <code>x</code> where the species’ DNA was detected. <code>eDNA_Process</code> says whether the sample was sequenced (71) or did not amplify (65, “not sequenced PCR negative”).</p>
+<p>The app’s <code>edna-processed.csv</code> is not read (a re-typed copy). This is <strong>not</strong> <code>calpoly_whale-edna</code> (the Zenodo ASV tables behind a whale-density model).</p>
+<ul>
+<li><strong>Provider</strong>: <code>sio</code> (tentative; the samples are NCOG’s, the screening appears to be the Whale Acoustics Lab’s; Q03)</li>
+<li><strong>Grain</strong>: one water sample (<code>sample_label</code>, the NCOG name <code>YYYYMM_LLL.L_SSS.S_depth</code>)</li>
+<li><strong>Occurrence</strong>: <code>edna_presence</code> 1/0 for each of the seven species on every <strong>sequenced</strong> sample: 1 = the species’ DNA was detected, 0 = it was not detected in a sample that amplified and was sequenced (a non-detection, not a confirmed absence). A PCR-negative sample (“not sequenced PCR negative”) did not amplify, so it says nothing about any species: it is kept as a <code>sample</code> row with <strong>no</strong> <code>obs</code> until the provider answers Q04 (Ben, 2026-10-01)</li>
+<li><strong>Time</strong>: the table gives none. NCOG filters its eDNA from the CTD-rosette Niskin bottles, so each sample takes the time and cruise of its <code>calcofi_bottle</code> cast: the one cast at the same station on the cruise of the label’s month, found with <code>match_by_site_datetime()</code>, then the Niskin bottle nearest the sample’s depth with <code>match_nearest_by_depth()</code> (Q06)</li>
+</ul>
+<div class="cell" data-layout-align="default">
+<div class="cell-output-display">
+<div>
+<p></p><figure class="figure"><p></p>
+<div>
+<pre class="mermaid mermaid-js">graph LR
+  R[edna.csv&lt;br/&gt;one row per sample, 7 species columns] --&gt; S[edna_sample]
+  R --&gt; D[edna_detection&lt;br/&gt;sample x species, 0/1]
+  D -.sample_label.-&gt; S
+  B[calcofi_bottle&lt;br/&gt;cast + Niskin bottle] -.site + cruise month, depth.-&gt; S
+</pre>
+</div>
+<p></p></figure><p></p>
+</div>
+</div>
+</div>
+</section>
+<section id="setup" class="level2">
+<h2 class="anchored" data-anchor-id="setup">Setup</h2>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"../calcofi4r"</span>))</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  CalCOFI<span class="sc">/</span>calcofi4db, CalCOFI<span class="sc">/</span>calcofi4r,</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  DBI, dplyr, DT, fs, glue, here, jsonlite, knitr,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  lubridate, purrr, readr, sf, stringr, tibble, tidyr, <span class="at">quiet =</span> T)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> F)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">DT.options =</span> <span class="fu">list</span>(<span class="at">scrollX =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="fu">here</span>(<span class="st">"libs/ingest.R"</span>))</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>cc           <span class="ot">&lt;-</span> <span class="fu">read_calcofi_meta</span>(<span class="fu">here</span>(<span class="st">"ingest_sio_cetacean-edna.qmd"</span>))</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>provider     <span class="ot">&lt;-</span> cc<span class="sc">$</span>provider</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>dataset      <span class="ot">&lt;-</span> cc<span class="sc">$</span>dataset</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>tables_owned <span class="ot">&lt;-</span> cc<span class="sc">$</span>tables_owned</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>ds_key       <span class="ot">&lt;-</span> <span class="fu">as.character</span>(<span class="fu">glue</span>(<span class="st">"{provider}_{dataset}"</span>))</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>dir_label    <span class="ot">&lt;-</span> ds_key</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>dir_parquet  <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="fu">glue</span>(<span class="st">"data/parquet/{dir_label}"</span>))</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>dir_stage    <span class="ot">&lt;-</span> <span class="fu">cc_stage_path</span>(<span class="st">"parquet"</span>, dir_label, <span class="at">create =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>db_path      <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="fu">glue</span>(<span class="st">"data/wrangling/{dir_label}.duckdb"</span>))</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>dir_meta     <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="fu">glue</span>(<span class="st">"metadata/{provider}/{dataset}"</span>))</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>dir_dl       <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="fu">glue</span>(<span class="st">"data/cache/{dir_label}"</span>)); <span class="fu">dir_create</span>(dir_dl)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>publish_to_gcs <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_SKIP_GCS"</span>) <span class="sc">==</span> <span class="st">""</span></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (overwrite) {</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">file_exists</span>(db_path))                 <span class="fu">file_delete</span>(db_path)</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">file_exists</span>(<span class="fu">paste0</span>(db_path, <span class="st">".wal"</span>))) <span class="fu">file_delete</span>(<span class="fu">paste0</span>(db_path, <span class="st">".wal"</span>))</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(<span class="fu">dirname</span>(db_path))</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">get_duckdb_con</span>(db_path)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="fu">load_duckdb_extension</span>(con, <span class="st">"spatial"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="read-source-data" class="level2">
+<h2 class="anchored" data-anchor-id="read-source-data">Read Source Data</h2>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># CalCOFI/marmam-app at a pinned commit (see ingest_sio_cetacean-sightings.qmd)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>src_sha  <span class="ot">&lt;-</span> <span class="st">"7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80"</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>src_url  <span class="ot">&lt;-</span> <span class="fu">glue</span>(<span class="st">"https://raw.githubusercontent.com/CalCOFI/marmam-app/{src_sha}/data/edna_data/edna.csv"</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>src_file <span class="ot">&lt;-</span> <span class="fu">file.path</span>(dir_dl, <span class="st">"edna.csv"</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>downloaded <span class="ot">&lt;-</span> overwrite_all <span class="sc">||</span> <span class="sc">!</span><span class="fu">file_exists</span>(src_file)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (downloaded) <span class="fu">download.file</span>(src_url, src_file, <span class="at">quiet =</span> <span class="cn">TRUE</span>, <span class="at">mode =</span> <span class="st">"wb"</span>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>src_stamp <span class="ot">&lt;-</span> <span class="fu">stamp_source_access</span>(<span class="at">files =</span> src_file) <span class="sc">|&gt;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">source =</span> <span class="fu">as.character</span>(src_url), <span class="at">method =</span> <span class="cf">if</span> (downloaded) <span class="st">"download"</span> <span class="cf">else</span> <span class="st">"file_mtime"</span>)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (publish_to_gcs) {</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_dl, <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"archive/{provider}/{dataset}"</span>),</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>              <span class="at">bucket =</span> <span class="st">"calcofi-files-public"</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"CALCOFI_SKIP_GCS set -- source NOT archived to gs://calcofi-files-public</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>rsync /Users/bbest/Github/CalCOFI/.worktrees/workflows-pr117/data/cache/sio_cetacean-edna -&gt; gs://calcofi-files-public/archive/sio/cetacean-edna</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Sync complete: 1 copied, 0 removed (rsync)</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 4
+  file    action    size reason        
+  &lt;chr&gt;   &lt;chr&gt;    &lt;dbl&gt; &lt;chr&gt;         
+1 &lt;rsync&gt; uploaded    NA parallel rsync</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>d_raw <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(src_file, <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>sp_cols <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Gg"</span>, <span class="st">"Tt"</span>, <span class="st">"Mn"</span>, <span class="st">"Dc"</span>, <span class="st">"Lb"</span>, <span class="st">"Lo"</span>, <span class="st">"Dd"</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">"row count changed at this commit"</span> <span class="ot">=</span> <span class="fu">nrow</span>(d_raw) <span class="sc">==</span> <span class="dv">136</span>L,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the seven species columns are present"</span> <span class="ot">=</span> <span class="fu">all</span>(sp_cols <span class="sc">%in%</span> <span class="fu">names</span>(d_raw)),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"a species cell is 'x' or blank"</span> <span class="ot">=</span> <span class="fu">all</span>(<span class="fu">unlist</span>(d_raw[sp_cols]) <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"x"</span>, <span class="cn">NA</span>)))</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"edna.csv: {nrow(d_raw)} rows, {sum(unlist(d_raw[sp_cols]) %in% 'x')} detections"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>edna.csv: 136 rows, 15 detections </code></pre>
+</div>
+</div>
+</section>
+<section id="build-sample-detection-tables" class="level2">
+<h2 class="anchored" data-anchor-id="build-sample-detection-tables">Build Sample + Detection Tables</h2>
+<p>Three samples are listed twice, once sequenced and once PCR-negative. The sequenced row is kept (Q05): it is the one that went further through the pipeline, and two of the three carry a detection.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>num <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">suppressWarnings</span>(<span class="fu">as.numeric</span>(x))</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>dupes <span class="ot">&lt;-</span> d_raw <span class="sc">|&gt;</span> <span class="fu">group_by</span>(Sample) <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="fu">n</span>() <span class="sc">&gt;</span> <span class="dv">1</span>) <span class="sc">|&gt;</span> <span class="fu">ungroup</span>()</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">"exactly three samples are listed twice"</span> <span class="ot">=</span> <span class="fu">n_distinct</span>(dupes<span class="sc">$</span>Sample) <span class="sc">==</span> <span class="dv">3</span>L <span class="sc">&amp;&amp;</span> <span class="fu">nrow</span>(dupes) <span class="sc">==</span> <span class="dv">6</span>L,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"each duplicate pair is one sequenced + one PCR-negative row"</span> <span class="ot">=</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(<span class="fu">table</span>(dupes<span class="sc">$</span>eDNA_Process) <span class="sc">==</span> <span class="dv">3</span>L))</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>d_dedup <span class="ot">&lt;-</span> d_raw <span class="sc">|&gt;</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(Sample, eDNA_Process <span class="sc">!=</span> <span class="st">"sequenced"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">distinct</span>(Sample, <span class="at">.keep_all =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>d_sample <span class="ot">&lt;-</span> d_dedup <span class="sc">|&gt;</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">sample_label  =</span> Sample,</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">edna_process  =</span> eDNA_Process,</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">illumina_name =</span> Illumina_name,</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    station_name,</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">season        =</span> <span class="fu">str_trim</span>(season),</span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>    <span class="co"># line/station from the NCOG sample name (YYYYMM_LLL.L_SSS.S_depth), not the</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>    <span class="co"># line/station columns: on 7 rows those disagree with the name, and the</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>    <span class="co"># row's own latitude/longitude sit on the name's station (asserted below)</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">line_src      =</span> <span class="fu">num</span>(line),</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">station_src   =</span> <span class="fu">num</span>(station),</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">line          =</span> <span class="fu">num</span>(<span class="fu">substr</span>(Sample, <span class="dv">8</span>, <span class="dv">12</span>)),</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>    <span class="at">station       =</span> <span class="fu">num</span>(<span class="fu">substr</span>(Sample, <span class="dv">14</span>, <span class="dv">18</span>)),</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>    <span class="at">site_key      =</span> <span class="fu">normalize_site_key</span>(<span class="fu">sprintf</span>(<span class="st">"%.1f %.1f"</span>, line, station)),</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    <span class="at">depth_m       =</span> <span class="fu">num</span>(depth),</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>    <span class="at">latitude      =</span> <span class="fu">num</span>(latitude),</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>    <span class="at">longitude     =</span> <span class="fu">num</span>(longitude),</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>    <span class="at">cruise_label  =</span> cruise,</span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>    <span class="co"># no sampling date in the source: the 15th of the cruise month (CCYYMM) is</span></span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>    <span class="co"># the anchor the bottle-cast match searches around (Q06)</span></span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>    <span class="at">nominal_date  =</span> <span class="fu">make_date</span>(<span class="dv">2000</span>L <span class="sc">+</span> <span class="fu">as.integer</span>(<span class="fu">substr</span>(cruise, <span class="dv">3</span>, <span class="dv">4</span>)),</span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>                              <span class="fu">as.integer</span>(<span class="fu">substr</span>(cruise, <span class="dv">5</span>, <span class="dv">6</span>)), <span class="dv">15</span>L),</span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>    <span class="co"># the match key: station + the cruise's designated year-month, which is</span></span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a>    <span class="co"># how a cruise_key begins (YYYY-MM-NODC)</span></span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">site_ym       =</span> <span class="fu">paste</span>(site_key, <span class="fu">format</span>(nominal_date, <span class="st">"%Y-%m"</span>)))</span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>xy_name <span class="ot">&lt;-</span> <span class="fu">cc_calcofi_to_lonlat</span>(d_sample<span class="sc">$</span>line, d_sample<span class="sc">$</span>station)</span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>n_ls_fix <span class="ot">&lt;-</span> <span class="fu">sum</span>(d_sample<span class="sc">$</span>line <span class="sc">!=</span> d_sample<span class="sc">$</span>line_src <span class="sc">|</span> d_sample<span class="sc">$</span>station <span class="sc">!=</span> d_sample<span class="sc">$</span>station_src)</span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every sample name is YYYYMM_LLL.L_SSS.S_depth"</span> <span class="ot">=</span></span>
+<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(<span class="fu">grepl</span>(<span class="st">"^</span><span class="sc">\\</span><span class="st">d{6}_</span><span class="sc">\\</span><span class="st">d{3}</span><span class="sc">\\</span><span class="st">.</span><span class="sc">\\</span><span class="st">d_</span><span class="sc">\\</span><span class="st">d{3}</span><span class="sc">\\</span><span class="st">.</span><span class="sc">\\</span><span class="st">d_</span><span class="sc">\\</span><span class="st">d+(</span><span class="sc">\\</span><span class="st">.</span><span class="sc">\\</span><span class="st">d+)?$"</span>, d_sample<span class="sc">$</span>sample_label)),</span>
+<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the name's station is where the row's own position is (within 0.02 deg)"</span> <span class="ot">=</span></span>
+<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(<span class="fu">abs</span>(xy_name<span class="sc">$</span>latitude <span class="sc">-</span> d_sample<span class="sc">$</span>latitude) <span class="sc">&lt;</span> <span class="fl">0.02</span> <span class="sc">&amp;</span></span>
+<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>        <span class="fu">abs</span>(xy_name<span class="sc">$</span>longitude <span class="sc">-</span> d_sample<span class="sc">$</span>longitude) <span class="sc">&lt;</span> <span class="fl">0.02</span>),</span>
+<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the name's depth is the depth column"</span> <span class="ot">=</span></span>
+<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(<span class="fu">as.numeric</span>(<span class="fu">sub</span>(<span class="st">".*_"</span>, <span class="st">""</span>, d_sample<span class="sc">$</span>sample_label)) <span class="sc">==</span> d_sample<span class="sc">$</span>depth_m),</span>
+<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>  <span class="st">"sample_label is unique"</span>   <span class="ot">=</span> <span class="sc">!</span><span class="fu">anyDuplicated</span>(d_sample<span class="sc">$</span>sample_label),</span>
+<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every sample has a station, depth and position"</span> <span class="ot">=</span></span>
+<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">anyNA</span>(d_sample<span class="sc">$</span>site_key) <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">anyNA</span>(d_sample<span class="sc">$</span>depth_m) <span class="sc">&amp;&amp;</span></span>
+<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>    <span class="sc">!</span><span class="fu">anyNA</span>(d_sample<span class="sc">$</span>latitude) <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">anyNA</span>(d_sample<span class="sc">$</span>longitude),</span>
+<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>  <span class="st">"cruise_label parses to a date"</span> <span class="ot">=</span> <span class="sc">!</span><span class="fu">anyNA</span>(d_sample<span class="sc">$</span>nominal_date),</span>
+<span id="cb8-53"><a href="#cb8-53" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the label's YYYYMM matches the sample name's"</span> <span class="ot">=</span></span>
+<span id="cb8-54"><a href="#cb8-54" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(<span class="fu">substr</span>(d_sample<span class="sc">$</span>sample_label, <span class="dv">3</span>, <span class="dv">6</span>) <span class="sc">==</span> <span class="fu">substr</span>(d_sample<span class="sc">$</span>cruise_label, <span class="dv">3</span>, <span class="dv">6</span>)))</span>
+<span id="cb8-55"><a href="#cb8-55" aria-hidden="true" tabindex="-1"></a><span class="fu">dbWriteTable</span>(con, <span class="st">"edna_sample"</span>, d_sample, <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-56"><a href="#cb8-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-57"><a href="#cb8-57" aria-hidden="true" tabindex="-1"></a>d_detection <span class="ot">&lt;-</span> d_dedup <span class="sc">|&gt;</span></span>
+<span id="cb8-58"><a href="#cb8-58" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(<span class="at">sample_label =</span> Sample, <span class="fu">all_of</span>(sp_cols)) <span class="sc">|&gt;</span></span>
+<span id="cb8-59"><a href="#cb8-59" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="sc">-</span>sample_label, <span class="at">names_to =</span> <span class="st">"species_code"</span>, <span class="at">values_to =</span> <span class="st">"cell"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb8-60"><a href="#cb8-60" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(sample_label, species_code, <span class="at">detected =</span> <span class="fu">as.integer</span>(cell <span class="sc">%in%</span> <span class="st">"x"</span>))</span>
+<span id="cb8-61"><a href="#cb8-61" aria-hidden="true" tabindex="-1"></a><span class="fu">dbWriteTable</span>(con, <span class="st">"edna_detection"</span>, d_detection, <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-62"><a href="#cb8-62" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-63"><a href="#cb8-63" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"line/station taken from the sample name; the line/station columns disagree on "</span>,</span>
+<span id="cb8-64"><a href="#cb8-64" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{n_ls_fix} rows (Q10)"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>line/station taken from the sample name; the line/station columns disagree on 7 rows (Q10) </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"edna_sample: {nrow(d_sample)} samples "</span>,</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>         <span class="st">"({sum(d_sample$edna_process == 'sequenced')} sequenced); "</span>,</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>         <span class="st">"edna_detection: {nrow(d_detection)} rows, {sum(d_detection$detected)} detections"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>edna_sample: 133 samples (71 sequenced); edna_detection: 931 rows, 15 detections </code></pre>
+</div>
+</div>
+</section>
+<section id="resolve-cruise_key-time-spatial" class="level2">
+<h2 class="anchored" data-anchor-id="resolve-cruise_key-time-spatial">Resolve cruise_key, time + Spatial</h2>
+<p>NCOG eDNA is filtered from the CTD-rosette Niskin bottles, so a sample’s time and cruise are those of its <strong>bottle cast</strong>, not of the net tow at the same station. <code>match_by_site_datetime()</code> finds, for each sample, the <code>calcofi_bottle</code> cast at the <strong>same <code>site_key</code> on the cruise of the label’s month</strong> (key <code>site_ym</code>; exactly one cast per sample at this commit, asserted) nearest the 15th of that month, and <code>match_nearest_by_depth()</code> then finds the Niskin bottle on that cast nearest the sample’s depth (within 5 m). The sample takes the cast’s <code>cruise_key</code> and time. Every one of the 133 samples has its cast, including the 16 on CC1611, a Sally Ride cruise with no net tows (Q06).</p>
+<p>The matched bottle is kept in the source table as evidence (it also confirms the 515 m and 170 m depths, Q09). It is <strong>not</strong> set as a cross-dataset <code>parent_sample_key</code>; that is a modelling decision still open.</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>bottle_parquet <span class="ot">&lt;-</span> <span class="fu">cc_stage_path</span>(<span class="st">"parquet"</span>, <span class="st">"calcofi_bottle"</span>, <span class="st">"sample.parquet"</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">"CREATE OR REPLACE TABLE bottle_cast AS</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="st">   SELECT sample_key AS cast_sample_key, site_key, cruise_key, datetime,</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="st">          site_key || ' ' || substr(cruise_key, 1, 7) AS site_ym</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="st">   FROM read_parquet('{bottle_parquet}')</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="st">   WHERE sample_type = 'cast' AND site_key IS NOT NULL</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="st">     AND cruise_key IS NOT NULL AND datetime IS NOT NULL"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 35595</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"CREATE OR REPLACE TABLE bottle_niskin AS</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="st">   SELECT sample_key AS bottle_sample_key, parent_sample_key AS cast_sample_key,</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="st">          depth_max_m AS depth_m</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="st">   FROM read_parquet('{bottle_parquet}')</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="st">   WHERE sample_type = 'bottle' AND depth_max_m IS NOT NULL</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="st">     AND parent_sample_key IN (</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="st">       SELECT cast_sample_key FROM bottle_cast</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="st">       WHERE site_ym IN (SELECT site_ym FROM edna_sample))"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 2716</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># match_by_site_datetime() takes the nearest cast by date and LIMIT 1, so a</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="co"># station occupied twice on one cruise would be a coin toss: assert there is none</span></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>n_multi_cast <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT COUNT(*) FROM (</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="st">    SELECT site_ym FROM bottle_cast WHERE site_ym IN (SELECT site_ym FROM edna_sample)</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="st">    GROUP BY 1 HAVING COUNT(*) &gt; 1)"</span>)[[<span class="dv">1</span>]]</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"one bottle cast per station x cruise month among the eDNA samples"</span> <span class="ot">=</span> n_multi_cast <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="co"># 45 days either side of the 15th: a cruise can begin late in the month before</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="co"># its designated month (CC1402's cast at 90.0 37.0 is 2014-01-29)</span></span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>cast_match <span class="ot">&lt;-</span> <span class="fu">match_by_site_datetime</span>(</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>  con, <span class="st">"edna_sample"</span>, <span class="st">"bottle_cast"</span>,</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">fk_col =</span> <span class="st">"cast_sample_key"</span>, <span class="at">ref_pk =</span> <span class="st">"cast_sample_key"</span>,</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">key_col =</span> <span class="st">"site_ym"</span>, <span class="at">datetime_col =</span> <span class="st">"nominal_date"</span>, <span class="at">ref_datetime_col =</span> <span class="st">"datetime"</span>,</span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">window_days =</span> <span class="dv">45</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>match_by_site_datetime: 133/133 edna_sample rows matched to bottle_cast (100%) within 45 d</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>niskin_match <span class="ot">&lt;-</span> <span class="fu">match_nearest_by_depth</span>(</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>  con, <span class="st">"edna_sample"</span>, <span class="st">"bottle_niskin"</span>,</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">fk_col =</span> <span class="st">"bottle_sample_key"</span>, <span class="at">ref_pk =</span> <span class="st">"bottle_sample_key"</span>,</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">parent_fk =</span> <span class="st">"cast_sample_key"</span>, <span class="at">axis_col =</span> <span class="st">"depth_m"</span>, <span class="at">tolerance =</span> <span class="dv">5</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>match_nearest_by_depth: 133/133 edna_sample rows matched to bottle_niskin (100%) within 5 depth_m</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="st">"ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS cruise_key VARCHAR"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 0</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="st">"ALTER TABLE edna_sample ADD COLUMN IF NOT EXISTS datetime_start_utc TIMESTAMP"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 0</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbExecute</span>(con, <span class="st">"</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="st">  UPDATE edna_sample e SET cruise_key = c.cruise_key, datetime_start_utc = c.datetime</span></span>
+<span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM bottle_cast c WHERE c.cast_sample_key = e.cast_sample_key"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 133</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="co"># the shared crosswalk (owned by ingest_sio_cetacean-sightings.qmd) is re-validated</span></span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a><span class="co"># here rather than trusted: each key must be the label's year-month + its ship's</span></span>
+<span id="cb26-3"><a href="#cb26-3" aria-hidden="true" tabindex="-1"></a><span class="co"># NODC code, and where an eDNA label is in it (CC1611), the bottle casts must</span></span>
+<span id="cb26-4"><a href="#cb26-4" aria-hidden="true" tabindex="-1"></a><span class="co"># place the samples on that same cruise</span></span>
+<span id="cb26-5"><a href="#cb26-5" aria-hidden="true" tabindex="-1"></a>d_ship  <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(</span>
+<span id="cb26-6"><a href="#cb26-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"SELECT ship_key, ship_nodc FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','ship.parquet')}')"</span>))</span>
+<span id="cb26-7"><a href="#cb26-7" aria-hidden="true" tabindex="-1"></a>d_xwalk <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/sio/cetacean-sightings/cruise_label_crosswalk.csv"</span>),</span>
+<span id="cb26-8"><a href="#cb26-8" aria-hidden="true" tabindex="-1"></a>                    <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb26-9"><a href="#cb26-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(d_ship, <span class="at">by =</span> <span class="st">"ship_key"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb26-10"><a href="#cb26-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">minted =</span> <span class="fu">paste0</span>(<span class="st">"20"</span>, <span class="fu">substr</span>(cruise_label, <span class="dv">3</span>, <span class="dv">4</span>), <span class="st">"-"</span>, <span class="fu">substr</span>(cruise_label, <span class="dv">5</span>, <span class="dv">6</span>), <span class="st">"-"</span>, ship_nodc))</span>
+<span id="cb26-11"><a href="#cb26-11" aria-hidden="true" tabindex="-1"></a>d_label_ck <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb26-12"><a href="#cb26-12" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT cruise_label, COUNT(DISTINCT cruise_key) AS n_keys, ANY_VALUE(cruise_key) AS cruise_key,</span></span>
+<span id="cb26-13"><a href="#cb26-13" aria-hidden="true" tabindex="-1"></a><span class="st">         COUNT(*) AS n_samples</span></span>
+<span id="cb26-14"><a href="#cb26-14" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM edna_sample GROUP BY 1 ORDER BY 1"</span>)</span>
+<span id="cb26-15"><a href="#cb26-15" aria-hidden="true" tabindex="-1"></a>d_xw_edna <span class="ot">&lt;-</span> d_label_ck <span class="sc">|&gt;</span> <span class="fu">inner_join</span>(d_xwalk <span class="sc">|&gt;</span> <span class="fu">select</span>(cruise_label, <span class="at">xwalk_key =</span> cruise_key), <span class="at">by =</span> <span class="st">"cruise_label"</span>)</span>
+<span id="cb26-16"><a href="#cb26-16" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb26-17"><a href="#cb26-17" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every sample has its bottle cast (a new sample without one must be looked at)"</span> <span class="ot">=</span></span>
+<span id="cb26-18"><a href="#cb26-18" aria-hidden="true" tabindex="-1"></a>    cast_match<span class="sc">$</span>matched <span class="sc">==</span> cast_match<span class="sc">$</span>total,</span>
+<span id="cb26-19"><a href="#cb26-19" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every sample has a Niskin bottle within 5 m of its depth on that cast"</span> <span class="ot">=</span></span>
+<span id="cb26-20"><a href="#cb26-20" aria-hidden="true" tabindex="-1"></a>    niskin_match<span class="sc">$</span>matched <span class="sc">==</span> <span class="fu">nrow</span>(d_sample),</span>
+<span id="cb26-21"><a href="#cb26-21" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every sample has a cruise_key and a time"</span> <span class="ot">=</span></span>
+<span id="cb26-22"><a href="#cb26-22" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT COUNT(*) FROM edna_sample</span></span>
+<span id="cb26-23"><a href="#cb26-23" aria-hidden="true" tabindex="-1"></a><span class="st">                     WHERE cruise_key IS NULL OR datetime_start_utc IS NULL"</span>)[[<span class="dv">1</span>]] <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb26-24"><a href="#cb26-24" aria-hidden="true" tabindex="-1"></a>  <span class="st">"a cruise label's samples sit on one cruise_key"</span> <span class="ot">=</span> <span class="fu">all</span>(d_label_ck<span class="sc">$</span>n_keys <span class="sc">==</span> <span class="dv">1</span>),</span>
+<span id="cb26-25"><a href="#cb26-25" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the cruise_key's year-month is the label's"</span> <span class="ot">=</span></span>
+<span id="cb26-26"><a href="#cb26-26" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(<span class="fu">substr</span>(d_label_ck<span class="sc">$</span>cruise_key, <span class="dv">1</span>, <span class="dv">7</span>) <span class="sc">==</span></span>
+<span id="cb26-27"><a href="#cb26-27" aria-hidden="true" tabindex="-1"></a>          <span class="fu">paste0</span>(<span class="st">"20"</span>, <span class="fu">substr</span>(d_label_ck<span class="sc">$</span>cruise_label, <span class="dv">3</span>, <span class="dv">4</span>), <span class="st">"-"</span>, <span class="fu">substr</span>(d_label_ck<span class="sc">$</span>cruise_label, <span class="dv">5</span>, <span class="dv">6</span>))),</span>
+<span id="cb26-28"><a href="#cb26-28" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every crosswalk ship is in the ship reference"</span> <span class="ot">=</span> <span class="sc">!</span><span class="fu">anyNA</span>(d_xwalk<span class="sc">$</span>ship_nodc),</span>
+<span id="cb26-29"><a href="#cb26-29" aria-hidden="true" tabindex="-1"></a>  <span class="st">"each crosswalk cruise_key is the label's year-month + its ship's NODC code"</span> <span class="ot">=</span></span>
+<span id="cb26-30"><a href="#cb26-30" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(d_xwalk<span class="sc">$</span>minted <span class="sc">==</span> d_xwalk<span class="sc">$</span>cruise_key),</span>
+<span id="cb26-31"><a href="#cb26-31" aria-hidden="true" tabindex="-1"></a>  <span class="st">"where the crosswalk names an eDNA label, the bottle casts agree with it"</span> <span class="ot">=</span></span>
+<span id="cb26-32"><a href="#cb26-32" aria-hidden="true" tabindex="-1"></a>    <span class="fu">all</span>(d_xw_edna<span class="sc">$</span>cruise_key <span class="sc">==</span> d_xw_edna<span class="sc">$</span>xwalk_key))</span>
+<span id="cb26-33"><a href="#cb26-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb26-34"><a href="#cb26-34" aria-hidden="true" tabindex="-1"></a>d_depth_gap <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb26-35"><a href="#cb26-35" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT e.sample_label, e.depth_m, n.depth_m AS bottle_depth_m,</span></span>
+<span id="cb26-36"><a href="#cb26-36" aria-hidden="true" tabindex="-1"></a><span class="st">         ABS(e.depth_m - n.depth_m) AS depth_diff_m</span></span>
+<span id="cb26-37"><a href="#cb26-37" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM edna_sample e JOIN bottle_niskin n USING (bottle_sample_key)</span></span>
+<span id="cb26-38"><a href="#cb26-38" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE e.depth_m &lt;&gt; n.depth_m ORDER BY depth_diff_m DESC"</span>)</span>
+<span id="cb26-39"><a href="#cb26-39" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"bottle cast matched for {cast_match$matched}/{cast_match$total} samples; "</span>,</span>
+<span id="cb26-40"><a href="#cb26-40" aria-hidden="true" tabindex="-1"></a>         <span class="st">"Niskin bottle within 5 m for {niskin_match$matched} "</span>,</span>
+<span id="cb26-41"><a href="#cb26-41" aria-hidden="true" tabindex="-1"></a>         <span class="st">"({nrow(d_depth_gap)} not at the exact depth, max {max(c(0, d_depth_gap$depth_diff_m))} m); "</span>,</span>
+<span id="cb26-42"><a href="#cb26-42" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{nrow(d_label_ck)} cruise labels, {nrow(d_xw_edna)} of them in the shared crosswalk"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>bottle cast matched for 133/133 samples; Niskin bottle within 5 m for 133 (12 not at the exact depth, max 4 m); 12 cruise labels, 1 of them in the shared crosswalk </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a>d_label_ck <span class="sc">|&gt;</span> <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Cruise label -&gt; cruise_key, from the bottle casts"</span>, <span class="at">rownames =</span> <span class="cn">FALSE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div class="datatables html-widget html-fill-item" id="htmlwidget-dc41bc4265e516786a2d" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-dc41bc4265e516786a2d">{"x":{"filter":"none","vertical":false,"caption":"<caption>Cruise label -&gt; cruise_key, from the bottle casts<\/caption>","data":[["CC1402","CC1404","CC1407","CC1411","CC1501","CC1504","CC1507","CC1511","CC1601","CC1604","CC1607","CC1611"],[1,1,1,1,1,1,1,1,1,1,1,1],["2014-02-3322","2014-04-32I1","2014-07-32NM","2014-11-32NM","2015-01-32NM","2015-04-32NM","2015-07-32OC","2015-11-32OC","2016-01-33UD","2016-04-3322","2016-07-32I1","2016-11-33P4"],[6,11,15,10,14,11,10,11,10,10,9,16]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>cruise_label<\/th>\n      <th>n_keys<\/th>\n      <th>cruise_key<\/th>\n      <th>n_samples<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":[1,3]},{"name":"cruise_label","targets":0},{"name":"n_keys","targets":1},{"name":"cruise_key","targets":2},{"name":"n_samples","targets":3}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># spatial last: nothing above has to UPDATE a table that carries geometry</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="fu">load_prior_tables</span>(con, <span class="at">parquet_dir =</span> <span class="fu">cc_stage_path</span>(<span class="st">"parquet"</span>, <span class="st">"swfsc_ichthyo"</span>),</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>                  <span class="at">tables =</span> <span class="fu">c</span>(<span class="st">"grid"</span>), <span class="at">geom_tables =</span> <span class="fu">c</span>(<span class="st">"grid"</span>), <span class="at">as_view =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Loaded grid: 218 rows (VIEW) (GEOMETRY)</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 1 × 3
+  table  rows has_geom
+  &lt;chr&gt; &lt;dbl&gt; &lt;lgl&gt;   
+1 grid    218 TRUE    </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">add_point_geom</span>(con, <span class="st">"edna_sample"</span>, <span class="at">lon_col =</span> <span class="st">"longitude"</span>, <span class="at">lat_col =</span> <span class="st">"latitude"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Added geom column to edna_sample table</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="fu">assign_grid_key</span>(con, <span class="st">"edna_sample"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Assigned grid_key to edna_sample: in_grid = 133</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   status   n
+1 in_grid 133</code></pre>
+</div>
+</div>
+</section>
+<section id="load-dataset-metadata-schema" class="level2">
+<h2 class="anchored" data-anchor-id="load-dataset-metadata-schema">Load Dataset Metadata + Schema</h2>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb37"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" aria-hidden="true" tabindex="-1"></a>this_provider <span class="ot">&lt;-</span> provider; this_dataset <span class="ot">&lt;-</span> dataset</span>
+<span id="cb37-2"><a href="#cb37-2" aria-hidden="true" tabindex="-1"></a>d_dataset <span class="ot">&lt;-</span> <span class="fu">ingest_yaml_to_dataset_df</span>(<span class="fu">read_ingest_yaml</span>(<span class="fu">here</span>())) <span class="sc">|&gt;</span></span>
+<span id="cb37-3"><a href="#cb37-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(provider <span class="sc">==</span> this_provider, dataset <span class="sc">==</span> this_dataset)</span>
+<span id="cb37-4"><a href="#cb37-4" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="fu">nrow</span>(d_dataset) <span class="sc">==</span> <span class="dv">1</span>)</span>
+<span id="cb37-5"><a href="#cb37-5" aria-hidden="true" tabindex="-1"></a><span class="fu">dbWriteTable</span>(con, <span class="st">"dataset"</span>, <span class="fu">as.data.frame</span>(d_dataset), <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb37-6"><a href="#cb37-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-7"><a href="#cb37-7" aria-hidden="true" tabindex="-1"></a>d_meas_type <span class="ot">&lt;-</span> <span class="fu">read_measurement_type</span>(<span class="fu">here</span>(<span class="st">"metadata/measurement_type.csv"</span>))</span>
+<span id="cb37-8"><a href="#cb37-8" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"edna_presence is registered"</span> <span class="ot">=</span> <span class="st">"edna_presence"</span> <span class="sc">%in%</span> d_meas_type<span class="sc">$</span>measurement_type)</span>
+<span id="cb37-9"><a href="#cb37-9" aria-hidden="true" tabindex="-1"></a><span class="fu">dbWriteTable</span>(con, <span class="st">"measurement_type"</span>, <span class="fu">as.data.frame</span>(d_meas_type), <span class="at">overwrite =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb37-10"><a href="#cb37-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-11"><a href="#cb37-11" aria-hidden="true" tabindex="-1"></a>d_qual <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/measurement_qual.csv"</span>), <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb37-12"><a href="#cb37-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(code_set <span class="sc">==</span> <span class="st">"cetacean-edna"</span>)</span>
+<span id="cb37-13"><a href="#cb37-13" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"every eDNA_Process value is a registered code"</span> <span class="ot">=</span></span>
+<span id="cb37-14"><a href="#cb37-14" aria-hidden="true" tabindex="-1"></a>            <span class="fu">all</span>(d_sample<span class="sc">$</span>edna_process <span class="sc">%in%</span> d_qual<span class="sc">$</span>qual_code))</span>
+<span id="cb37-15"><a href="#cb37-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb37-16"><a href="#cb37-16" aria-hidden="true" tabindex="-1"></a>src_rels <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb37-17"><a href="#cb37-17" aria-hidden="true" tabindex="-1"></a>  <span class="at">primary_keys =</span> <span class="fu">list</span>(<span class="at">edna_sample =</span> <span class="st">"sample_label"</span>),</span>
+<span id="cb37-18"><a href="#cb37-18" aria-hidden="true" tabindex="-1"></a>  <span class="at">foreign_keys =</span> <span class="fu">list</span>(</span>
+<span id="cb37-19"><a href="#cb37-19" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">table =</span> <span class="st">"edna_detection"</span>, <span class="at">column =</span> <span class="st">"sample_label"</span>,</span>
+<span id="cb37-20"><a href="#cb37-20" aria-hidden="true" tabindex="-1"></a>         <span class="at">ref_table =</span> <span class="st">"edna_sample"</span>, <span class="at">ref_column =</span> <span class="st">"sample_label"</span>)))</span>
+<span id="cb37-21"><a href="#cb37-21" aria-hidden="true" tabindex="-1"></a><span class="fu">cc_erd</span>(con, <span class="at">tables =</span> <span class="fu">c</span>(<span class="st">"edna_sample"</span>, <span class="st">"edna_detection"</span>, <span class="st">"dataset"</span>), <span class="at">rels =</span> src_rels,</span>
+<span id="cb37-22"><a href="#cb37-22" aria-hidden="true" tabindex="-1"></a>       <span class="at">colors =</span> <span class="fu">list</span>(<span class="at">lightblue =</span> <span class="fu">c</span>(<span class="st">"edna_sample"</span>, <span class="st">"edna_detection"</span>), <span class="at">white =</span> <span class="st">"dataset"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="ingest_sio_cetacean-edna_files/figure-html/meta-schema-1.png" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="questions-for-data-providers" class="level2">
+<h2 class="anchored" data-anchor-id="questions-for-data-providers">Questions for Data Providers</h2>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="fu">questions_datatable</span>(</span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">here</span>(cc<span class="sc">$</span>questions_file),</span>
+<span id="cb38-3"><a href="#cb38-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">caption =</span> <span class="st">"Questions for the cetacean eDNA data providers (ranked)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div class="datatables html-widget html-fill-item" id="htmlwidget-16a2d40ef7979603ed1b" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-16a2d40ef7979603ed1b">{"x":{"filter":"none","vertical":false,"caption":"<caption>Questions for the cetacean eDNA data providers (ranked)<\/caption>","data":[["Q01","Q02","Q03","Q04","Q05","Q06","Q07","Q08","Q10","Q09"],["high","high","high","high","normal","normal","normal","normal","normal","low"],["open","open","proposed","proposed","proposed","proposed","proposed","proposed","proposed","proposed"],["What licence applies to the eDNA detection table?","How should the dataset be cited, and is it deposited anywhere?","Who curates this table: the Scripps Whale Acoustics Lab (provider sio) or NCOG / JCVI (provider jcvi, beside jcvi_ncog-metabarcoding)?","Does 'not sequenced PCR negative' mean no cetacean DNA was detected, i.e. an absence for all seven species?","Three samples are listed twice, once sequenced and once PCR-negative (201604_093.3_026.7_9, 201607_093.3_045.0_9, 201611_081.8_046.9_20). Which is right?","Can the sampling date/time be supplied?","Which assay/marker was used, and were only these seven species screened (Gg, Tt, Mn, Dc, Lb, Lo, Dd)?","Confirm the taxa behind Dc and Lo.","On 7 rows the line/station columns disagree with the sample name: six 201407-201504 samples say line 81.9 for 081.8_046.9, and 201404_086.7_070.0_12 says station 46.9. Which is right?","Five samples are at 515 m and four at 170 m. Are those depths right?"],["marmam-app's LICENSE (MIT) covers the app code, not the data. The release refuses license = unknown without this question open. Checked 2026-09-27: marmam-app's LICENSE is MIT, 'Copyright (c) 2024 PSTAT197-F23' (the UCSB data-science capstone that built the app), and grants rights over 'this software and associated documentation files'. The class did not collect the data, so it cannot license them; the lab must name the data licence.","No citation or DOI is given in marmam-app. marmam-app's info page credits the app to Luis Barajas, Sam Guimte, Justin Kim, Kaitlyn Lee, Yoobin Won, Ryan Yee, Puyuan Zhang, Michaela Alksne, Lauren Baggett, Julie Dinasquet, Bryce Ellman, Erin Satterthwaite, Brice Semmens and Simone Baumann-Pickering, funded by ONR award N00014-22-1-2719; those are app credits, not a data citation.","The samples are NCOG's; the cetacean screening appears to be the lab's. The provider decides the dataset_key, so this must be settled before release.","Until 2026-09-30 the ingest published edna_presence = 0 for all seven species on these samples. Since 2026-10-01 they are held: each stays a sample row and publishes no edna_presence, because a reaction that did not amplify says nothing about which species were present. marmam-app's README describes edna.csv as 'eDNA sequencing effort and detections', one row per station and depth.","Two of the three sequenced rows carry a detection.","The table gives only year, season and cruise. Since 2026-10-01 the ingest dates each sample by its calcofi_bottle cast: the one cast at the same station on the cruise of the label's month (match_by_site_datetime), then the Niskin bottle on that cast nearest the sample's depth (match_nearest_by_depth, within 5 m). All 133 samples match, the 16 CC1611 samples included, which the earlier match to ichthyo net tows could not time.","An absence (0) is published only for these seven; any other species is not claimed absent. marmam-app's info page says only 'metabarcoding assays'.","WoRMS treats Delphinus capensis as a nomen dubium and Lagenorhynchus obliquidens as a junior synonym of Sagmatias obliquidens.","Each row's own latitude/longitude sits on the sample name's station (81.8/46.9 and 86.7/70.0), not on the columns'. Taking the columns put those 7 samples on stations ichthyo never occupies, so they got no time.","The rest are 0-100 m. The depth is also in each sample name (e.g. 201504_081.8_046.9_515), at the two NCOG deep stations 81.8/46.9 and 76.7/70.0, so the column matches the name. But marmam-app's info page says the cetacean eDNA samples were 'collected at 10, 20, or 40 meters', and the table also has depths such as 10.6 and 34.4 (201607_093.3_070.0). Which depths were actually screened for cetaceans? Evidence (2026-10-01): each of the nine deep samples matches a calcofi_bottle cast at its station on that cruise with a Niskin bottle within 4 m of 515 m or 170 m."],[null,null,"provider = sio, dataset = cetacean-edna; NCOG credited in the description.","No, not as an absence: 'not sequenced PCR negative' means the sample did not amplify, so no species could be detected or ruled out. We publish the sample with no edna_presence values. If a PCR negative is in fact a screened result (for example, positive controls amplified in the same run), we would publish 0 for all seven species.","Keep the sequenced row and drop the PCR-negative duplicate.","datetime = the time of the bottle cast at the same station on that cruise. Each sample has exactly one such cast, and a Niskin bottle within 4 m of its depth (121 at the exact depth). Please confirm that NCOG filtered these samples from that cast.","Presence/absence published for the seven columns only.","Dc -&gt; Delphinus capensis (worms:383816, nomen dubium, review), kept distinct from Dd as farallon LBCD; keying it to D. delphis gave each sample two conflicting D. delphis rows. Lo -&gt; Sagmatias obliquidens (worms:1571909). Both via taxon_override.csv, as in sio_cetacean-sightings.","The sample name (and the position) are right: line/station are taken from the name, and the ingest asserts the position agrees within 0.02 degrees.","The depths are real: water was collected at 515 m and 170 m on those casts, so we keep them as recorded. Please confirm they were screened for cetaceans like the shallow samples."],["dataset","dataset","dataset","edna_sample","edna_sample","edna_sample","edna_detection","edna_detection","edna_sample","edna_sample"],["license","citation_main","pi_names","edna_process","sample_label","datetime_start_utc","species_code","species_code","site_key","depth_m"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>label<\/th>\n      <th>priority<\/th>\n      <th>status<\/th>\n      <th>question<\/th>\n      <th>context<\/th>\n      <th>proposed_answer<\/th>\n      <th>related_table<\/th>\n      <th>related_field<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"pageLength":25,"dom":"tip","columnDefs":[{"width":"60px","targets":0},{"name":"label","targets":0},{"name":"priority","targets":1},{"name":"status","targets":2},{"name":"question","targets":3},{"name":"context","targets":4},{"name":"proposed_answer","targets":5},{"name":"related_table","targets":6},{"name":"related_field","targets":7}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+</div>
+</div>
+</section>
+<section id="emit-core-tables" class="level2">
+<h2 class="anchored" data-anchor-id="emit-core-tables">Emit Core Tables</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>source</th>
+<th>core</th>
+<th>transform</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>edna_sample</code></td>
+<td><code>sample</code> (<code>water</code>)</td>
+<td>every sample, sequenced or not; key <code>sio_cetacean-edna:water:&lt;sample_label&gt;</code>; depth_min_m = depth_max_m = <code>depth_m</code>; time and cruise of the matched bottle cast</td>
+</tr>
+<tr class="even">
+<td><code>edna_detection.detected</code></td>
+<td><code>obs</code> <code>edna_presence</code></td>
+<td>1/0 for each of the seven species on every <strong>sequenced</strong> sample; <code>measurement_qual</code> = <code>edna_process</code> verbatim (always <code>sequenced</code>)</td>
+</tr>
+<tr class="odd">
+<td>PCR-negative samples</td>
+<td>–</td>
+<td><strong>held</strong> (Q04): a <code>sample</code> row, no <code>obs</code>; the 0s in the source are not published</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Not published</strong> (kept in the archived source): <code>illumina_name</code>, <code>station_name</code>, <code>season</code>, the app’s <code>detections</code> / <code>SpeciesName</code> / <code>SubOrder</code> convenience columns, the matched bottle (<code>bottle_sample_key</code>, evidence only), and the species columns of the PCR-negative samples.</p>
+<section id="taxon-vocabulary" class="level3">
+<h3 class="anchored" data-anchor-id="taxon-vocabulary">Taxon vocabulary</h3>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>mt_taxon <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/measurement_taxon.csv"</span>),</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>                     <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">worms_id =</span> <span class="st">"i"</span>, <span class="at">itis_id =</span> <span class="st">"i"</span>,</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>                                      <span class="at">bin_value =</span> <span class="st">"d"</span>, <span class="at">.default =</span> <span class="st">"c"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(dataset_key <span class="sc">==</span> ds_key)</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a>tx_over  <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/taxon_override.csv"</span>), <span class="at">show_col_types =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb39-6"><a href="#cb39-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb39-7"><a href="#cb39-7" aria-hidden="true" tabindex="-1"></a><span class="co"># the same codes as the visual survey; their names come from its vocabulary</span></span>
+<span id="cb39-8"><a href="#cb39-8" aria-hidden="true" tabindex="-1"></a>d_vocab <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">here</span>(<span class="st">"metadata/sio/cetacean-sightings/species_codes.csv"</span>),</span>
+<span id="cb39-9"><a href="#cb39-9" aria-hidden="true" tabindex="-1"></a>                    <span class="at">col_types =</span> <span class="fu">cols</span>(<span class="at">.default =</span> <span class="st">"c"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb39-10"><a href="#cb39-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(species_code <span class="sc">%in%</span> sp_cols) <span class="sc">|&gt;</span></span>
+<span id="cb39-11"><a href="#cb39-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">ds_taxa_code =</span> species_code, <span class="at">ds_scientific_name =</span> scientific_name,</span>
+<span id="cb39-12"><a href="#cb39-12" aria-hidden="true" tabindex="-1"></a>            <span class="at">ds_common_name =</span> common_name)</span>
+<span id="cb39-13"><a href="#cb39-13" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"all seven codes named"</span> <span class="ot">=</span> <span class="fu">setequal</span>(d_vocab<span class="sc">$</span>ds_taxa_code, sp_cols))</span>
+<span id="cb39-14"><a href="#cb39-14" aria-hidden="true" tabindex="-1"></a>n_staged <span class="ot">&lt;-</span> <span class="fu">append_dataset_taxon</span>(con, ds_key, d_vocab)</span>
+<span id="cb39-15"><a href="#cb39-15" aria-hidden="true" tabindex="-1"></a><span class="fu">ensure_taxon_xref</span>(con, mt_taxon, tx_over, <span class="at">cache_csv =</span> <span class="fu">here</span>(<span class="st">"metadata/taxon_xref.csv"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon xref: 0 TSN + 2 AphiaID + 5 name requested; 0 to fetch, 7 cached</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon xref: 0 TSN + 5 AphiaID + 0 name requested; 0 to fetch, 5 cached</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>_taxon_xref: 12 cross-reference rows (12 with worms_id, 6 with itis_id, 0 re-keyed)</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb43"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb43-1"><a href="#cb43-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ensure_taxon_lineage</span>(con, mt_taxon, tx_over, <span class="at">cache_csv =</span> <span class="fu">here</span>(<span class="st">"metadata/taxon_lineage.csv"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon lineage: 7 WoRMS + 0 ITIS requested; 0 to fetch, 7 cached</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon lineage: 0 Aves taxa keyed on ITIS, 7 taxa on WoRMS</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon xref: 0 TSN + 27 AphiaID + 0 name requested; 0 to fetch, 27 cached</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon: 27 lineage rows for 7 taxa (0 unresolved)</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb48"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>n_taxon    <span class="ot">&lt;-</span> <span class="fu">build_taxon_reference</span>(con, mt_taxon, tx_over)</span>
+<span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a>n_ds_taxon <span class="ot">&lt;-</span> <span class="fu">resolve_dataset_taxon</span>(con, mt_taxon, tx_over)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>taxon overrides ('sio_cetacean-edna'): 2 registry row(s) matched 2 vocabulary row(s): 2 applied, 0 skipped</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb50"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a>n_tx_group <span class="ot">&lt;-</span> <span class="fu">build_taxon_group</span>(con, <span class="fu">read_taxon_group_rules</span>(<span class="fu">here</span>(<span class="st">"metadata/taxon_group.csv"</span>)))</span>
+<span id="cb50-2"><a href="#cb50-2" aria-hidden="true" tabindex="-1"></a>chk <span class="ot">&lt;-</span> <span class="fu">check_dataset_taxon</span>(con, ds_key, <span class="at">codes =</span> sp_cols)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>check_dataset_taxon('sio_cetacean-edna'): 7 taxa, 7 keyed by an authority, 0 local (0 allowed); 0 finding(s)</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb52"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb52-1"><a href="#cb52-1" aria-hidden="true" tabindex="-1"></a>dt <span class="ot">&lt;-</span> <span class="fu">dbGetQuery</span>(con, <span class="st">"SELECT ds_taxa_code, taxon_key FROM dataset_taxon WHERE dataset_key = ?"</span>,</span>
+<span id="cb52-2"><a href="#cb52-2" aria-hidden="true" tabindex="-1"></a>                 <span class="at">params =</span> <span class="fu">list</span>(ds_key))</span>
+<span id="cb52-3"><a href="#cb52-3" aria-hidden="true" tabindex="-1"></a>key_of <span class="ot">&lt;-</span> <span class="cf">function</span>(code) dt<span class="sc">$</span>taxon_key[dt<span class="sc">$</span>ds_taxa_code <span class="sc">==</span> code]</span>
+<span id="cb52-4"><a href="#cb52-4" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb52-5"><a href="#cb52-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every code keys a taxon"</span>             <span class="ot">=</span> <span class="sc">!</span><span class="fu">anyNA</span>(dt<span class="sc">$</span>taxon_key) <span class="sc">&amp;&amp;</span> <span class="fu">nrow</span>(dt) <span class="sc">==</span> <span class="dv">7</span>L,</span>
+<span id="cb52-6"><a href="#cb52-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Dc keys Delphinus capensis (Q08)"</span>    <span class="ot">=</span> <span class="fu">identical</span>(<span class="fu">key_of</span>(<span class="st">"Dc"</span>), <span class="st">"worms:383816"</span>),</span>
+<span id="cb52-7"><a href="#cb52-7" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Dc and Dd are distinct taxa (Q08)"</span>   <span class="ot">=</span> <span class="sc">!</span><span class="fu">identical</span>(<span class="fu">key_of</span>(<span class="st">"Dc"</span>), <span class="fu">key_of</span>(<span class="st">"Dd"</span>)),</span>
+<span id="cb52-8"><a href="#cb52-8" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Lo keys Sagmatias obliquidens (Q08)"</span> <span class="ot">=</span> <span class="fu">identical</span>(<span class="fu">key_of</span>(<span class="st">"Lo"</span>), <span class="st">"worms:1571909"</span>))</span>
+<span id="cb52-9"><a href="#cb52-9" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"vocabulary: {n_staged} codes; taxon {n_taxon}, dataset_taxon {n_ds_taxon}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>vocabulary: 7 codes; taxon 27, dataset_taxon 7 </code></pre>
+</div>
+</div>
+</section>
+<section id="sample-obs" class="level3">
+<h3 class="anchored" data-anchor-id="sample-obs">Sample, obs</h3>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb54"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb54-1"><a href="#cb54-1" aria-hidden="true" tabindex="-1"></a><span class="fu">append_sample</span>(con, <span class="fu">sample_arm_self</span>(</span>
+<span id="cb54-2"><a href="#cb54-2" aria-hidden="true" tabindex="-1"></a>  ds_key, <span class="st">"edna_sample"</span>, <span class="st">"sample_label"</span>, <span class="st">"water"</span>,</span>
+<span id="cb54-3"><a href="#cb54-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">site_expr =</span> <span class="st">"site_key"</span>, <span class="at">depth_min =</span> <span class="st">"depth_m"</span>, <span class="at">depth_max =</span> <span class="st">"depth_m"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Loaded extension: spatial</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb56"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb56-1"><a href="#cb56-1" aria-hidden="true" tabindex="-1"></a><span class="co"># a PCR-negative sample did not amplify: its 0s are not non-detections, so it</span></span>
+<span id="cb56-2"><a href="#cb56-2" aria-hidden="true" tabindex="-1"></a><span class="co"># publishes no obs until the provider answers Q04 (Ben, 2026-10-01). Its sample</span></span>
+<span id="cb56-3"><a href="#cb56-3" aria-hidden="true" tabindex="-1"></a><span class="co"># row stays: the water was collected and screened, the result is what is held.</span></span>
+<span id="cb56-4"><a href="#cb56-4" aria-hidden="true" tabindex="-1"></a><span class="fu">append_obs</span>(con, <span class="fu">glue</span>(<span class="st">"</span></span>
+<span id="cb56-5"><a href="#cb56-5" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'water', 's.sample_label')},</span></span>
+<span id="cb56-6"><a href="#cb56-6" aria-hidden="true" tabindex="-1"></a><span class="st">         s.grid_key, s.cruise_key, s.latitude, s.longitude,</span></span>
+<span id="cb56-7"><a href="#cb56-7" aria-hidden="true" tabindex="-1"></a><span class="st">         CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,</span></span>
+<span id="cb56-8"><a href="#cb56-8" aria-hidden="true" tabindex="-1"></a><span class="st">         dt.taxon_key, NULL::VARCHAR, 'edna_presence',</span></span>
+<span id="cb56-9"><a href="#cb56-9" aria-hidden="true" tabindex="-1"></a><span class="st">         CAST(d.detected AS DOUBLE), s.edna_process, NULL::DOUBLE</span></span>
+<span id="cb56-10"><a href="#cb56-10" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM edna_detection d JOIN edna_sample s USING (sample_label)</span></span>
+<span id="cb56-11"><a href="#cb56-11" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}' AND dt.ds_taxa_code = d.species_code</span></span>
+<span id="cb56-12"><a href="#cb56-12" aria-hidden="true" tabindex="-1"></a><span class="st">  WHERE s.edna_process = 'sequenced'"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Loaded extension: h3</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb58"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>q1 <span class="ot">&lt;-</span> <span class="cf">function</span>(sql) <span class="fu">dbGetQuery</span>(con, sql)[[<span class="dv">1</span>]]</span>
+<span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>n_seq <span class="ot">&lt;-</span> <span class="fu">sum</span>(d_sample<span class="sc">$</span>edna_process <span class="sc">==</span> <span class="st">"sequenced"</span>)</span>
+<span id="cb58-3"><a href="#cb58-3" aria-hidden="true" tabindex="-1"></a>n_pcr_neg_detect <span class="ot">&lt;-</span> d_detection <span class="sc">|&gt;</span></span>
+<span id="cb58-4"><a href="#cb58-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">semi_join</span>(d_sample <span class="sc">|&gt;</span> <span class="fu">filter</span>(edna_process <span class="sc">!=</span> <span class="st">"sequenced"</span>), <span class="at">by =</span> <span class="st">"sample_label"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb58-5"><a href="#cb58-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pull</span>(detected) <span class="sc">|&gt;</span> <span class="fu">sum</span>()</span>
+<span id="cb58-6"><a href="#cb58-6" aria-hidden="true" tabindex="-1"></a>core <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb58-7"><a href="#cb58-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample            =</span> <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM sample"</span>),</span>
+<span id="cb58-8"><a href="#cb58-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample_sequenced  =</span> n_seq,</span>
+<span id="cb58-9"><a href="#cb58-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">sample_held       =</span> <span class="fu">nrow</span>(d_sample) <span class="sc">-</span> n_seq,</span>
+<span id="cb58-10"><a href="#cb58-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">obs               =</span> <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM obs"</span>),</span>
+<span id="cb58-11"><a href="#cb58-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">obs_present       =</span> <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM obs WHERE measurement_value = 1"</span>))</span>
+<span id="cb58-12"><a href="#cb58-12" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"core projection -- "</span>, <span class="fu">paste</span>(<span class="fu">names</span>(core), <span class="fu">unlist</span>(core), <span class="at">sep =</span> <span class="st">"="</span>, <span class="at">collapse =</span> <span class="st">" "</span>)), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>core projection -- sample=133 sample_sequenced=71 sample_held=62 obs=497 obs_present=15 </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a>  <span class="st">"one sample per eDNA sample, PCR-negative ones included"</span> <span class="ot">=</span> core<span class="sc">$</span>sample <span class="sc">==</span> <span class="fu">nrow</span>(d_sample),</span>
+<span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">"seven obs per sequenced sample"</span>        <span class="ot">=</span> core<span class="sc">$</span>obs <span class="sc">==</span> <span class="dv">7</span>L <span class="sc">*</span> n_seq,</span>
+<span id="cb60-4"><a href="#cb60-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">"one obs per sample x taxon (Q08)"</span>      <span class="ot">=</span></span>
+<span id="cb60-5"><a href="#cb60-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM (SELECT sample_key, taxon_key FROM obs GROUP BY ALL HAVING COUNT(*) &gt; 1)"</span>) <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb60-6"><a href="#cb60-6" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the source has no detection on a PCR-negative sample"</span> <span class="ot">=</span> n_pcr_neg_detect <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb60-7"><a href="#cb60-7" aria-hidden="true" tabindex="-1"></a>  <span class="st">"presences = detections in the source"</span>  <span class="ot">=</span> core<span class="sc">$</span>obs_present <span class="sc">==</span> <span class="fu">sum</span>(d_detection<span class="sc">$</span>detected),</span>
+<span id="cb60-8"><a href="#cb60-8" aria-hidden="true" tabindex="-1"></a>  <span class="st">"a PCR-negative sample publishes no obs (held, Q04)"</span> <span class="ot">=</span></span>
+<span id="cb60-9"><a href="#cb60-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM obs WHERE measurement_qual IS DISTINCT FROM 'sequenced'"</span>) <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb60-10"><a href="#cb60-10" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every obs.sample_key resolves in sample"</span> <span class="ot">=</span></span>
+<span id="cb60-11"><a href="#cb60-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key) WHERE s.sample_key IS NULL"</span>) <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb60-12"><a href="#cb60-12" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every obs.taxon_key resolves in taxon"</span> <span class="ot">=</span></span>
+<span id="cb60-13"><a href="#cb60-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key) WHERE t.taxon_key IS NULL"</span>) <span class="sc">==</span> <span class="dv">0</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="declared-nulls" class="level3">
+<h3 class="anchored" data-anchor-id="declared-nulls">Declared NULLs</h3>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb61"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>results <span class="ot">&lt;-</span> <span class="fu">validate_for_release</span>(con, <span class="at">checks =</span> <span class="st">"all"</span>, <span class="at">strict =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a>nullable <span class="ot">&lt;-</span> <span class="fu">tribble</span>(</span>
+<span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>table,   <span class="sc">~</span>column,             <span class="sc">~</span>n,                <span class="sc">~</span>reason,</span>
+<span id="cb61-4"><a href="#cb61-4" aria-hidden="true" tabindex="-1"></a>  <span class="st">"sample"</span>, <span class="st">"parent_sample_key"</span>, <span class="fu">nrow</span>(d_sample),    <span class="st">"single-level dataset: every sample is a root (the matched bottle is not set as a cross-dataset parent)"</span>,</span>
+<span id="cb61-5"><a href="#cb61-5" aria-hidden="true" tabindex="-1"></a>  <span class="st">"sample"</span>, <span class="st">"grid_key"</span>,          <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM sample WHERE grid_key IS NULL"</span>),</span>
+<span id="cb61-6"><a href="#cb61-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"station outside the CalCOFI grid cells"</span>)</span>
+<span id="cb61-7"><a href="#cb61-7" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(</span>
+<span id="cb61-8"><a href="#cb61-8" aria-hidden="true" tabindex="-1"></a>  <span class="st">"no sample lacks a time (every one has its bottle cast)"</span> <span class="ot">=</span></span>
+<span id="cb61-9"><a href="#cb61-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM sample WHERE datetime IS NULL"</span>) <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb61-10"><a href="#cb61-10" aria-hidden="true" tabindex="-1"></a>  <span class="st">"no sample lacks a cruise_key"</span> <span class="ot">=</span></span>
+<span id="cb61-11"><a href="#cb61-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL"</span>) <span class="sc">==</span> <span class="dv">0</span>,</span>
+<span id="cb61-12"><a href="#cb61-12" aria-hidden="true" tabindex="-1"></a>  <span class="st">"every sample is a root"</span> <span class="ot">=</span></span>
+<span id="cb61-13"><a href="#cb61-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">q1</span>(<span class="st">"SELECT COUNT(*) FROM sample WHERE parent_sample_key IS NULL"</span>) <span class="sc">==</span> <span class="fu">nrow</span>(d_sample),</span>
+<span id="cb61-14"><a href="#cb61-14" aria-hidden="true" tabindex="-1"></a>  <span class="st">"the grid_key NULLs are counted, not assumed (a ratchet: none at this commit)"</span> <span class="ot">=</span></span>
+<span id="cb61-15"><a href="#cb61-15" aria-hidden="true" tabindex="-1"></a>    nullable<span class="sc">$</span>n[nullable<span class="sc">$</span>column <span class="sc">==</span> <span class="st">"grid_key"</span>] <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb61-16"><a href="#cb61-16" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"validate_for_release:"</span>, <span class="fu">ifelse</span>(results<span class="sc">$</span>passed, <span class="st">"PASSED"</span>, <span class="st">"reported findings -- reconciled against the declared NULLs below"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>validate_for_release: reported findings -- reconciled against the declared NULLs below </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb63"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a>nullable <span class="sc">|&gt;</span> <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Declared NULLs (count and reason)"</span>, <span class="at">rownames =</span> <span class="cn">FALSE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div class="datatables html-widget html-fill-item" id="htmlwidget-322d26c474cc68432c0b" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-322d26c474cc68432c0b">{"x":{"filter":"none","vertical":false,"caption":"<caption>Declared NULLs (count and reason)<\/caption>","data":[["sample","sample"],["parent_sample_key","grid_key"],[133,0],["single-level dataset: every sample is a root (the matched bottle is not set as a cross-dataset parent)","station outside the CalCOFI grid cells"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>table<\/th>\n      <th>column<\/th>\n      <th>n<\/th>\n      <th>reason<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":2},{"name":"table","targets":0},{"name":"column","targets":1},{"name":"n","targets":2},{"name":"reason","targets":3}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+</div>
+</div>
+</section>
+<section id="measurement-bounds" class="level3">
+<h3 class="anchored" data-anchor-id="measurement-bounds">Measurement bounds</h3>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb64"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a>b <span class="ot">&lt;-</span> <span class="fu">check_measurement_bounds</span>(con, <span class="st">"obs"</span>, <span class="at">mt =</span> d_meas_type, <span class="at">dataset_key =</span> ds_key,</span>
+<span id="cb64-2"><a href="#cb64-2" aria-hidden="true" tabindex="-1"></a>                              <span class="at">depth_col =</span> <span class="st">"depth_max_m"</span>)</span>
+<span id="cb64-3"><a href="#cb64-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bounds_datatable</span>(b)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div class="datatables html-widget html-fill-item" id="htmlwidget-6af01d085bf840cffa67" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-6af01d085bf840cffa67">{"x":{"filter":"none","vertical":false,"caption":"<caption>Measured values against the registry's declared bounds. `undeclared` is a finding too: nothing was checked.<\/caption>","data":[["edna_presence"],["ok"],[497],[0],[0],[0],[0],[0],[1],[0],[1],[null],["dimensionless"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>measurement_type<\/th>\n      <th>status<\/th>\n      <th>n_total<\/th>\n      <th>n_bad<\/th>\n      <th>pct_bad<\/th>\n      <th>n_low<\/th>\n      <th>n_high<\/th>\n      <th>v_min<\/th>\n      <th>v_max<\/th>\n      <th>valid_min<\/th>\n      <th>valid_max<\/th>\n      <th>n_outside_depth<\/th>\n      <th>units<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"pageLength":25,"dom":"tip","columnDefs":[{"className":"dt-right","targets":[2,3,4,5,6,7,8,9,10,11]},{"name":"measurement_type","targets":0},{"name":"status","targets":1},{"name":"n_total","targets":2},{"name":"n_bad","targets":3},{"name":"pct_bad","targets":4},{"name":"n_low","targets":5},{"name":"n_high","targets":6},{"name":"v_min","targets":7},{"name":"v_max","targets":8},{"name":"valid_min","targets":9},{"name":"valid_max","targets":10},{"name":"n_outside_depth","targets":11},{"name":"units","targets":12}],"order":[],"autoWidth":false,"orderClasses":false,"rowCallback":"function(row, data, displayNum, displayIndex, dataIndex) {\nvar value=data[1]; $(this.api().cell(row, 1).node()).css({'font-weight':value == \"out_of_range\" ? \"bold\" : \"normal\",'color':value == \"ok\" ? \"#1a7f37\" : value == \"undeclared\" ? \"#b06000\" : value == \"out_of_range\" ? \"#d03b3b\" : null});\n}"},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":["options.rowCallback"],"jsHooks":[]}</script>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb65"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"edna_presence is declared and respected"</span> <span class="ot">=</span> <span class="fu">all</span>(b<span class="sc">$</span>status <span class="sc">==</span> <span class="st">"ok"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="preview" class="level2">
+<h2 class="anchored" data-anchor-id="preview">Preview</h2>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb66"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb66-1"><a href="#cb66-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dbGetQuery</span>(con, <span class="st">"</span></span>
+<span id="cb66-2"><a href="#cb66-2" aria-hidden="true" tabindex="-1"></a><span class="st">  SELECT dt.ds_taxa_code, t.scientific_name,</span></span>
+<span id="cb66-3"><a href="#cb66-3" aria-hidden="true" tabindex="-1"></a><span class="st">         COUNT(*) FILTER (WHERE o.measurement_qual = 'sequenced') AS n_sequenced,</span></span>
+<span id="cb66-4"><a href="#cb66-4" aria-hidden="true" tabindex="-1"></a><span class="st">         SUM(o.measurement_value) AS n_detected</span></span>
+<span id="cb66-5"><a href="#cb66-5" aria-hidden="true" tabindex="-1"></a><span class="st">  FROM obs o JOIN taxon t USING (taxon_key)</span></span>
+<span id="cb66-6"><a href="#cb66-6" aria-hidden="true" tabindex="-1"></a><span class="st">  JOIN dataset_taxon dt ON dt.taxon_key = o.taxon_key AND dt.dataset_key = o.dataset_key</span></span>
+<span id="cb66-7"><a href="#cb66-7" aria-hidden="true" tabindex="-1"></a><span class="st">  GROUP BY ALL ORDER BY n_detected DESC"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb66-8"><a href="#cb66-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">datatable</span>(<span class="at">caption =</span> <span class="st">"Detections by species"</span>, <span class="at">rownames =</span> <span class="cn">FALSE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div class="datatables html-widget html-fill-item" id="htmlwidget-878bcac62c3b3e175776" style="width:100%;height:auto;"></div>
+<script type="application/json" data-for="htmlwidget-878bcac62c3b3e175776">{"x":{"filter":"none","vertical":false,"caption":"<caption>Detections by species<\/caption>","data":[["Dd","Dc","Lb","Gg","Mn","Tt","Lo"],["Delphinus delphis","Delphinus capensis","Lissodelphis borealis","Grampus griseus","Megaptera novaeangliae","Tursiops truncatus","Sagmatias obliquidens"],[71,71,71,71,71,71,71],[4,4,2,2,1,1,1]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>ds_taxa_code<\/th>\n      <th>scientific_name<\/th>\n      <th>n_sequenced<\/th>\n      <th>n_detected<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"scrollX":true,"columnDefs":[{"className":"dt-right","targets":[2,3]},{"name":"ds_taxa_code","targets":0},{"name":"scientific_name","targets":1},{"name":"n_sequenced","targets":2},{"name":"n_detected","targets":3}],"order":[],"autoWidth":false,"orderClasses":false},"selection":{"mode":"multiple","selected":null,"target":"row","selectable":null}},"evals":[],"jsHooks":[]}</script>
+</div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb67"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a>core_tbls <span class="ot">&lt;-</span> <span class="fu">core_output_tables</span>(con)</span>
+<span id="cb67-2"><a href="#cb67-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cc_erd</span>(con, <span class="at">tables =</span> core_tbls, <span class="at">rels =</span> <span class="fu">core_relationships</span>(core_tbls))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="ingest_sio_cetacean-edna_files/figure-html/erd-core-1.png" class="img-fluid figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="write-outputs-upload" class="level2">
+<h2 class="anchored" data-anchor-id="write-outputs-upload">Write Outputs + Upload</h2>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb68"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb68-1"><a href="#cb68-1" aria-hidden="true" tabindex="-1"></a><span class="fu">dir_create</span>(dir_parquet)</span>
+<span id="cb68-2"><a href="#cb68-2" aria-hidden="true" tabindex="-1"></a>tbls_out <span class="ot">&lt;-</span> <span class="fu">core_output_tables</span>(con, <span class="at">extra =</span> <span class="fu">c</span>(<span class="st">"measurement_type"</span>, <span class="st">"dataset"</span>))</span>
+<span id="cb68-3"><a href="#cb68-3" aria-hidden="true" tabindex="-1"></a><span class="fu">write_parquet_outputs</span>(</span>
+<span id="cb68-4"><a href="#cb68-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">con =</span> con, <span class="at">output_dir =</span> dir_parquet, <span class="at">tables =</span> tbls_out,</span>
+<span id="cb68-5"><a href="#cb68-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">sort_by =</span> <span class="fu">list</span>(<span class="at">obs =</span> <span class="fu">c</span>(<span class="st">"grid_key"</span>, <span class="st">"measurement_type"</span>)),</span>
+<span id="cb68-6"><a href="#cb68-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">strip_provenance =</span> <span class="cn">FALSE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused sample: 133 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused obs: 497 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused taxon: 27 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused dataset_taxon: 7 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused taxon_group: 7 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused measurement_type: 220 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Reused dataset: 1 rows unchanged (no re-write/upload)</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Wrote manifest to /Users/bbest/Github/CalCOFI/.worktrees/workflows-pr117/data/parquet/sio_cetacean-edna/manifest.json</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 7 × 5
+  table             rows file_size path                              partitioned
+  &lt;chr&gt;            &lt;dbl&gt;     &lt;dbl&gt; &lt;chr&gt;                             &lt;lgl&gt;      
+1 sample             133      7604 /Users/bbest/_big/calcofi/parque… FALSE      
+2 obs                497      8975 /Users/bbest/_big/calcofi/parque… FALSE      
+3 taxon               27      5008 /Users/bbest/_big/calcofi/parque… FALSE      
+4 dataset_taxon        7      1727 /Users/bbest/_big/calcofi/parque… FALSE      
+5 taxon_group          7      1058 /Users/bbest/_big/calcofi/parque… FALSE      
+6 measurement_type   220     16838 /Users/bbest/_big/calcofi/parque… FALSE      
+7 dataset              1      5072 /Users/bbest/_big/calcofi/parque… FALSE      </code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb78"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb78-1"><a href="#cb78-1" aria-hidden="true" tabindex="-1"></a><span class="fu">build_relationships_json</span>(</span>
+<span id="cb78-2"><a href="#cb78-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">rels =</span> <span class="fu">core_relationships</span>(tbls_out), <span class="at">output_dir =</span> dir_parquet,</span>
+<span id="cb78-3"><a href="#cb78-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">provider =</span> provider, <span class="at">dataset =</span> dataset)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Wrote relationships.json: 7 PKs, 8 FKs</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "/Users/bbest/Github/CalCOFI/.worktrees/workflows-pr117/data/parquet/sio_cetacean-edna/relationships.json"</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb81"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb81-1"><a href="#cb81-1" aria-hidden="true" tabindex="-1"></a>d_tbls_rd <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">file.path</span>(dir_meta, <span class="st">"tbls_redefine.csv"</span>))</span>
+<span id="cb81-2"><a href="#cb81-2" aria-hidden="true" tabindex="-1"></a>d_flds_rd <span class="ot">&lt;-</span> <span class="fu">read_csv</span>(<span class="fu">file.path</span>(dir_meta, <span class="st">"flds_redefine.csv"</span>))</span>
+<span id="cb81-3"><a href="#cb81-3" aria-hidden="true" tabindex="-1"></a><span class="fu">build_metadata_json</span>(</span>
+<span id="cb81-4"><a href="#cb81-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">con =</span> con, <span class="at">d_tbls_rd =</span> d_tbls_rd, <span class="at">d_flds_rd =</span> d_flds_rd,</span>
+<span id="cb81-5"><a href="#cb81-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">metadata_derived_csv =</span> <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"metadata/core_dictionary.csv"</span>),</span>
+<span id="cb81-6"><a href="#cb81-6" aria-hidden="true" tabindex="-1"></a>                           <span class="fu">file.path</span>(dir_meta, <span class="st">"metadata_derived.csv"</span>)),</span>
+<span id="cb81-7"><a href="#cb81-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">output_dir =</span> dir_parquet, <span class="at">tables =</span> tbls_out,</span>
+<span id="cb81-8"><a href="#cb81-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">set_comments =</span> <span class="cn">TRUE</span>, <span class="at">provider =</span> provider, <span class="at">dataset =</span> dataset,</span>
+<span id="cb81-9"><a href="#cb81-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">workflow_url =</span> cc<span class="sc">$</span>workflow_url, <span class="at">tables_owned =</span> tables_owned,</span>
+<span id="cb81-10"><a href="#cb81-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">sources =</span> src_stamp)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Set DuckDB COMMENT ON for tables and columns</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Wrote metadata.json: 7 tables, 106 columns</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>metadata.json documentation gaps (7 tables, 106 columns) — these render blank in cc_describe_table() / cc_db_catalog():
+tables with no description_md: 2    measurement_type, dataset
+columns with no description_md: 43    dataset.provider, dataset.dataset, dataset.dataset_name, dataset.dataset_name_short, dataset.category, dataset.color, dataset.description, dataset.citation_main, dataset.citation_others, dataset.link_calcofi_org, dataset.link_data_source, dataset.link_others (+31 more)
+measurement columns with no units: 34    dataset.dataset_name_short, dataset.category, dataset.color, dataset.citation_main, dataset.citation_others, dataset.link_calcofi_org, dataset.link_data_source, dataset.link_others, dataset.tables, dataset.coverage_temporal, dataset.coverage_spatial, dataset.license (+22 more)
+  backfill via metadata/{provider}/{dataset}/flds_redefine.csv, then re-run</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] "/Users/bbest/Github/CalCOFI/.worktrees/workflows-pr117/data/parquet/sio_cetacean-edna/metadata.json"</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb86"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb86-1"><a href="#cb86-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (publish_to_gcs) {</span>
+<span id="cb86-2"><a href="#cb86-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sync_to_gcs</span>(<span class="at">local_dir =</span> dir_stage, <span class="at">sidecar_dir =</span> dir_parquet,</span>
+<span id="cb86-3"><a href="#cb86-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">gcs_prefix =</span> <span class="fu">glue</span>(<span class="st">"ingest/{dir_label}"</span>), <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>)</span>
+<span id="cb86-4"><a href="#cb86-4" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> {</span>
+<span id="cb86-5"><a href="#cb86-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"CALCOFI_SKIP_GCS set -- parquet kept local, NOT synced to gs://calcofi-db</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb86-6"><a href="#cb86-6" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>rsync /Users/bbest/_big/calcofi/parquet/sio_cetacean-edna -&gt; gs://calcofi-db/ingest/sio_cetacean-edna</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Copied 3 sidecar(s) from /Users/bbest/Github/CalCOFI/.worktrees/workflows-pr117/data/parquet/sio_cetacean-edna</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Sync complete: 10 copied, 0 removed (rsync)</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 10 × 4
+   file    action    size reason        
+   &lt;chr&gt;   &lt;chr&gt;    &lt;dbl&gt; &lt;chr&gt;         
+ 1 &lt;rsync&gt; uploaded    NA parallel rsync
+ 2 &lt;rsync&gt; uploaded    NA parallel rsync
+ 3 &lt;rsync&gt; uploaded    NA parallel rsync
+ 4 &lt;rsync&gt; uploaded    NA parallel rsync
+ 5 &lt;rsync&gt; uploaded    NA parallel rsync
+ 6 &lt;rsync&gt; uploaded    NA parallel rsync
+ 7 &lt;rsync&gt; uploaded    NA parallel rsync
+ 8 &lt;rsync&gt; uploaded    NA parallel rsync
+ 9 &lt;rsync&gt; uploaded    NA parallel rsync
+10 &lt;rsync&gt; uploaded    NA parallel rsync</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb91"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb91-1"><a href="#cb91-1" aria-hidden="true" tabindex="-1"></a><span class="fu">close_duckdb</span>(con)</span>
+<span id="cb91-2"><a href="#cb91-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"Parquet outputs written to: {dir_parquet}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Parquet outputs written to: /Users/bbest/Github/CalCOFI/.worktrees/workflows-pr117/data/parquet/sio_cetacean-edna </code></pre>
+</div>
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

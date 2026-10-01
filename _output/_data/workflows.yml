@@ -1,13 +1,13 @@
-generated: '2026-09-23'
-n_total: 58
-n_meta: 29
+generated: '2026-09-27'
+n_total: 61
+n_meta: 32
 categories:
 - id: ingest
   title: Ingest
   blurb: Acquire, standardize, and load a source dataset into the integrated database.
     Cards are grouped by data provider.
   layout: cards
-  count: 18
+  count: 21
   groups:
   - label: CalCOFI
     items:
@@ -129,6 +129,40 @@ categories:
       provider: swfsc
   - label: SIO
     items:
+    - url: ingest_sio_cetacean-edna.html
+      title: ingest_sio_cetacean-edna
+      dataset_name: CalCOFI Cetacean eDNA Detections (NCOG samples)
+      description: Cetacean species detections from environmental DNA (eDNA) in seawater
+        samples collected by the NOAA CalCOFI Genomics Program (NCOG) at 10-40 m (a
+        few deeper) on CalCOFI cruises, 2014-2016. Seven dolphin and whale species
+        detected by metabarcoding; samples that failed PCR are kept as sampling effort
+        with no detection. Staged from the CalCOFI marine mammal Shiny app repository
+        (CalCOFI/marmam-app).
+      color: '#e4dcef'
+      link_data_source: https://github.com/CalCOFI/marmam-app/tree/main/data/edna_data
+      provider: sio
+    - url: ingest_sio_cetacean-sightings.html
+      title: ingest_sio_cetacean-sightings
+      dataset_name: CalCOFI Cetacean Visual Line-Transect Sightings
+      description: Cetacean (whale, dolphin, porpoise) sightings and on-effort visual
+        line-transect survey segments from quarterly CalCOFI cruises, 2004-2022 (effort
+        through 2021). Curated by the Scripps Whale Acoustics Lab (Hildebrand / Baumann-Pickering)
+        and staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app).
+      color: '#d6e2f0'
+      link_data_source: https://github.com/CalCOFI/marmam-app/tree/main/data/whale_visual_data
+      provider: sio
+    - url: ingest_sio_cetacean-sonobuoy.html
+      title: ingest_sio_cetacean-sonobuoy
+      dataset_name: CalCOFI Sonobuoy Baleen Whale Call Detections
+      description: Hourly presence of blue, fin and humpback whale calls in sonobuoy
+        recordings from CalCOFI cruises, 2004-2012. Each record is one hour of a DIFAR
+        or omnidirectional sonobuoy deployment near a CalCOFI station, scanned by
+        an analyst as 60-second spectrogram windows, with the call types heard. Curated
+        by the Scripps Whale Acoustics Lab (Baumann-Pickering) and staged from the
+        CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app).
+      color: '#d3ebe9'
+      link_data_source: https://github.com/CalCOFI/marmam-app/tree/main/data/acoustic_data
+      provider: sio
     - url: ingest_sio_mesopelagic-fish.html
       title: ingest_sio_mesopelagic-fish
       dataset_name: UCSD SIO Mesopelagic Fish
@@ -237,7 +271,7 @@ categories:
       coverage: 1984-05 to 2014-05
       bbox: 33.5–51.0°N, 132.2–120.7°W
       color: '#f5d5b8'
-      link_data_source: https://library.ucsd.edu/dc/search?q=CalCOFI+Dungeness+crab+megalopae
+      link_data_source: https://data.cnra.ca.gov/dataset/sorting-effort-in-2012-and-2015-for-dungeness-crab-megalopae-in-calcofi-plankton-samples
       provider: cdfw
   - label: Farallon Institute
     items:
@@ -421,6 +455,9 @@ dag_mermaid: |-
     ingest_cce_lter_zooscan(["ingest_cce_lter_zooscan"]):::c_ingest_cce_lter_zooscan
     ingest_cdfw_dungeness_crab(["ingest_cdfw_dungeness_crab"]):::c_ingest_cdfw_dungeness_crab
     ingest_farallon_bird_mammal(["ingest_farallon_bird_mammal"]):::c_ingest_farallon_bird_mammal
+    ingest_sio_cetacean_edna(["ingest_sio_cetacean_edna"]):::c_ingest_sio_cetacean_edna
+    ingest_sio_cetacean_sightings(["ingest_sio_cetacean_sightings"]):::c_ingest_sio_cetacean_sightings
+    ingest_sio_cetacean_sonobuoy(["ingest_sio_cetacean_sonobuoy"]):::c_ingest_sio_cetacean_sonobuoy
     ingest_sio_mesopelagic_fish(["ingest_sio_mesopelagic_fish"]):::c_ingest_sio_mesopelagic_fish
     ingest_sio_pic_zooplankton(["ingest_sio_pic_zooplankton"]):::c_ingest_sio_pic_zooplankton
     ingest_spatial(["ingest_spatial"]):::ingest
@@ -448,6 +485,9 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_cce_lter_zooscan
     ingest_swfsc_ichthyo --> ingest_cdfw_dungeness_crab
     ingest_swfsc_ichthyo --> ingest_farallon_bird_mammal
+    ingest_swfsc_ichthyo --> ingest_sio_cetacean_edna
+    ingest_swfsc_ichthyo --> ingest_sio_cetacean_sightings
+    ingest_swfsc_ichthyo --> ingest_sio_cetacean_sonobuoy
     ingest_swfsc_ichthyo --> ingest_sio_mesopelagic_fish
     ingest_swfsc_ichthyo --> ingest_sio_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
@@ -473,6 +513,9 @@ dag_mermaid: |-
     ingest_cce_lter_zooscan --> release_database
     ingest_cdfw_dungeness_crab --> release_database
     ingest_farallon_bird_mammal --> release_database
+    ingest_sio_cetacean_edna --> release_database
+    ingest_sio_cetacean_sightings --> release_database
+    ingest_sio_cetacean_sonobuoy --> release_database
     ingest_sio_mesopelagic_fish --> release_database
     ingest_sio_pic_zooplankton --> release_database
     ingest_spatial --> release_database
@@ -493,6 +536,9 @@ dag_mermaid: |-
     classDef c_ingest_cce_lter_zooscan fill:#c2e8f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cdfw_dungeness_crab fill:#f5d5b8,stroke:#00000033,color:#10161c;
     classDef c_ingest_farallon_bird_mammal fill:#f0d2e8,stroke:#00000033,color:#10161c;
+    classDef c_ingest_sio_cetacean_edna fill:#e4dcef,stroke:#00000033,color:#10161c;
+    classDef c_ingest_sio_cetacean_sightings fill:#d6e2f0,stroke:#00000033,color:#10161c;
+    classDef c_ingest_sio_cetacean_sonobuoy fill:#d3ebe9,stroke:#00000033,color:#10161c;
     classDef c_ingest_sio_mesopelagic_fish fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_sio_pic_zooplankton fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef ingest fill:#cdd9e5,stroke:#00000033,color:#10161c;

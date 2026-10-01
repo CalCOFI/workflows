@@ -1,27 +1,24 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: cce-lter
-
-# source: WS-R1 2026-09-05
-dataset: iron
-
-# source: https://cite.edirepository.org/cite/knb-lter-cce.21.3?style=ESIP, checked 2026-09-05 (newest EDI revision; overrides the sheet's title where they disagree, see note)
-dataset_name: Measurements of dissolved inorganic concentrations of nutrient iron
-  and of iron limitation at selected stations and depths from CalCOFI cruises in the
-  California Current System, Nov. 2002 - July 2004 (completed)
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "Dissolved iron"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Nutrients & Chemistry
-
-# source: caloos-sheet row 39, 2026-09-05
-status: archived
+# descriptive metadata for cce-lter_iron -- provider-editable (Google Sheet tab
+# `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys
+# (dataset_name, dataset_name_short, category, color, tables) moved to
+# ingest_cce-lter_iron.qmd's calcofi.dataset_meta YAML block on 2026-09-19 when
+# this holding (WS-R1 2026-09-05, CalOOS intake) became an active ingest for
+# issue #82. `status`/`module`/`next_step` (holdings-tracker-only fields) were
+# dropped here for the same reason -- pipeline stage now lives in
+# metadata/dataset_status.csv, one row per skill, not in this sidecar.
 
 # source: WS-R1 2026-09-05 default
 visibility: public
 
-# source: caloos-sheet row 39, 2026-09-05
-module: NA- one dataset
+# source: caloos-sheet row 39 (2026-09-05), condensed from the fuller `abstract`
+# below for the calcofi.io card/table use `description` is meant for
+description: >
+  Dissolved iron (Fe) concentrations from CalCOFI cruises in the southern
+  California Current System, Nov. 2002 - July 2004 (completed). Surface (0 m)
+  samples collected with a pole sampler, analyzed by FeLume flow-injection
+  analysis. The source also carries total iron (no real values) and a
+  shipboard iron-addition bioassay response (Chla response to Fe+, units
+  unconfirmed); neither is released yet.
 
 # source: caloos-sheet row 39, 2026-09-05
 abstract: CalCOFI Dissolved and Total Iron (Fe) Concentrations contains measurements
@@ -41,10 +38,24 @@ abstract: CalCOFI Dissolved and Total Iron (Fe) Concentrations contains measurem
   studying nutrient controls on primary productivity in low-nutrient, low-chlorophyll
   coastal waters.
 
-# source: caloos-sheet row 39, 2026-09-05
+# source: EML knb-lter-cce.21.3 methodStep, checked 2026-09-19 -- thin in the
+# source itself (just "Selected Stations Seasonally"); the real method detail
+# is what `abstract` above already carries (pole sampler / FeLume FIA / GO-Flo
+# profile + trace-metal-clean pump for a subset, see questions.csv Q03)
+methods_md: >
+  Seawater samples collected primarily from the mixed layer (surface, 0 m)
+  using a pole sampler; some samples collected via a trace metal clean Teflon
+  pump system, with profiles using GO-Flo bottles on synthetic line under
+  ultra-pure filtration protocols. Dissolved iron analyzed by FeLume
+  flow-injection analysis. A subset of samples also carry results from
+  shipboard iron-addition bioassays tracking the chlorophyll-a response.
+  Frequency: selected stations, seasonally.
+
+# source: EML knb-lter-cce.21.3 creator/contact, checked 2026-09-19 (fixes a
+# "Kathy Barbaeu" transposition-typo in the prior WS-R1 draft of this file)
 creators:
-- name: Kathy Barbaeu
-  organization: UCSD SIO
+- name: Katherine Barbeau
+  organization: Scripps Institution of Oceanography (SIO)
   email: kbarbeau@ucsd.edu
   role: lead
 
@@ -56,20 +67,51 @@ keywords:
 - Dissolved Nutrients
 - Phytoplankton Biomass and Diversity
 - CalCOFI Network
+- Iron
 
 # source: caloos-sheet row 39, 2026-09-05
-quality_control_md: 'QC flags present: No.'
+quality_control_md: >-
+  QC flags present: No. Surface samples were collected by pole; no field
+  blanks, replicates or contamination flags are documented, and units
+  ('nM/L' in the file header) and any detection limit are unconfirmed with the
+  provider. Values are published as nmol/L.
 
 # source: caloos-sheet row 39, 2026-09-05
 maintenance: Never; archived
 
+# source: https://cite.edirepository.org/cite/knb-lter-cce.21.3?style=ESIP,
+# checked 2026-10-01 -- EDI's own rendering, verbatim (its three creators:
+# CCE-LTER, the CalCOFI program at SIO, and K. Barbeau)
+citation_main: >
+  California Current Ecosystem LTER, CalCOFI - Scripps Institution of
+  Oceanography, and K. Barbeau. 2017. Measurements of dissolved inorganic
+  concentrations of nutrient iron and of iron limitation at selected stations
+  and depths from CalCOFI cruises in the California Current System, Nov. 2002 -
+  July 2004 (completed) ver 3. Environmental Data Initiative.
+  https://doi.org/10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1.
+
+# source: EML knb-lter-cce.21.3 intellectualRights, checked 2026-09-19 --
+# EDI's older free-text rights statement, not an SPDX license grant, so
+# recorded as `custom` with the source page as license_url rather than
+# guessed onto a CC id. Verbatim text: "The data available here are intended
+# for scholarly use by the research community, with the express
+# understanding that data users will properly acknowledge the originating
+# investigator. Use or reproduction of any material herein for any
+# commercial purpose is prohibited without prior written permission from the
+# responsible party."
+license: custom
+license_url: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.21.3
+
 # source: https://cite.edirepository.org/cite/knb-lter-cce.21.3?style=ESIP, checked 2026-09-05
 doi: 10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1
+
+# source: EML knb-lter-cce.21.3 creator, checked 2026-09-19
+pi_names: Katherine Barbeau
 
 # source: caloos-sheet row 39, 2026-09-05
 link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.21.3
 
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. EDI 21 (dissolved/total iron) -- new holding; sheet's own DOI matches the newest
-  revision (21.3)
+# source: CCE-LTER DataZoo dataset page, checked 2026-09-19 -- the provider's
+# own catalog page for this holding, distinct from the EDI portal above
+link_others:
+  - http://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/21

@@ -1,0 +1,89 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    iron_sample {
+        varchar study_name
+        double event_number
+        int index_number
+        timestamp datetime_start_utc
+        double latitude
+        double longitude
+        double line
+        double station
+        double depth_m
+        varchar iron_sampling_equipment
+        double dissolved_fe_nmol_l
+        double total_fe_nmol_l
+        double chl_response_to_fe
+        varchar site_key
+        varchar sample_key_id
+        int sample_id PK
+        varchar ship_code
+        varchar cruise_ym
+        varchar ship_key
+        varchar cruise_key
+        varchar cruise_key_method
+        geometry geom
+        varchar grid_key
+    }
+    iron_measurement {
+        bigint measurement_id PK
+        int sample_id FK
+        varchar measurement_type FK
+        double measurement_value
+    }
+    measurement_type {
+        varchar measurement_type PK
+        varchar description
+        varchar units
+        double valid_min
+        double valid_max
+        double valid_depth_min_m
+        double valid_depth_max_m
+        varchar derivation
+        bool is_canonical
+        varchar _source_column
+        varchar _source_table
+        varchar _source_datasets
+        varchar _qual_column
+        varchar _prec_column
+        varchar grain
+        varchar denominator
+        varchar category
+        varchar variable
+        varchar nerc_p01
+        varchar units_nerc_p06
+    }
+    dataset {
+        varchar provider
+        varchar dataset
+        varchar dataset_name
+        varchar dataset_name_short
+        varchar category
+        varchar color
+        varchar description
+        varchar citation_main
+        varchar citation_others
+        varchar link_calcofi_org
+        varchar link_data_source
+        varchar link_others
+        varchar tables
+        varchar coverage_temporal
+        varchar coverage_spatial
+        varchar license
+        varchar pi_names
+        varchar doi
+        varchar license_url
+        varchar acknowledgement
+        varchar contact
+    }
+    iron_sample ||--o{ iron_measurement : "sample_id"
+    measurement_type ||--o{ iron_measurement : "measurement_type"
+    classDef lightblue stroke:#ADD8E6,stroke-width:3px
+    class iron_sample,iron_measurement lightblue
+    classDef lightyellow stroke:#FFFFE0,stroke-width:3px
+    class measurement_type lightyellow
+    classDef white stroke:#FFFFFF,stroke-width:3px
+    class dataset white

@@ -8,6 +8,141 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Registry: eDNA measurement types for `calcofi_2022-edna` (staged, not released)
+
+`ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
+Vertebrate eDNA" (doi:10.15468/n52j6r, CC BY 4.0; Patin et al. 2026) but is **held out of the
+release** (`in_release: false`) until the provider says whether filters and assay runs with no
+detection were omitted and how reads were filtered. Its headline is `edna_presence` (1 = detected),
+shared with `sio_cetacean-edna`. What does ship is the shared `measurement_type` registry,
+which gains:
+- `edna_reads_dloop` and `edna_reads_12s` (reads per assay, summed over ASVs and PCR replicates: a
+  semi-quantitative signal, not abundance, never summed across assays);
+- the per-sample normalisers `edna_reads_raw_dloop` / `edna_reads_raw_12s` and
+  `edna_reads_filtered_dloop` / `edna_reads_filtered_12s`, and `oxygen_mg_l`, `dna_concentration`;
+- `chl_fluor`, shared with `calcofi_mets`, now declares `valid_min = 0`.
+
+## Phytoplankton: named codes stop falling into "not identified further"; one rule for unknown species
+
+**53 codes with real names keyed only their functional-group class.** The ingest's WoRMS cache
+(`metadata/calcofi/phytoplankton/taxon_worms.csv`) had no AphiaID for 75 of the source's 384 defined
+species codes. Those fell through to the six `ds_common_name` rows in `metadata/taxon_override.csv`
+and keyed their class (Bacillariophyceae, Dinophyceae, Coccolithophyceae, Dictyochophyceae). That
+is right for the source's own unidentified classes ("indistinguished pennate diatoms", "pennate
+sp. 6"). For 53 real names it was a failed lookup, so "Diatoms, not identified further" and its
+siblings silently absorbed named taxa. Among them were both *Pseudo-nitzschia* size classes (codes
+94 and 400: cells counted in 405 and 234 source samples, 1996–2022), *Calcidiscus leptoporus* (223)
+and *Ditylum brightwellii* (43). The lookups failed for four reasons:
+
+- **Source spelling slips:** *Rhisosolenia*, *brightwelli*, *obtusidiens*, *Lithodesmum*, *octanarius*, …
+- **Qualifiers the name cleaner turned into an empty query:** "slim" / "robust Pseudo-nitzschia spp.".
+- **Open nomenclature queried verbatim:** "Hemiaulus 1".
+- **Accepted species the WoRMS name services never return:** *Calcidiscus leptoporus*
+  (worms:235923) and *Rhabdosphaera clavigera* (worms:235972).
+
+**One rule for what the source names.** `species` stays verbatim (it is the name a consumer
+displays); `name_query` is what is looked up:
+
+- **Clear spelling slips** are fixed in the query only. The species keys its accepted WoRMS record
+  (16 codes).
+- **An unknown species of a named genus keys that genus.** This covers "sp. 1" / "sp. a", "spp.",
+  size classes, spores, "complex", "cf." determinations, a species WoRMS does not hold (*Prorocentrum
+  cinctum*), and species of one genus counted together ("Ceratium kofoidii + C. boehmii"). A known
+  species with a "var." / "spore" / "minute form" suffix keeps its species key.
+- **The genus keyed is the accepted one.** Where WoRMS files the source's species under another
+  accepted genus, the genus codes key that genus, so a hierarchy rollup agrees with the species
+  items: the six "Ceratium spp." codes key *Tripos* (worms:494057), as the 19 *Ceratium* species
+  already did. `species` still reads "Ceratium spp.".
+- **Older rows are brought into line too.** The rule also applies to the older "cf." and combined
+  rows, which keyed a species ("Chaetoceros cf. subtilis" keyed *C. subtilis*; "Actinoptychus
+  adriaticus + A. vulgaris" keyed *A. adriaticus*). Those species items now fold into their genus.
+- **Species of two genera counted together key their lowest common ancestor** in WoRMS's
+  classification, not the class: "Dactyliosolen phuketensis + Guinardia striata" keys Rhizosoleniaceae
+  (worms:149068), "indistinguished Gyrosigma spp. + Pleurosigma spp." keys Pleurosigmataceae
+  (worms:149032), and "Mastogloia woodiana + pennate a" keys Bacillariophyceae (worms:148899), the
+  common ancestor of a named *Mastogloia* and an unidentified pennate. `questions.csv` Q09 asks the provider.
+- **Same spelling, wrong author.** Five cached rows keyed a later, unaccepted name spelled like the
+  source's, not the accepted species. They now key the accepted record:
+  - *Chaetoceros debilis* (codes 367 and 521): Leegaard 1920 (worms:961758) → Cleve 1894 (worms:149219).
+  - *Chaetoceros peruvianus* (34): Gran 1908 (worms:961865) → Brightwell 1856 (worms:178185).
+  - *Coscinodiscus perforatus* (501): Cleve & Möller 1878 (worms:962307) → Ehrenberg 1844 (worms:149272).
+  - "*Rhizosolenia hebetata* f. *hebetata*" (390) had keyed *R. hebetata* (Hensen) Margalef, a
+    synonym of *R. semispina*, so it merged with f. *semispina* (code 62). It now keys its own form
+    (worms:163347).
+- **A dinoflagellate keyed to a diatom.** "Prorocentrum compressum" (code 102) keyed worms:978142,
+  a diatom variety (*Pyxidicula compressa* var. *compressa*), because WoRMS files that name
+  as a synonym of a diatom. It now keys *Prorocentrum* (worms:109566), like the other "Prorocentrum
+  sp." codes. Four cached ranks that said "Species" for varieties and a form were corrected.
+
+**Result.** By the resolution order applied to the committed registries:
+
+- 118 codes change `taxon_key`: 54 leave their class (53 for a genus or species, 1 for a family),
+  56 move from a species to its genus, 1 from a species to a family, 1 from a species to the class,
+  1 from the source's genus to the accepted genus (*Ceratium* → *Tripos*), and 5 move to the
+  accepted record of the same name. No other code moves.
+- 17 codes stay at class level: 16 unidentified classes and the one two-genus entry whose common
+  ancestor is the class. The ingest allowlists them one code at a time and stops if any other
+  code reaches only a class.
+- Distinct phytoplankton `taxon_key`s in the worms authority go from 299 to 296 (plus 10
+  dataset-local keys, unchanged).
+- **`obs` row count is unchanged** (159,804: one row per source measurement). Only `taxon_key`
+  moves, on 48,633 rows (the 118 codes; 5,925 of them with cells counted).
+- **Consumers must sum.** Several codes now share one `taxon_key` within the same sample (30
+  keys do: *Oxytoxum* 10 codes, Bacillariophyceae 9, *Dinophysis* 8, *Nitzschia* 8,
+  *Prorocentrum* 8, *Chaetoceros* 7, *Protoperidinium* 6, *Tripos* 6). A consumer that counts
+  rows per taxon rather than summing `value` per sample double-counts. `obs.obs_id` stays unique,
+  so no gate fails.
+- The release's `dataset_taxon.ds_scientific_name` still holds the WoRMS name, not the source's own
+  spelling; the verbatim name is in the ingest's `taxon_worms.csv` (`species`).
+
+**Two phytoplankton common names.** WoRMS, GBIF, ITIS and NCBI Taxonomy were checked for every
+phytoplankton taxon. Beyond the classes, only two species have an English name, and both are WoRMS's
+single English vernacular: *Noctiluca scintillans* "sea sparkle" (worms:109921) and *Pyrocystis
+fusiformis* "ocean night light" (worms:110328). They are added to `metadata/taxon_common.csv`.
+
+## A new dataset: `cce-lter_iron`, dissolved iron on CalCOFI cruises, 2002–2004
+
+`ingest_cce-lter_iron.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.21.3` (Barbeau,
+doi:10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1), fetched and md5-pinned by
+`libs/download_iron.R` (CalCOFI/workflows#82). With no cast or bottle number in the source, it
+mints its own `sample` arm (170 surface pole samples, Nov 2002 – Jul 2004, keyed
+`cce-lter_iron:bottle:{study_name}-{index_number}` from the source's own unique pair, not row
+position) and publishes 170 `obs` rows in the env realm of one new measurement type,
+`dissolved_iron` (nmol/L; the file header says "nM/L", confirmation pending, Q04).
+
+**Held out, on purpose.** `chl_response_to_fe` (the iron-addition bioassay response) is **not**
+released until the provider answers Q01 (is it a unitless treatment:control ratio, a concentration
+or a code? its EML scale is `nominal`); Q01 stays `open` with priority `blocker`. `total_iron` is
+not registered because the revision has no real value (170 of 170 rows are the `-999` sentinel).
+Neither has a row in `measurement_type`, so neither appears in the measurements catalog.
+
+The source's undocumented `-999` sentinel becomes NULL (Q06), and `Datetime PST` is read as a fixed
+UTC−8 offset pending the provider's answer to Q02. The license is the package's own free-text
+rights statement (`custom`), not a CC grant. Open provider questions: Q01, Q04 (units, detection
+limit, whether the 0.05 nmol/L floor is one), Q07 (operational definition of "dissolved",
+contamination control).
+
+## Three cetacean datasets staged, not released; the registry rows they add do ship
+
+`sio_cetacean-sightings` (visual line-transect sightings and effort, 2004-2022), `sio_cetacean-sonobuoy`
+(hourly acoustic presence, 2004-2012) and `sio_cetacean-edna` (NCOG eDNA screens, 2014-2016) are staged
+from CalCOFI/marmam-app with `in_release: false`: no rows of theirs are in this release, pending their
+licences and citations (CalCOFI/workflows#117). Three things they touch **are** release content:
+
+- **`measurement_type` gains 10 types with no data behind them yet**: `acoustic_presence`, `calf_count`,
+  `call_type`, `edna_presence`, `effort_status`, `group_size`, `group_size_max`, `group_size_min`,
+  `transect_length`. The release publishes the whole registry (`metadata/measurement_type.csv`), not only
+  the types its shards use. `behavior`'s `_source_datasets` also names `sio_cetacean-sightings` now.
+- **The sightings holding stays in the catalog.** `sio_cetacean-sightings` remains a `status: external`
+  holding in `datasets.json` (now titled from the ingest, linked to the marmam-app source, DOI unchanged)
+  until it ships, at which point the holding keys leave its sidecar.
+- **`farallon_bird-mammal`'s description** now says the Scripps Whale Acoustics Lab's independent observers
+  survey cetaceans on the same cruises, so summing the two datasets counts some animals twice.
+
+The release gate `check_taxon_registries()` now skips `taxon_override.csv` rows for held-out datasets
+(`exclude = ds_excluded`, calcofi4db 4.17.2); the 13 rows these three ingests add would otherwise have
+stopped the release.
+
 # v2026.10.01
 
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen

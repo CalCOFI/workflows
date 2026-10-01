@@ -227,6 +227,9 @@ Rscript scripts/build_workflows_index.R
   `ensure_taxon_xref()` → `ensure_taxon_lineage()` → `resolve_dataset_taxon()` →
   the builders → `check_dataset_taxon()`. There are no per-dataset arms in
   `calcofi4db`.
+- A source name keys its accepted rank: verbatim in `species`, an unknown species of a named
+  genus keys the accepted genus, two genera key their lowest common ancestor, and a code left
+  at class level is allowlisted one at a time.
 - `clean_taxon_name()` output is the lookup query, never `ds_taxa_code`. Stage
   `measurement_taxon.csv` with `ensure_measurement_taxon()`.
 - An override never replaces an id the source supplied; a group label is never a

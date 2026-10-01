@@ -1,0 +1,19 @@
+tbl_old,tbl_new,fld_old,fld_new,type_new,fld_description
+occurrence,edna_sample,parentEventID,parent_event_id,varchar,"Filter id (Darwin Core parentEventID); the id part of sample_key calcofi_2022-edna:filter:<id>. An eventID is the finer sequencing-library grain (assay x PCR replicate), not the sample."
+occurrence,edna_sample,decimalLatitude,latitude,decimal,Latitude in decimal degrees (WGS84)
+occurrence,edna_sample,decimalLongitude,longitude,decimal,Longitude in decimal degrees (WGS84)
+occurrence,edna_sample,minimumDepthInMeters,depth_min_m,decimal,Minimum filter depth in meters
+occurrence,edna_sample,maximumDepthInMeters,depth_max_m,decimal,Maximum filter depth in meters
+occurrence,edna_sample,eventDate,datetime_start_utc,timestamp,"Filter collection datetime: the source's ISO 8601 local time with a UTC offset (e.g. 2022-10-13T13:50-07:00), converted to UTC by parsing the offset"
+occurrence,edna_sample,locationID,location_id,varchar,"CalCOFI line/station and depth label (e.g. 80.7 59.9); kept for QA, not yet matched to a station (question Q06)"
+occurrence,edna_sample,locality,locality,varchar,"Kept verbatim for QA; staging-only, not projected into core sample"
+occurrence,edna_assay,occurrenceID,occurrenceID,varchar,"One ASV (distinct sequence) in one sequencing library; join key between occurrence, dnaderiveddata and extendedmeasurementorfact; staging-only"
+occurrence,edna_assay,eventID,eventID,varchar,"Sequencing library: assay suffix (_DL, _MiFish) and, for D-loop, a PCR replicate (-1, -2, -3); staging-only"
+occurrence,edna_assay,scientificNameID,ds_taxa_code,varchar,"WoRMS LSID URN (urn:lsid:marinespecies.org:taxname:<AphiaID>), used verbatim as dataset_taxon.ds_taxa_code"
+occurrence,edna_assay,(derived from scientificNameID),worms_id,integer,AphiaID extracted from the scientificNameID LSID URN via regexp_extract('([0-9]+)$')
+occurrence,edna_assay,organismQuantity,reads,bigint,"Sequence reads for this ASV in this library (organismQuantityType 'DNA sequence reads' on every row, asserted)"
+dnaderiveddata,edna_assay,target_gene,assay,varchar,"Assay code: 'D-loop' -> dloop, '12S rRNA (SSU mitochondria)' -> 12s; asserted against the library's _DL / _MiFish suffix. Becomes the suffix of measurement_type edna_reads_<assay>."
+occurrence,edna_detection,organismQuantity,reads,bigint,"SUM of reads over the taxon's ASVs and the filter's PCR replicate libraries of one assay; obs.measurement_value for edna_reads_<assay>. A semi-quantitative signal, not abundance."
+occurrence,edna_detection,(derived),n_library,integer,"Libraries (PCR replicates) of this assay in which this filter detected the taxon; staging-only"
+extendedmeasurementorfact,edna_context,measurementType,measurement_type,varchar,"Mapped by exact measurementType text and asserted measurementUnit (emof_type_map): ammonia, nitrate, nitrite, phosphate, silicate, chl_fluor, oxygen_mg_l, dna_concentration (per filter) and edna_reads_raw_<assay> / edna_reads_filtered_<assay> (per library, summed per assay). The other measurementTypes (FAIRe protocol text, the OTU/ASV count of question Q04) are not published."
+extendedmeasurementorfact,edna_context,measurementValue,measurement_value,double,"Numeric value; asserted identical across the occurrences of its filter (per-filter types) or library (raw and filtered reads). The FAIRe terms 'missing' / 'missing: not provided' emit no row."
