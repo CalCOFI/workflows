@@ -1,0 +1,8 @@
+table,column,name_long,units,description_md
+iron_sample,ship_code,Ship Code,,Trailing alphanumeric code extracted from source `study_name` (e.g. '33RR' from '2002-11-02-C-33RR'); input to `derive_cruise_key_on_casts()`.
+iron_sample,cruise_key,Cruise Key,,Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Derived via `calcofi4db::derive_cruise_key_on_casts()` against `ship_code` + `datetime_start_utc`.
+iron_sample,site_key,Site Key,,"CalCOFI station key 'LLL.L SSS.S', derived as `sprintf('%05.1f %05.1f', line, station)` from the source's own Line/Station columns."
+iron_sample,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+iron_sample,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
+iron_sample,sample_id,Sample ID,,"Integer pivot FK between `iron_sample` and `iron_measurement` (`row_number()` in `study_name`, `index_number` order); the published key is `sample_key_id`."
+iron_sample,sample_key_id,Sample Key ID,,"Natural sample key `study_name` + `-` + `index_number` (the source's own pair, asserted unique); the id part of `sample.sample_key`."

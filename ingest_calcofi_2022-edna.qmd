@@ -792,12 +792,8 @@ registered <- d_meas_type |>
   filter(map_lgl(str_split(coalesce(`_source_datasets`, ""), ";\\s*"), ~ ds_key %in% .x)) |>
   pull(measurement_type)
 
-# edna_presence is sio_cetacean-edna's row (PR #117), kept byte-identical so the
-# two PRs merge without a conflict; calcofi_2022-edna joins its
-# _source_datasets once #117 is on main. Drop it from this list then.
-claim_pending <- "edna_presence"
 unregistered <- setdiff(emitted, d_meas_type$measurement_type)
-unclaimed    <- setdiff(emitted, c(registered, claim_pending))
+unclaimed    <- setdiff(emitted, registered)
 empty        <- setdiff(registered, emitted)
 stopifnot(
   "every emitted measurement_type must be in metadata/measurement_type.csv" =
