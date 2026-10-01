@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.01
+
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
 
 **Five recent cruises regain their offshore stations.** The first 20-2607SH_CTDPrelim.zip wrote station numbers
