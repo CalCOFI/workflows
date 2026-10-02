@@ -8,6 +8,15 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD casts: two provider questions on bottle values after 2021-05
+
+`calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
+reach the release only as the `btl_*` types on `calcofi_ctd-cast`, from preliminary CTD + bottle
+files and with no quality code (the source files carry no flag column for any bottle value).
+Two `proposed` questions go to the provider (`metadata/calcofi/ctd-cast/questions.csv` Q40, Q41):
+whether `btl_*` values are equivalent to the bottle database for 2021 onward, and whether a bottle
+database later than 2021-05 is available or scheduled. No data changes.
+
 ## Registry: eDNA measurement types for `calcofi_2022-edna` (staged, not released)
 
 `ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
