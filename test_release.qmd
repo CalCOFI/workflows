@@ -524,6 +524,25 @@ contract <- tibble::tribble(
   "integrity: no non-finite coordinates in sample", "zero", glue(
     "SELECT count(*) n FROM {rp('sample')}
      WHERE isnan(latitude) OR isnan(longitude) OR isinf(latitude) OR isinf(longitude)"),
+  # hex7 on sample and sample_root (Ben, 2026-10-02; calcofi4db add_sample_hex7()): what lets a
+  # per-sample value in sample_measurement — a cast's mixed-layer depth, a net's volume — be drawn in
+  # the Explorer's Hexagons lens. Read from the PUBLISHED objects with no extension, as a browser
+  # does: the resolution is the cell's own bits 52-55. One definition with obs_bio / obs_env (the
+  # res-7 parent of the res-10 cell of the position), proved on the rows that share a position.
+  "consumer: a per-sample value reaches a hexagon through sample.hex7, on non-root samples too (Explorer slice_cast)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('sample_measurement')} sm JOIN {rp('sample')} s USING (sample_key)
+     WHERE s.parent_sample_key IS NOT NULL AND s.hex7 IS NOT NULL"),
+  "integrity: sample.hex7 is a resolution-7 cell, present exactly where the position is finite", "zero", glue(
+    "SELECT count(*) n FROM {rp('sample')}
+     WHERE (hex7 IS NOT NULL) <> COALESCE(isfinite(latitude) AND isfinite(longitude), FALSE)
+        OR ((hex7 >> 52) & 15) <> 7"),
+  "integrity: sample_root.hex7 is its root's sample.hex7, present exactly where the position is finite", "zero", glue(
+    "SELECT count(*) n FROM {rp('sample_root')} r LEFT JOIN {rp('sample')} s ON s.sample_key = r.root_sample_key
+     WHERE s.sample_key IS NULL OR r.hex7 IS DISTINCT FROM s.hex7
+        OR (r.hex7 IS NOT NULL) <> COALESCE(isfinite(r.latitude) AND isfinite(r.longitude), FALSE)"),
+  "integrity: an observation at its sample's own position is in its sample's hex7 (one definition) [obs_bio]", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_bio')} o JOIN {rp('sample')} s USING (sample_key)
+     WHERE o.latitude = s.latitude AND o.longitude = s.longitude AND o.hex7 IS DISTINCT FROM s.hex7"),
   # (the rows that read obs live in obs_rows() above: once against the deprecated table's
   #  own objects, once against the catalog view; pair_rows() reads obs_bio / obs_env directly)
   # an itis:-keyed taxon must KEEP its itis: key once worms_id is filled — the
