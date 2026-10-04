@@ -482,6 +482,45 @@ v2026.10.01:
   depth and bucket temperature; `ShipLookup.ShipIces`; aggregation by AphiaID
   (`swfsc_ichthyo_05`/`_13`); egg stages 12-15 stay as published (669 rows, `swfsc_ichthyo_02`).
 
+## CUFES: the source is SWFSC's own export, and eggs per m³ are published
+
+`swfsc_cufes` was read from NOAA CoastWatch ERDDAP (`erdCalCOFIcufes`). It now reads `Cufes.csv`
+from SWFSC's CSV export of its CalCOFI database (2026-09-26, Ed Weber), where each sample carries
+its `CufesId` and the `CruiseId` of its cruise. Record by record, the export holds 47,989 of
+ERDDAP's 49,572 samples. Where both have a sample, its times and egg counts are identical, and its
+positions and environment differ by no more than float rounding (≤ 1.5e-5). Both run from
+1996-03-15 to 2022-04-27. Measured against v2026.10.01:
+
+- **1,583 samples leave** (9,016 `abundance` rows; 18,218 eggs, 15,252 of them "other fish").
+  1,563 have no position at either end, and SWFSC removed them at source (`swfsc_cufes_04`).
+  They include all of cruises 1998-09, 1999-08 and 2000-01 New Horizon. The other 20 have a stop
+  position only, and v2026.10.01 placed them there (asked: `swfsc_cufes_09`). Every remaining
+  sample has a position.
+- **A new measurement type, `egg_concentration`** (count/m³; 275,081 rows on all 47,989 samples,
+  one per egg count, same taxon and `life_stage = egg`). It is Ed Weber's standardization
+  (`swfsc_cufes_01`): eggs/m³ = (count / minutes sampled) / mean pump speed, with minutes =
+  stop − start and the pump speed in m³/min (`swfsc_cufes_02`). It is computed only where the
+  minutes and both pump speeds are positive, which every sample of this export is. The raw
+  counts still publish as `abundance` (count), unchanged. One sample's stop pump speed reads
+  40 m³/min (others 0.27–1.07), which makes its concentration about 30 times too low. It is
+  published as shipped and asked about (`swfsc_cufes_10`).
+- **Every sample has a `cruise_key`**, taken from the provider's `CruiseId` through
+  `cruise.cruise_uuid`. Before, 5,053 had none, and 6,212 keys change: 5,049 are filled (on
+  2017-07 and 2018-07 Lasker, 1998-03/05/06 and 1997-03 Jordan, and others). 1,163 move to the
+  cruise SWFSC designates: 743 from 1998-02-31JD to 1998-03-31JD, and 420 from 1996-04-31JD to
+  1996-03-31JD. The date-span rule (`resolve_cruise_key()`, span then the source's `Cruise`)
+  gives the same key on all 47,989.
+- **`sample_key` is built from `CufesId`** (`swfsc_cufes:underway:<CufesId>`, previously the
+  ERDDAP row number), and `CufesId` is released as `sample.source_uuid`, as ichthyo's UUIDs are.
+  Every CUFES `sample_key` changes.
+- `grid_key`: 9,224 samples change cell. All of them come from the rebuilt 225-cell grid (section
+  above), none from the new source. 754 samples (9,048 `obs` rows) lie outside the grid, against
+  2,319 in v2026.10.01, most of which had no position at all.
+- `swfsc_cufes` `sample` goes 49,572 → 47,989. `obs` goes 284,097 → 550,162 (`abundance`
+  275,081 + `egg_concentration` 275,081). Taxa are unchanged: the six keys, now checked against
+  SWFSC's `Species.csv` AphiaIDs. The underway temperature, salinity, wind and pump speed are
+  still not published, as before.
+
 ## Bottle: salinity quality codes above 9 become blank (calcofi_bottle_01)
 
 The provider (Rasmus Swalethorp, 2026-09-18) answered that a quality code above 9 is impossible
