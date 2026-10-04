@@ -1578,13 +1578,13 @@ append_sample(con, glue("
   FROM site s
   LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
          ON td.site_uuid = s.site_uuid"))
-# Net.NetDepth (new in the 2026-09-26 export): the tow's maximum depth in m, true
-# depth not wire-out (Ed Weber, 2026-09-25, swfsc_ichthyo_08). It is loaded into
-# `net` and checked here, but NOT yet projected to sample.depth_max_m: on this
-# export 210 of 59,976 ichthyo sites would put a tow more than 10 m below the
-# deepest GEBCO cell around the position, and the release's seafloor ratchet
-# (DEPTH_SEAFLOOR_OVER_MAX = 694, 686 at v2026.10.01) would fail. The projection is
-# a decision for the release, not this ingest; tow/net depth_max_m stay NULL.
+# depth_max_m of a tow and of its nets: Net.NetDepth, the tow's maximum depth in m,
+# true depth not wire-out (Ed Weber, 2026-09-25, swfsc_ichthyo_08). It is a net
+# column but a property of the tow, so the tow takes it only where every net of the
+# tow agrees; a tow with no NetDepth (the surface Manta tows) keeps NULL.
+# NOT release-ready on its own: on the 2026-09-26 export 210 of 59,976 sites then sit
+# more than 10 m below the deepest GEBCO cell around them, past the release's
+# DEPTH_SEAFLOOR_OVER_MAX ratchet (694; 686 at v2026.10.01) -- swfsc_ichthyo_19.
 d_netdepth <- dbGetQuery(con, "
   SELECT t.tow_type_key,
          COUNT(*)                                        AS n_tow,
@@ -1604,7 +1604,7 @@ stopifnot(
     dbGetQuery(con, "SELECT COUNT(*) FROM net WHERE net_depth_m IS NOT NULL
                      AND (isnan(net_depth_m) OR net_depth_m <= 0)")[[1]] == 0)
 d_netdepth |>
-  datatable(caption = "Net.NetDepth per tow, by tow type (not projected to sample.depth_max_m yet)")
+  datatable(caption = "Net.NetDepth -> sample.depth_max_m of tows and nets, by tow type")
 
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'tow', 't.tow_uuid')} AS sample_key, 'tow' AS sample_type,
@@ -1613,11 +1613,13 @@ append_sample(con, glue("
          '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
          CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
-         0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         0::DOUBLE AS depth_min_m, CAST(nd.depth_max_m AS DOUBLE) AS depth_max_m,
          t.tow_type_key AS tow_type,
          NULL::VARCHAR AS data_stage,
          t.tow_uuid AS source_uuid
-  FROM tow t JOIN site s USING (site_uuid)"))
+  FROM tow t JOIN site s USING (site_uuid)
+  LEFT JOIN (SELECT tow_uuid, MAX(net_depth_m) AS depth_max_m
+             FROM net GROUP BY 1) nd USING (tow_uuid)"))
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'net', 'n.net_uuid')} AS sample_key, 'net' AS sample_type,
          {ns_key(ds_key, 'tow', 'n.tow_uuid')} AS parent_sample_key,
@@ -1625,11 +1627,26 @@ append_sample(con, glue("
          '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
          CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
-         0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         0::DOUBLE AS depth_min_m, CAST(n.net_depth_m AS DOUBLE) AS depth_max_m,
          t.tow_type_key AS tow_type,
          NULL::VARCHAR AS data_stage,
          n.net_uuid AS source_uuid
   FROM net n JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)"))
+
+# the NetDepth projection landed on exactly the tows and nets that carry one
+d_depth <- dbGetQuery(con, "
+  SELECT sample_type, COUNT(*) AS n, COUNT(depth_max_m) AS n_depth_max
+  FROM sample GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "every tow with a NetDepth carries it as depth_max_m" =
+    d_depth$n_depth_max[d_depth$sample_type == "tow"] == sum(d_netdepth$n_tow_depth),
+  "every net with a NetDepth carries it as depth_max_m" =
+    d_depth$n_depth_max[d_depth$sample_type == "net"] ==
+    dbGetQuery(con, "SELECT COUNT(net_depth_m) FROM net")[[1]],
+  "a site has no depth of its own" =
+    d_depth$n_depth_max[d_depth$sample_type == "site"] == 0)
+cat(glue("depth_max_m from NetDepth: ",
+         "{paste(sprintf('%s %s of %s', d_depth$sample_type, format(d_depth$n_depth_max, big.mark=','), format(d_depth$n, big.mark=',')), collapse = '; ')}"), "\n")
 
 # obs — the abundance headline: BASE rows only (measurement_type IS NULL in the
 # source long table). taxon_key resolves through dataset_taxon on species_id —
