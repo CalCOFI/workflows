@@ -16,8 +16,7 @@ exported the 16 `obs` partition objects and `obs.parquet`, and **this release do
 only when every reader has moved to `obs_bio` + `obs_env` or the `obs` catalog view
 (issue [#92](https://github.com/CalCOFI/workflows/issues/92), open; seven readers break with no
 change). Until the release that drops them says so here, read `obs_bio` / `obs_env` or the view,
-not the table's objects. The `removed_in: next` mark on the table's catalog entry is a placeholder
-until then.
+not the table's objects.
 
 ## DIC: every sample with a position carries a `grid_key`
 
