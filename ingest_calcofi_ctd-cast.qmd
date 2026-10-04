@@ -1670,6 +1670,92 @@ d_bind <- d_bind |>
 stopifnot(sum(is.na(d_bind$longitude)) == 0)
 stopifnot(sum(is.na(d_bind$latitude)) == 0)
 
+# --- a cast is on station as a whole: its MEDIAN position decides --------------
+# Until #131 the distance filter tested every scan, so a scan whose GPS fix glitched
+# (2404SH: 674 scans on 143 casts, lat 226 or lon -245 in the middle of an otherwise
+# steady cast; 626 of them beyond 10 km) was dropped with its measurements, 11 bottles
+# among them, and a cast was kept piecewise; the 48 within 10 km were published at
+# the glitched position. Now the cast's median position is tested: a cast
+# within CTD_TRUNC_KM (the filter's 10 km) of its station keeps EVERY scan, and a
+# scan more than CTD_GLITCH_DEG from that median keeps its measurements and takes
+# the cast's median position. A cast whose median fails (truly off station, or a GPS
+# feed corrupt on most scans, as on several 0310NH / 0711NH casts) falls back to the
+# per-scan test in [filter_pts], so it keeps exactly what it kept before.
+#
+# CTD_OFF_STATION_KEEP: a real occupation off its station is not a position error.
+# 2504SH cast 045 (both directions) sits 11.0 km from nominal 083.3 039.4 on a steady
+# GPS track (scans within 0.05 km of each other); GEBCO gives 45 m at the recorded
+# position and 24 m at the nominal one, and the cast reached 32 m, so it cannot have
+# been at the nominal position. It keeps its true position and its nominal station
+# (site_key 083.3 039.4); the distance is listed in the table below.
+CTD_GLITCH_DEG <- 0.05
+CTD_OFF_STATION_KEEP <- tibble::tribble(
+  ~cruise_key, ~cast_base, ~max_km, ~reason,
+  "2504SH",    "2504_045", 12,      paste(
+    "11.0 km off 083.3 039.4 on a steady GPS track; 32 m cast where GEBCO is 24 m at",
+    "the nominal position and 45 m at the recorded one (CalCOFI/workflows#131)"))
+
+cast_gid <- as.integer(vctrs::vec_group_id(d_bind[c("_source_file", "cast_id", "line", "sta")]))
+d_cast_pos <- tibble(gid = cast_gid, lon = d_bind$longitude, lat = d_bind$latitude,
+                     lon_lnst = d_bind$lon_lnst, lat_lnst = d_bind$lat_lnst) |>
+  group_by(gid) |>
+  summarize(lon_med = median(lon), lat_med = median(lat),
+            lon_lnst = first(lon_lnst), lat_lnst = first(lat_lnst), n_scans = n(),
+            .groups = "drop") |>
+  arrange(gid)
+stopifnot("cast groups numbered 1..n" = all(d_cast_pos$gid == seq_len(nrow(d_cast_pos))))
+d_cast_pos$cruise_key <- d_bind$cruise_key[match(d_cast_pos$gid, cast_gid)]
+d_cast_pos$cast_id    <- d_bind$cast_id[match(d_cast_pos$gid, cast_gid)]
+d_cast_pos <- d_cast_pos |>
+  mutate(
+    cast_base = str_remove(cast_id, "[dDuU]$"),
+    km_cast = {
+      r <- pi / 180
+      2 * 6371.0088 * asin(sqrt(sin((lat_lnst - lat_med) * r / 2)^2 +
+        cos(lat_med * r) * cos(lat_lnst * r) * sin((lon_lnst - lon_med) * r / 2)^2))
+    }) |>
+  left_join(CTD_OFF_STATION_KEEP |> select(cruise_key, cast_base, max_km),
+            by = c("cruise_key", "cast_base")) |>
+  mutate(
+    is_off_station_kept = !is.na(km_cast) & km_cast > CTD_TRUNC_KM &
+      !is.na(max_km) & km_cast <= max_km,
+    is_on_station = !is.na(km_cast) & (km_cast <= CTD_TRUNC_KM | is_off_station_kept))
+
+# an off-station allowance that no longer applies is a stale key, not a no-op
+off_unused <- anti_join(CTD_OFF_STATION_KEEP,
+                        d_cast_pos |> filter(is_off_station_kept), by = c("cruise_key", "cast_base"))
+if (nrow(off_unused) > 0)
+  stop(glue("CTD_OFF_STATION_KEEP matches no off-station cast: ",
+            "{paste(off_unused$cruise_key, off_unused$cast_base, collapse = '; ')}"))
+d_cast_pos |>
+  filter(is_off_station_kept) |>
+  transmute(cruise_key, cast_id, lon_med, lat_med, km_from_station = round(km_cast, 2), n_scans) |>
+  dt(caption = "Casts kept off their nominal station (CTD_OFF_STATION_KEEP)",
+     fname = "ctd_casts_off_station_kept")
+
+d_bind$is_cast_on_station <- d_cast_pos$is_on_station[cast_gid]
+i_glitch <- which(
+  d_bind$is_cast_on_station &
+    pmax(abs(d_bind$longitude - d_cast_pos$lon_med[cast_gid]),
+         abs(d_bind$latitude  - d_cast_pos$lat_med[cast_gid])) > CTD_GLITCH_DEG)
+if (length(i_glitch) > 0) {
+  tibble(cruise_key = d_bind$cruise_key[i_glitch], cast_id = d_bind$cast_id[i_glitch],
+         depth = d_bind$depth[i_glitch]) |>
+    group_by(cruise_key) |>
+    summarize(n_casts = n_distinct(cast_id), n_scans = n(), .groups = "drop") |>
+    dt(caption = glue(
+      "GPS glitches: scans more than {CTD_GLITCH_DEG} deg from their on-station cast's ",
+      "median position, kept with the cast's median position"),
+      fname = "ctd_scans_gps_glitch")
+  say(glue("GPS-glitch scans given their cast's median position: ",
+           "{format(length(i_glitch), big.mark = ',')} on ",
+           "{n_distinct(cast_gid[i_glitch])} cast(s)"))
+  d_bind$longitude[i_glitch] <- d_cast_pos$lon_med[cast_gid[i_glitch]]
+  d_bind$latitude[i_glitch]  <- d_cast_pos$lat_med[cast_gid[i_glitch]]
+}
+write_rds(d_cast_pos, glue("{dir_tmp}/d_cast_position.rds"))
+rm(cast_gid, i_glitch)
+
 d_bind |>
   filter(is_lon_pseudoNA | is_lat_pseudoNA) |>
   group_by(cruise_key) |>
@@ -1851,6 +1937,12 @@ mapView(bb_badcr) +
 
 ```{r}
 #| label: filter_pts
+
+# a scan stays when its CAST is on station ([fill_lonlat]: median position, glitches
+# repositioned) or, for a cast whose median fails, when the scan itself is within the
+# cutoff (the pre-#131 rule, so a cast with a GPS feed corrupt on most scans keeps what
+# it kept). is_dist_dec_lnst_within_max is folded into that verdict here.
+pts$is_dist_dec_lnst_within_max <- pts$is_cast_on_station | pts$is_dist_dec_lnst_within_max
 
 d_pts_cruise_filt_smry <- pts |>
   group_by(cruise_key) |>
@@ -2037,6 +2129,7 @@ d_filt <- d_filt |>
       "lat_lnst",
       "dist_dec_lnst_km",
       "is_dist_dec_lnst_within_max",
+      "is_cast_on_station",
       "grid_site"
     ))
   )
