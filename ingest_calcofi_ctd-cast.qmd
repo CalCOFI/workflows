@@ -1343,6 +1343,41 @@ d_bind <- d_bind |>
     )
   )
 
+# --- a cast's direction is its Cast_ID's, not its file's ---------------------
+# The downcast files of 1604SH and 2105SH carry seven UPcasts (1604_003u, _034u,
+# _042u, _082u, _099u; 2105_019u, _043u: 1,756 rows), each the only cast of its
+# occupation and each byte-for-byte the same rows as in the U file. Tagged with the
+# file's direction they kept a `cast_dir` of D, so [dedup_ctd_raw] (which keys on
+# cast_dir) never matched them to their U-file twins and every one reached obs and
+# obs_ctd_full twice under the same sample_key (CalCOFI/workflows#131 item 5:
+# 75,310 duplicated keys in v2026.10.01). Take the direction from the Cast_ID's last letter; drop
+# a mis-filed row whose twin sits in the file of its own direction, and re-tag one
+# that has no twin so nothing is lost.
+id_dir <- toupper(str_extract(d_bind$cast_id, "[dDuU]$"))
+i_misdir <- which(!is.na(id_dir) & id_dir != d_bind$cast_dir)
+if (length(i_misdir) > 0) {
+  d_misdir <- d_bind[i_misdir, c("cruise_key", "_source_file", "cast_id", "depth", "date_time_utc")]
+  # only the rows of the same casts: the whole frame is ~30M scans
+  i_same   <- setdiff(which(d_bind$cast_id %in% unique(d_misdir$cast_id)), i_misdir)
+  ok_dir   <- d_bind[i_same, c("cruise_key", "cast_id", "depth", "date_time_utc")]
+  has_twin <- vctrs::vec_in(d_misdir[c("cruise_key", "cast_id", "depth", "date_time_utc")], ok_dir)
+  d_misdir |>
+    mutate(twin = has_twin) |>
+    group_by(cruise_key, file = basename(`_source_file`), cast_id) |>
+    summarize(n_rows = n(), n_dropped_twin = sum(twin), n_retagged = sum(!twin),
+              .groups = "drop") |>
+    dt(caption = paste(
+      "Casts filed under the wrong direction: a row whose twin is in the file of its",
+      "Cast_ID's direction is dropped, one without a twin takes that direction"),
+      fname = "ctd_casts_wrong_direction_file")
+  say(glue("casts filed under the wrong direction: {n_distinct(d_misdir$cast_id)} casts, ",
+           "{sum(has_twin)} rows dropped as twins, {sum(!has_twin)} re-tagged"))
+  d_bind$cast_dir[i_misdir[!has_twin]] <- id_dir[i_misdir[!has_twin]]
+  if (any(has_twin)) d_bind <- d_bind[-i_misdir[has_twin], ]
+  rm(d_misdir, ok_dir, has_twin, i_same)
+}
+rm(id_dir, i_misdir)
+
 # normalize raw coordinate column names (CalCOFI CTD CSV ships Lon_Dec/Lat_Dec ->
 # clean_names lon_dec/lat_dec) to the canonical dictionary names used downstream
 d_bind <- d_bind |>
