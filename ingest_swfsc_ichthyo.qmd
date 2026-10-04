@@ -1864,6 +1864,66 @@ d_fish <- dbGetQuery(con, "
 cat(glue("fish: {format(d_fish$n, big.mark = ',')} rows, {format(d_fish$fish, big.mark = ',')} fish ",
          "on {format(d_fish$nets, big.mark = ',')} nets, {d_fish$codes} species codes\n"))
 
+# net effort, as SWFSC gives it (swfsc_ichthyo_03; Ed Weber 2026-09-26: "you should
+# trust us on the standard haul factor instead of calculating based on angles for
+# every 10-m of wire"). Nothing here recomputes it: std_haul_factor is Net.Shf,
+# volume_sampled Net.Vol, prop_sorted Net.PropSorted, verbatim. "They cannot be
+# missing": a net without one stops the render (a question back to SWFSC, never a
+# silent drop). A proportion sorted outside (0, 1] is reported, not changed.
+d_effort <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n_net,
+         COUNT(*) FILTER (WHERE volume_sampled IS NULL)       AS no_volume,
+         COUNT(*) FILTER (WHERE standard_haul_factor IS NULL) AS no_shf,
+         COUNT(*) FILTER (WHERE prop_sorted IS NULL)          AS no_prop_sorted,
+         COUNT(*) FILTER (WHERE volume_sampled <= 0 OR standard_haul_factor <= 0) AS not_positive,
+         COUNT(*) FILTER (WHERE prop_sorted <= 0 OR prop_sorted > 1) AS prop_sorted_out
+  FROM net")
+stopifnot(
+  "net effort cannot be missing (swfsc_ichthyo_03): volume, standard haul factor, proportion sorted" =
+    d_effort$no_volume + d_effort$no_shf + d_effort$no_prop_sorted == 0,
+  "volume sampled and standard haul factor are positive" = d_effort$not_positive == 0)
+d_prop_out <- dbGetQuery(con, "
+  SELECT n.net_uuid, t.tow_type_key, s.cruise_key, s.site_key, n.prop_sorted,
+         n.volume_sampled, n.standard_haul_factor
+  FROM net n JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+  WHERE n.prop_sorted <= 0 OR n.prop_sorted > 1")
+
+# true zeros (swfsc_ichthyo_09; Ed Weber: "The others are true zeros and have valid
+# positive zooplankton volumes"). obs stays positive-only by design: a tow with no
+# egg, larva or invertebrate row is a ZERO for every taxon, implied by its `sample`
+# rows and their effort, which every tow and net keeps (the denominator). Only the
+# two staging cruises were removed (exclude_staging_cruises); nothing marks a tow
+# "unsorted". Zooplankton volume is measured on the oblique tows (C1, CB) only.
+d_zero <- dbGetQuery(con, "
+  WITH caught AS (SELECT DISTINCT n.tow_uuid FROM ichthyo i JOIN net n USING (net_uuid)),
+  z AS (
+    SELECT t.tow_uuid, t.tow_type_key, COUNT(n.net_uuid) AS n_net,
+           MIN(n.volume_sampled) AS vol_min, MAX(n.totalplankton) AS tp_max
+    FROM tow t LEFT JOIN net n USING (tow_uuid)
+    WHERE t.tow_uuid NOT IN (SELECT tow_uuid FROM caught)
+    GROUP BY 1, 2)
+  SELECT tow_type_key, COUNT(*) AS n_zero_tow,
+         COUNT(*) FILTER (WHERE n_net = 0)                     AS no_net,
+         COUNT(*) FILTER (WHERE n_net > 0 AND vol_min > 0)    AS volume_positive,
+         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max > 0)     AS zooplankton_positive,
+         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max IS NULL) AS zooplankton_missing
+  FROM z GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "every zero-catch tow that has a net has a positive volume sampled (true zero, in the denominator)" =
+    all(d_zero$volume_positive == d_zero$n_zero_tow - d_zero$no_net))
+d_zero |>
+  datatable(caption = "Zero-catch tows (no egg, larva or invertebrate row): true zeros, by tow type")
+cat(glue(
+  "true zeros: {format(sum(d_zero$n_zero_tow), big.mark = ',')} of ",
+  "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM tow')[[1]], big.mark = ',')} tows caught nothing; ",
+  "all {format(sum(d_zero$volume_positive), big.mark = ',')} with a net have a positive volume; ",
+  "{sum(d_zero$no_net)} tow(s) have no net at all (no effort: not in any density denominator); ",
+  "oblique (C1/CB) zero tows with no zooplankton volume: ",
+  "{sum(d_zero$zooplankton_missing[d_zero$tow_type_key %in% c('C1', 'CB')])}\n",
+  "net effort: {format(d_effort$n_net, big.mark = ',')} nets, none missing; ",
+  "{nrow(d_prop_out)} with prop_sorted outside (0, 1]\n"))
+if (nrow(d_prop_out)) d_prop_out |> datatable(caption = "Nets whose proportion sorted is outside (0, 1] (reported to SWFSC)")
+
 # sample_measurement — the five net-level effort quantities, long-formatted
 append_sample_measurement(con, glue("
   SELECT {ns_key(ds_key, 'net', 'net_uuid')}, '{ds_key}',
