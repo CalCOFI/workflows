@@ -3,6 +3,7 @@ cruise_key,VARCHAR,,identifier,Natural cruise key in YYYY-MM-NODC form (e.g. 199
 cruise_uuid,UUID,,identifier,Stable UUID for a cruise (SWFSC source tables).,cruise_id,,TRUE,NOAA CruiseId; public join key to NOAA's CalCOFI database; released on cruise.,
 ship_key,VARCHAR,,identifier,NODC ship code key; primary key of ship.,shipcode,,TRUE,,
 ship_nodc,VARCHAR,,identifier,NODC ship code.,shipnodc,,TRUE,,
+ship_ices,VARCHAR,,identifier,"ICES platform code of the ship (SWFSC ShipLookup.ShipIces), carried beside ship_nodc on ship and cruise.",ShipIces;shipices,,TRUE,cruise_key stays YYYY-MM-NODC; the two codes are virtually all the same (swfsc_ichthyo_14).,
 ship_code,VARCHAR,,identifier,Source ship code as provided by the data provider; resolve to ship_key.,Ship_Code,,TRUE,,
 ship_name,VARCHAR,,descriptive,Ship name as resolved against the NODC ship registry.,shipname;Ship_Name;ship,,FALSE,,
 site_key,VARCHAR,,identifier,CalCOFI station key in 'line station' form (e.g. '090.0 062.0'); canonical spatial join key.,Sta_ID;sta_id;station_id;Station_ID;stationid,,TRUE,,http://rs.tdwg.org/dwc/terms/locationID

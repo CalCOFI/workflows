@@ -378,8 +378,11 @@ if (nrow(new_tables) > 0) {
         dr <- delta_rows[j, ]
         pq_path <- file.path(dr$parquet_dir, paste0(base_tbl, "_new.parquet"))
         if (file.exists(pq_path)) {
+          # BY NAME, not by position: `ship` gained ship_ices (2026-10, swfsc_ichthyo_14)
+          # and a delta staged before that (bottle/mets ship_new) has one column fewer —
+          # positionally it would fail, or shift a provenance column into ship_ices
           dbExecute(con_wdl, glue(
-            "INSERT INTO {base_tbl}
+            "INSERT INTO {base_tbl} BY NAME
              SELECT * FROM read_parquet('{pq_path}')
              WHERE {pk_col} NOT IN (SELECT {pk_col} FROM {base_tbl})"))
           n_new <- dbGetQuery(con_wdl, glue(
@@ -1499,7 +1502,7 @@ if (all(c("cruise", "ship") %in% tbls)) {
      SELECT cr.*,
             EXTRACT(YEAR FROM cr.date_ym)::INTEGER  AS year,
             EXTRACT(MONTH FROM cr.date_ym)::INTEGER AS month,
-            sh.ship_name, sh.ship_nodc,
+            sh.ship_name, sh.ship_nodc, sh.ship_ices,
             COALESCE(piv.ichthyo, 0)  AS ichthyo,
             COALESCE(piv.bottle, 0)   AS bottle,
             COALESCE(piv.ctd_cast, 0) AS ctd_cast,

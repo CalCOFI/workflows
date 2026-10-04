@@ -790,11 +790,19 @@ not_ingested <- c("cufes", "fish", "species_itis", "species_worms", "preservativ
 # all deprecated tables
 deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup, not_ingested)
 
-# ShipLookup.ShipIces (new in the 2026-09 exports): the release's `ship` table is
-# shared with the bottle and CTD ingests (ship_key, ship_name, ship_nodc); adding a
-# column is a cross-dataset change, so it is dropped here, not ingested
-if ("ship_ices" %in% dbListFields(con, "ship"))
-  invisible(dbExecute(con, "ALTER TABLE ship DROP COLUMN ship_ices"))
+# ShipLookup.ShipIces -> ship.ship_ices, beside ship_nodc (swfsc_ichthyo_14; Ben,
+# 2026-10-01: "carry the ICES code ... as its own column on the ship and cruise
+# tables, beside the NODC code"). cruise_key stays YYYY-MM-NODC: ship_nodc is
+# untouched and still keys every cruise. The release copies it onto `cruise`.
+# Every SWFSC ship carries one; where it differs from the NODC code it is reported.
+d_ices <- dbGetQuery(con, "
+  SELECT ship_key, ship_name, ship_nodc, ship_ices FROM ship
+  WHERE ship_ices IS DISTINCT FROM ship_nodc ORDER BY 1")
+stopifnot(
+  "every SWFSC ship carries an ICES code (swfsc_ichthyo_14)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM ship WHERE ship_ices IS NULL")[[1]] == 0)
+d_ices |>
+  datatable(caption = "Ships whose ICES code differs from the NODC code (cruise_key keeps NODC)")
 
 # drop each deprecated table
 for (tbl in deprecated_tables) {
