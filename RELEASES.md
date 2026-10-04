@@ -440,8 +440,11 @@ them: 1,128 `site`, 1,112 `tow` and 1,145 `net` `sample` rows; 1,100 `obs` rows 
 `swfsc_ichthyo` `obs` goes 482,250 → 481,150. The ingest now asserts both cruises are absent from
 what it loads. **Zero handling is unchanged:** a tow with no row for a taxon is a true zero and stays
 in the denominator (the provider: "the others are true zeros and have valid positive zooplankton
-volumes"). `1982-02-31JD` stays in `cruise` as a derived row because 40 `cce-lter_euphausiids` samples
-carry that key (derived-cruise count 151 → 152, the ratchet's ceiling); `1982-12-31JD` leaves it.
+volumes"). Both cruises leave `cruise`. One consequence reaches another dataset: 40
+`cce-lter_euphausiids` tows of February 1982 were keyed `1982-02-31JD` and now resolve no cruise, since
+the reference holds none for that ship and month (NULL `cruise_key` on that dataset 420 → 460; the
+release ratchet is raised by those 40 and returns to 420 when the provider restores the cruise row,
+`swfsc_ichthyo` Q23). Their values, positions and dates are unchanged.
 
 ## Ichthyoplankton: the source is SWFSC's 2026-09-26 export; v2026.09.11 to v2026.10.01 carried the 2026-09-04 ingest
 

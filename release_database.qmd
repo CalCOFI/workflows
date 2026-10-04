@@ -1607,7 +1607,11 @@ d_cki <- check_cruise_key_integrity(
       # region-pooled phytoplankton. Baselines, not targets.
       calcofi_phyllosoma              = 44L,
       calcofi_phytoplankton           = 168L,
-      "cce-lter_euphausiids"          = 420L,
+      # euphausiids: 420 until v2026.10.01; +40 for the tows of cruise 198202JD, which SWFSC moved
+      # back to its staging schema (its 2026-09-26 export has no Cruise row for it), so the
+      # reference holds no cruise for that ship and month and resolve_cruise_key() leaves them
+      # NULL. Back to 420 when the provider restores the cruise row (swfsc_ichthyo Q23).
+      "cce-lter_euphausiids"          = 460L,
       "cce-lter_picoplankton-bacteria" = 7216L,
       "cce-lter_zoodb"                = 111L,
       "cce-lter_zooscan"              = 421L,
