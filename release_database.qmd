@@ -1637,8 +1637,9 @@ core_keep <- c(
   "obs", "sample", "obs_attribute", "sample_measurement",                    # core facts
   "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
   "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
-  "spatial", "spatial_attribute")
-supplemental_keep <- supp_tbls                    # hosted, hidden by default (from the ingests)
+  "spatial", "spatial_attribute",
+  "fish")                                   # swfsc_ichthyo's own table (SWFSC Fish, 2026-10)
+supplemental_keep <- supp_tbls                   # hosted, hidden by default (from the ingests)
 # drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
 # even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)
 retire_objs <- DBI::dbGetQuery(con_wdl,

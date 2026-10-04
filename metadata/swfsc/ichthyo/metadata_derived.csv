@@ -60,3 +60,8 @@ taxon,scientificNameAuthorship,Scientific Name Authorship,,Authority string for 
 taxa_rank,,Taxa Rank,,Lookup table mapping taxonomic rank names to sort order
 taxa_rank,taxonRank,Taxon Rank,,Taxonomic rank name (e.g. Kingdom; Species). Primary key.
 taxa_rank,rank_order,Rank Order,,Integer sort order from broadest (1=Kingdom) to most specific
+fish,,Fish,,"Fish grown past the larval stage (SWFSC Fish table): counts per net and CalCOFI species code. Not in obs: whether these fish are also in the larval count, and which life stage they are, is asked (swfsc_ichthyo_20)."
+fish,sample_key,Sample Key,,"The net (sample_type net) the fish were counted in; FK to sample."
+fish,species_id,Species ID,,"CalCOFI species code (SWFSC SppCode); with sample_key the primary key. Its name is dataset_taxon.ds_scientific_name for ds_taxa_code = species_id."
+fish,taxon_key,Taxon Key,,"The taxon the species code resolves to (by its WoRMS AphiaID); FK to taxon."
+fish,tally,Tally,count,"Raw count of fish in the sorted portion of the net (not standardized; see the net's std_haul_factor and prop_sorted in sample_measurement)."

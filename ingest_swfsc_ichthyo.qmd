@@ -32,6 +32,7 @@ calcofi:
     - {table: ship, shared: true, note: "ship registry; also modified by bottle/ctd ingests"}
     - {table: lookup}
     - {table: grid, shared: true, note: "spatial grid referenced across datasets"}
+    - {table: fish, note: "fish grown past the larval stage, per net and species code (SWFSC Fish)"}
   erd:
     color: "#cdebc6"
 ---
@@ -819,11 +820,13 @@ deprecated_lookup <- c("tow_type")
 # every source column) but NOT ingested; each needs a design decision first:
 # - cufes: CUFES is its own ingest (ingest_swfsc_cufes.qmd, from ERDDAP); switching
 #   its source to this export is a change to that notebook
-# - fish: juvenile/adult fish counts per net; no answered question says what they are
 # - species_itis / species_worms: the provider's ITIS/WoRMS names and lineage
-#   (swfsc_ichthyo_05/13); aggregating by AphiaID is a change to the taxon model
+#   (swfsc_ichthyo_05/13); emit_core reads SpeciesWormsLookup from the source to
+#   check the keys, so the wrangling copies are not needed
 # - preservative: a lookup nothing references in this export
-not_ingested <- c("cufes", "fish", "species_itis", "species_worms", "preservative")
+# `fish` (grown-out larvae, Ben 2026-10-04) is kept: published as its own table in
+# emit_core.
+not_ingested <- c("cufes", "species_itis", "species_worms", "preservative")
 
 # all deprecated tables
 deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup, not_ingested)
@@ -1822,6 +1825,45 @@ cat(glue("AphiaID aggregation: {format(n_rows_src, big.mark = ',')} source count
          "{format(n_obs_now, big.mark = ',')} obs rows ({n_rows_src - n_obs_now} summed into a ",
          "row of the same net and AphiaID)\n"))
 
+# fish — SWFSC's Fish table (Ed Weber 2026-09-26: "the Fish (i.e., grown out of
+# larvae size) table"; Ben 2026-10-04: wanted, in lower snake_case). Counts per net
+# and species code of fish past the larval stage. Published as its own table at
+# the source grain -- (sample_key of the net, species_id), with the taxon_key the
+# code resolves to -- and NOT projected into obs: no life_stage in the vocabulary
+# says "grown out of larvae" exactly (juvenile, or juvenile and adult?), and 2,923
+# of its net x species pairs also have a Larvae count, so whether a fish is also in
+# that count must be known before an abundance could be summed (swfsc_ichthyo_20).
+d_fish_orphan <- dbGetQuery(con, "
+  SELECT COUNT(*) FILTER (WHERE n.net_uuid IS NULL) AS no_net,
+         COUNT(*) FILTER (WHERE dt.taxon_key IS NULL) AS no_taxon
+  FROM fish f LEFT JOIN net n USING (net_uuid)
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo'
+                            AND dt.ds_taxa_code = CAST(f.species_id AS VARCHAR)")
+stopifnot(
+  "every fish row names a released net" = d_fish_orphan$no_net == 0,
+  "every fish species code resolves to a taxon_key" = d_fish_orphan$no_taxon == 0,
+  "fish (net, species code) is unique" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT net_uuid, species_id FROM fish
+                     GROUP BY ALL HAVING COUNT(*) > 1)")[[1]] == 0,
+  "a fish tally is a positive count" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM fish WHERE tally IS NULL OR tally <= 0")[[1]] == 0)
+invisible(dbExecute(con, glue("
+  CREATE OR REPLACE TABLE fish_pub AS
+  SELECT {ns_key(ds_key, 'net', 'f.net_uuid')} AS sample_key,
+         CAST(f.species_id AS INTEGER) AS species_id, dt.taxon_key,
+         CAST(f.tally AS INTEGER) AS tally
+  FROM fish f
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = CAST(f.species_id AS VARCHAR)
+  ORDER BY sample_key, species_id")))
+invisible(dbExecute(con, "DROP TABLE fish"))
+invisible(dbExecute(con, "ALTER TABLE fish_pub RENAME TO fish"))
+d_fish <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n, COUNT(DISTINCT sample_key) AS nets, COUNT(DISTINCT species_id) AS codes,
+         SUM(tally) AS fish FROM fish")
+cat(glue("fish: {format(d_fish$n, big.mark = ',')} rows, {format(d_fish$fish, big.mark = ',')} fish ",
+         "on {format(d_fish$nets, big.mark = ',')} nets, {d_fish$codes} species codes\n"))
+
 # sample_measurement — the five net-level effort quantities, long-formatted
 append_sample_measurement(con, glue("
   SELECT {ns_key(ds_key, 'net', 'net_uuid')}, '{ds_key}',
@@ -1979,10 +2021,11 @@ mismatches <- list(
 
 # write parquet files with manifest
 # core shards + the shared reference tables this ingest owns for the whole
-# database (grid/cruise/ship/lookup). The per-dataset site/tow/net/ichthyo
-# tables are no longer written — they are VIEWs over the core now.
+# database (grid/cruise/ship/lookup), and the dataset's own `fish` table. The
+# per-dataset site/tow/net/ichthyo tables are no longer written — they are VIEWs
+# over the core now.
 tbls_out <- core_output_tables(
-  con, extra = c("grid", "cruise", "ship", "lookup", "dataset"))
+  con, extra = c("grid", "cruise", "ship", "lookup", "dataset", "fish"))
 parquet_stats <- write_parquet_outputs(
   con              = con,
   output_dir       = dir_parquet,
@@ -2025,6 +2068,10 @@ metadata_path <- build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
+# `fish` (this dataset's own table) is declared in core_relationships() (calcofi4db
+# dev): key (sample_key, species_id), FKs to the net in `sample` and to `taxon`
+stopifnot("calcofi4db must declare fish's key (core_relationships)" =
+            identical(core_relationships("fish")$primary_keys$fish, c("sample_key", "species_id")))
 build_relationships_json(
   rels = core_relationships(tbls_out),
   output_dir = dir_parquet,
