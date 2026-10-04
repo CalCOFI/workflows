@@ -1596,6 +1596,59 @@ if (nrow(d_trunc_fix) > 0) {
 } else say("no truncated station numbers found")
 rm(sta_num, line_num, i_cand)
 
+# --- a line number the provider wrote wrong: an explicit override per cast ------
+# 2204SH casts 094 and 095 (both directions) write `Sta_ID` 066.3 070.0 / 066.3 060.0,
+# but the ship sat 0.6 km and 0.2 km from 063.3 070.0 / 063.3 060.0 and 66 km from the
+# stations as written, between casts 093 (063.3 080.0) and 096 (063.3 055.0) of the same
+# line. The distance filter dropped both casts whole (199 bottle values; CalCOFI/
+# workflows#131 item 2). Unlike the truncation above this is not a pattern to detect, so
+# it is keyed on cruise + cast and still confirmed by the cast's own median position: an
+# override whose position no longer agrees stops the render, and one that matches no
+# scan (the provider re-issued the file) is reported and does nothing. The question to
+# the provider stays open (questions.csv Q43).
+CTD_STATION_OVERRIDE <- tibble::tribble(
+  ~cruise_key, ~cast_base,  ~line_as_written, ~line_repaired, ~question,
+  "2204SH",    "2204_094",  66.3,             63.3,           "calcofi_ctd-cast_43",
+  "2204SH",    "2204_095",  66.3,             63.3,           "calcofi_ctd-cast_43")
+cast_base_all <- str_remove(d_bind$cast_id, "[dDuU]$")
+d_sta_fix <- purrr::pmap_dfr(CTD_STATION_OVERRIDE, function(cruise_key, cast_base, line_as_written,
+                                                            line_repaired, question) {
+  i <- which(d_bind$cruise_key == cruise_key & cast_base_all == cast_base &
+               abs(suppressWarnings(as.numeric(d_bind$line)) - line_as_written) < 1e-6)
+  if (!length(i)) return(tibble(cruise_key, cast_base, n_scans = 0L))
+  sta <- unique(suppressWarnings(as.numeric(d_bind$sta[i])))
+  ok  <- d_bind$longitude[i] > -180 & d_bind$latitude[i] > -90
+  lon <- median(d_bind$longitude[i][ok]); lat <- median(d_bind$latitude[i][ok])
+  xy_w <- sf_project(from = "+proj=calcofi", to = "+proj=longlat +datum=WGS84",
+                     pts = cbind(line_as_written, sta))
+  xy_r <- sf_project(from = "+proj=calcofi", to = "+proj=longlat +datum=WGS84",
+                     pts = cbind(line_repaired, sta))
+  r <- pi / 180
+  km <- function(x, y) 2 * 6371.0088 * asin(sqrt(sin((y - lat) * r / 2)^2 +
+    cos(lat * r) * cos(y * r) * sin((x - lon) * r / 2)^2))
+  km_written <- km(xy_w[, 1], xy_w[, 2]); km_repaired <- km(xy_r[, 1], xy_r[, 2])
+  if (length(sta) != 1 || !(km_repaired <= CTD_TRUNC_KM && km_written > CTD_TRUNC_KM))
+    stop(glue("station override {cruise_key} {cast_base}: the cast's median position does ",
+              "not confirm line {line_repaired} (km as written {round(km_written, 1)}, ",
+              "repaired {round(km_repaired, 1)}). Re-check the source before overriding."))
+  d_bind$line[i]   <<- if (is.character(d_bind$line)) sprintf("%05.1f", line_repaired) else line_repaired
+  d_bind$sta_id[i] <<- sprintf("%05.1f %05.1f", line_repaired, sta)
+  tibble(cruise_key, cast_base, line_as_written, line_repaired, sta, n_scans = length(i),
+         km_as_written = km_written, km_repaired = km_repaired, question)
+})
+rm(cast_base_all)
+if (sum(d_sta_fix$n_scans) > 0) {
+  say(glue("line numbers repaired by override: {sum(d_sta_fix$n_scans > 0)} cast(s), ",
+           "{format(sum(d_sta_fix$n_scans), big.mark = ',')} scans"))
+  dt(d_sta_fix, caption = paste(
+    "Line numbers the source wrote wrong, repaired per cast where the cast's median",
+    "position confirms the repair (CTD_STATION_OVERRIDE; CalCOFI/workflows#131)"),
+    fname = "ctd_station_override_repaired")
+}
+if (any(d_sta_fix$n_scans == 0))
+  say(glue("station override matched no scan (source re-issued?): ",
+           "{paste(d_sta_fix$cast_base[d_sta_fix$n_scans == 0], collapse = ', ')}"))
+
 d_bind <- d_bind |>
   mutate(
     is_lnsta_pseudoNA = ifelse(
