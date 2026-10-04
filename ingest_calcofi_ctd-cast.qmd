@@ -1942,7 +1942,7 @@ dbWriteTable(con, "ctd_src_format", read_rds(glue("{dir_tmp}/d_src_format.rds"))
 # of swap. Nothing after this point reads them.
 rm(list = intersect(c("d_bind", "pts", "pts_filt", "d_filt", "d_csv"), ls()))
 invisible(gc())
-say(glue("Loaded {nrow(d_filt)} rows into ctd_raw"))
+say(glue("Loaded {dbGetQuery(con, 'SELECT COUNT(*) AS n FROM ctd_raw')$n} rows into ctd_raw"))
 ```
 
 ## De-duplicate ctd_raw
