@@ -785,7 +785,7 @@ append_sample(con, glue("
                   ELSE 'calcofi_bottle:cast:' || CAST(c.cast_id AS VARCHAR) END,
              'calcofi_dic:bottle:' || {dic_md5('d')}) AS root_sample_key,
            '{ds_key}' AS dataset_key,
-           COALESCE(c.grid_key, d.grid_key) AS grid_key,  -- a matched cast's key wins; else the sample's own position
+           COALESCE(d.grid_key, c.grid_key) AS grid_key,  -- the sample's own position; a matched cast's key only where it has none (check_grid_key_assignment())
            d.site_key,
            CASE WHEN c.cast_id IS NULL THEN d.cruise_key ELSE c.cruise_key END AS cruise_key,
            CAST(c.order_occ AS INTEGER) AS order_occ,
