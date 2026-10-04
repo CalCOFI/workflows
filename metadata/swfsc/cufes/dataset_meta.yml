@@ -2,8 +2,10 @@
   visibility: public
   description: >
     Continuous Underway Fish Egg Sampler (CUFES) egg counts (sardine, anchovy,
-    jack mackerel, hake, squid, other) with underway environmental conditions,
-    from CalCOFI cruises (1996-present). Source: NOAA CoastWatch ERDDAP
+    jack mackerel, hake, squid, other) and eggs per cubic metre pumped, from
+    CalCOFI cruises (1996-2022). Source: SWFSC's CSV export of its CalCOFI
+    database (Cufes.csv, linked to the cruise list by CruiseId); until release
+    v2026.10.01 the same records were read from NOAA CoastWatch ERDDAP
     erdCalCOFIcufes.
   # no formal author/year/title citation is stated in the ERDDAP .das —
   # left empty; see metadata/swfsc/cufes/questions.csv Q06 (proposed to
@@ -29,6 +31,13 @@
     net-tow egg count dataset, which samples at discrete stations rather
     than continuously along the track.
   link_calcofi_org: ""
+  # since 2026-10-04 (WS-1004Z) the ingest reads SWFSC's CSV export
+  # (Cufes.csv, 2026-09-26, Ed Weber) from the provider folder swfsc/ichthyo/,
+  # archived to gs://calcofi-files-public/archive/swfsc/cufes/; that export has
+  # no public URL (questions Q13). The public, citable copy of these records
+  # (with the 1,583 SWFSC removed at source, Q04) is still SWFSC's ERDDAP
+  # dataset below, which is also the authority
+  # check_dataset_citation() resolves for license and citation, so it stays.
   link_data_source: "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.html"
   link_others: []
   # ERDDAP .das globals: institution "NOAA SWFSC"; `license` = "The data may be

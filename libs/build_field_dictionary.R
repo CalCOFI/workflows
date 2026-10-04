@@ -28,6 +28,11 @@ fd <- tribble(
   "NODC ship code.",
   "shipnodc", "", TRUE, "",
 
+  "ship_ices", "VARCHAR", "", "identifier",
+  "ICES platform code of the ship (SWFSC ShipLookup.ShipIces), carried beside ship_nodc on ship and cruise.",
+  "ShipIces;shipices", "", TRUE,
+  "cruise_key stays YYYY-MM-NODC; the two codes are virtually all the same (swfsc_ichthyo_14).",
+
   "ship_code", "VARCHAR", "", "identifier",
   "Source ship code as provided by the data provider; resolve to ship_key.",
   "Ship_Code", "", TRUE, "",

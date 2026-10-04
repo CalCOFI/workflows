@@ -1,76 +1,81 @@
 # build_cufes_metadata.R
-# scaffold metadata/swfsc/cufes/ for the #35 ingest (underway CUFES fish eggs).
-# Source: ERDDAP erdCalCOFIcufes (coastwatch.pfeg.noaa.gov). fld_new conforms to
-# metadata/field_dictionary.csv. re-runnable & idempotent.
+# author the redefinition files of metadata/swfsc/cufes/ for ingest_swfsc_cufes.qmd.
+#
+# Source (since 2026-10-04, WS-1004Z): SWFSC's own CSV export of its CalCOFI
+# database, `Cufes.csv` in the provider folder
+# `{dir_data}/swfsc/ichthyo/` (Ed Weber added it on 2026-09-26, linked to
+# `Cruise.csv` by `CruiseId`). Until then the ingest read NOAA CoastWatch ERDDAP
+# `erdCalCOFIcufes`; the CSV holds every ERDDAP record except the 1,583 Ed
+# removed at source (no start position, questions Q04), with identical values.
+#
+# fld_new is the lower snake_case of the source column, except the identifiers
+# (CufesId -> cufes_uuid, CruiseId -> cruise_uuid, Ship -> ship_key) and the
+# two timestamps (Start/Stop -> datetime_start_utc/datetime_end_utc). Every
+# source column is kept, the cruise designation `Cruise` included (never drop a
+# source cruise column as "derivable"). Units: wind speed in knots and pump speed
+# in m3/min (Ed Weber, 2026-09-25, questions Q02).
+#
+# Re-runnable and idempotent. It writes ONLY the three redefinition files:
+# questions.csv and dataset_meta.yml are hand-maintained and never rewritten here
+# (the previous version of this script re-created questions.csv from scratch).
 
-suppressMessages({library(readr); library(tibble); library(dplyr); library(here); library(fs)})
+suppressMessages({library(readr); library(tibble); library(here); library(fs)})
 dir_meta <- here("metadata/swfsc/cufes"); dir_create(dir_meta)
 
 tbls <- tribble(
   ~tbl_old, ~tbl_new, ~tbl_description,
-  "erdCalCOFIcufes", "cufes_sample",
-  "One row per Continuous Underway Fish Egg Sampler (CUFES) sample: position, time, and underway environmental conditions (temperature, salinity, wind, pump). Egg counts are pivoted to cufes_measurement.",
-  "erdCalCOFIcufes", "cufes_measurement",
-  "Fish/squid egg counts per CUFES sample in long form (measurement_type = taxon eggs, measurement_value = count)."
-)
+  "Cufes", "cufes",
+  "One row per Continuous Underway Fish Egg Sampler (CUFES) sample, as exported by SWFSC (Cufes.csv): the sample's identifier, cruise and ship, start and stop time and position, underway temperature, salinity, wind and pump speed at each end, and the six egg counts.",
+  "Cufes", "cufes_measurement",
+  "Egg counts per CUFES sample in long form (measurement_type = <taxon>_eggs, units count) and the standardized concentration derived from them (<taxon>_eggs_per_m3, units count/m3).")
 write_csv(tbls, file.path(dir_meta, "tbls_redefine.csv"), na = "")
 
 flds <- tribble(
   ~tbl_old, ~tbl_new, ~fld_old, ~fld_new, ~type_new, ~fld_description, ~units,
-  "erdCalCOFIcufes","cufes_sample","cruise","cruise_orig","VARCHAR","Source cruise label; cruise_key derived from it.","",
-  "erdCalCOFIcufes","cufes_sample","ship","ship_name","VARCHAR","Vessel name; resolved to ship_key.","",
-  "erdCalCOFIcufes","cufes_sample","ship_code","ship_code","VARCHAR","Source ship code.","",
-  "erdCalCOFIcufes","cufes_sample","sample_number","sample_number","INTEGER","CUFES sample sequence number within the cruise.","",
-  "erdCalCOFIcufes","cufes_sample","time","datetime_start_utc","TIMESTAMP","Sample start date-time (UTC); canonical event timestamp.","",
-  "erdCalCOFIcufes","cufes_sample","latitude","latitude","DOUBLE","Sample start latitude, WGS84.","decimal_degrees",
-  "erdCalCOFIcufes","cufes_sample","longitude","longitude","DOUBLE","Sample start longitude, WGS84.","decimal_degrees",
-  "erdCalCOFIcufes","cufes_sample","start_temperature","start_temperature","DOUBLE","Sea surface temperature at sample start.","degC",
-  "erdCalCOFIcufes","cufes_sample","start_salinity","start_salinity","DOUBLE","Sea surface salinity at sample start.","PSS-78",
-  "erdCalCOFIcufes","cufes_sample","start_wind_speed","start_wind_speed","DOUBLE","Wind speed at sample start.","m/s",
-  "erdCalCOFIcufes","cufes_sample","start_wind_direction","start_wind_direction","DOUBLE","Wind direction at sample start.","degrees",
-  "erdCalCOFIcufes","cufes_sample","start_pump_speed","start_pump_speed","DOUBLE","CUFES pump speed at sample start.","",
-  "erdCalCOFIcufes","cufes_sample","stop_time","datetime_end_utc","TIMESTAMP","Sample end date-time (UTC).","",
-  "erdCalCOFIcufes","cufes_sample","stop_latitude","latitude_stop","DOUBLE","Sample end latitude.","decimal_degrees",
-  "erdCalCOFIcufes","cufes_sample","stop_longitude","longitude_stop","DOUBLE","Sample end longitude.","decimal_degrees",
-  "erdCalCOFIcufes","cufes_sample","stop_temperature","stop_temperature","DOUBLE","Sea surface temperature at sample end.","degC",
-  "erdCalCOFIcufes","cufes_sample","stop_salinity","stop_salinity","DOUBLE","Sea surface salinity at sample end.","PSS-78",
-  "erdCalCOFIcufes","cufes_sample","stop_wind_speed","stop_wind_speed","DOUBLE","Wind speed at sample end.","m/s",
-  "erdCalCOFIcufes","cufes_sample","stop_wind_direction","stop_wind_direction","DOUBLE","Wind direction at sample end.","degrees",
-  "erdCalCOFIcufes","cufes_sample","stop_pump_speed","stop_pump_speed","DOUBLE","CUFES pump speed at sample end.","",
-  # egg-count columns (pivoted into cufes_measurement)
-  "erdCalCOFIcufes","cufes_measurement","sardine_eggs","sardine_eggs","INTEGER","Sardine (Sardinops sagax) egg count.","count",
-  "erdCalCOFIcufes","cufes_measurement","anchovy_eggs","anchovy_eggs","INTEGER","Northern anchovy (Engraulis mordax) egg count.","count",
-  "erdCalCOFIcufes","cufes_measurement","jack_mackerel_eggs","jack_mackerel_eggs","INTEGER","Jack mackerel (Trachurus symmetricus) egg count.","count",
-  "erdCalCOFIcufes","cufes_measurement","hake_eggs","hake_eggs","INTEGER","Pacific hake (Merluccius productus) egg count.","count",
-  "erdCalCOFIcufes","cufes_measurement","squid_eggs","squid_eggs","INTEGER","Squid egg count.","count",
-  "erdCalCOFIcufes","cufes_measurement","other_fish_eggs","other_fish_eggs","INTEGER","Other fish egg count.","count")
+  "Cufes", "cufes", "CufesId",            "cufes_uuid",           "UUID",      "SWFSC's identifier for the CUFES sample; keys sample_key and is released as sample.source_uuid.", "",
+  "Cufes", "cufes", "CruiseId",           "cruise_uuid",          "UUID",      "SWFSC's identifier for the cruise, FK to cruise.cruise_uuid (Cruise.csv); resolves cruise_key.", "",
+  "Cufes", "cufes", "Cruise",             "cruise",               "VARCHAR",   "SWFSC's cruise designation (YYYYMM) as shipped; cross-checked against cruise_key.", "",
+  "Cufes", "cufes", "Ship",               "ship_key",             "VARCHAR",   "SWFSC ship code, FK to ship.ship_key.", "",
+  "Cufes", "cufes", "SampleNumber",       "sample_number",        "INTEGER",   "CUFES sample number within the cruise.", "",
+  "Cufes", "cufes", "Start",              "datetime_start_utc",   "TIMESTAMP", "Sample start date-time (UTC); the event timestamp.", "",
+  "Cufes", "cufes", "StartLatitude",      "start_latitude",       "DOUBLE",    "Latitude where the sample started, WGS84.", "decimal_degrees",
+  "Cufes", "cufes", "StartLongitude",     "start_longitude",      "DOUBLE",    "Longitude where the sample started, WGS84.", "decimal_degrees",
+  "Cufes", "cufes", "StartTemperature",   "start_temperature",    "DOUBLE",    "Sea surface temperature at sample start.", "degC",
+  "Cufes", "cufes", "StartSalinity",      "start_salinity",       "DOUBLE",    "Sea surface salinity at sample start.", "PSS-78",
+  "Cufes", "cufes", "StartWindSpeed",     "start_wind_speed",     "DOUBLE",    "Wind speed at sample start (knots; Ed Weber, questions Q02).", "knots",
+  "Cufes", "cufes", "StartWindDirection", "start_wind_direction", "DOUBLE",    "Wind direction at sample start.", "degrees",
+  "Cufes", "cufes", "StartPumpSpeed",     "start_pump_speed",     "DOUBLE",    "CUFES pump speed at sample start (m3/min; Ed Weber, questions Q02).", "m3/min",
+  "Cufes", "cufes", "Stop",               "datetime_end_utc",     "TIMESTAMP", "Sample stop date-time (UTC).", "",
+  "Cufes", "cufes", "StopLatitude",       "stop_latitude",        "DOUBLE",    "Latitude where the sample stopped, WGS84.", "decimal_degrees",
+  "Cufes", "cufes", "StopLongitude",      "stop_longitude",       "DOUBLE",    "Longitude where the sample stopped, WGS84.", "decimal_degrees",
+  "Cufes", "cufes", "StopTemperature",    "stop_temperature",     "DOUBLE",    "Sea surface temperature at sample stop.", "degC",
+  "Cufes", "cufes", "StopSalinity",       "stop_salinity",        "DOUBLE",    "Sea surface salinity at sample stop.", "PSS-78",
+  "Cufes", "cufes", "StopWindSpeed",      "stop_wind_speed",      "DOUBLE",    "Wind speed at sample stop (knots; Ed Weber, questions Q02).", "knots",
+  "Cufes", "cufes", "StopWindDirection",  "stop_wind_direction",  "DOUBLE",    "Wind direction at sample stop.", "degrees",
+  "Cufes", "cufes", "StopPumpSpeed",      "stop_pump_speed",      "DOUBLE",    "CUFES pump speed at sample stop (m3/min; Ed Weber, questions Q02).", "m3/min",
+  # egg counts: raw counts, not standardized (Ed Weber, questions Q01); pivoted into cufes_measurement
+  "Cufes", "cufes", "SardineEggs",        "sardine_eggs",         "INTEGER",   "Pacific sardine (Sardinops sagax) egg count.", "count",
+  "Cufes", "cufes", "AnchovyEggs",        "anchovy_eggs",         "INTEGER",   "Northern anchovy (Engraulis mordax) egg count.", "count",
+  "Cufes", "cufes", "JackMackerelEggs",   "jack_mackerel_eggs",   "INTEGER",   "Jack mackerel (Trachurus symmetricus) egg count.", "count",
+  "Cufes", "cufes", "HakeEggs",           "hake_eggs",            "INTEGER",   "Pacific hake (Merluccius productus) egg count.", "count",
+  "Cufes", "cufes", "SquidEggs",          "squid_eggs",           "INTEGER",   "Squid egg count.", "count",
+  "Cufes", "cufes", "OtherFishEggs",      "other_fish_eggs",      "INTEGER",   "Other fish egg count.", "count")
 write_csv(flds, file.path(dir_meta, "flds_redefine.csv"), na = "")
 
 derived <- tribble(
   ~table, ~column, ~name_long, ~units, ~description_md,
-  "cufes_sample","cruise_key","Cruise Key","","CalCOFI cruise natural key, derived from cruise_orig + ship + date.",
-  "cufes_sample","ship_key","Ship Key","","NODC ship key; FK to ship.",
-  "cufes_sample","geom","Geometry","","Sample-start point geometry (WGS84).",
-  "cufes_sample","grid_key","Grid Key","","CalCOFI grid cell from spatial join.",
-  "cufes_measurement","cufes_measurement_id","CUFES Measurement ID","","Sequential primary key.",
-  "cufes_measurement","sample_id","Sample ID","","FK to cufes_sample.")
+  "cufes", "latitude",          "Latitude",            "decimal_degrees", "Sample position: the midpoint of the start and stop positions, else whichever end has both coordinates.",
+  "cufes", "longitude",         "Longitude",           "decimal_degrees", "Sample position: the midpoint of the start and stop positions, else whichever end has both coordinates.",
+  "cufes", "position_source",   "Position Source",     "",                "Which ends of the segment gave the position: `midpoint`, `start` or `stop`.",
+  "cufes", "duration_min",      "Minutes Sampled",     "min",             "Stop minus start, in minutes.",
+  "cufes", "pump_speed_mean",   "Mean Pump Speed",     "m3/min",          "Mean of the start and stop pump speeds.",
+  "cufes", "volume_pumped_m3",  "Volume Pumped",       "m3",              "duration_min x pump_speed_mean: the water the sample filtered.",
+  "cufes", "cruise_key",        "Cruise Key",          "",                "CalCOFI cruise natural key (YYYY-MM-NODC) of the cruise SWFSC's CruiseId names.",
+  "cufes", "cruise_key_method", "Cruise Key Method",   "",                "How cruise_key was resolved: `cruise_uuid` (the provider's CruiseId), else resolve_cruise_key()'s `span` / `source` / `month`.",
+  "cufes", "geom",              "Geometry",            "",                "Sample position as a point geometry (WGS84).",
+  "cufes", "grid_key",          "Grid Key",            "",                "CalCOFI grid cell holding the sample position (assign_grid_key()).",
+  "cufes_measurement", "cufes_measurement_id", "CUFES Measurement ID", "", "Sequential primary key.",
+  "cufes_measurement", "cufes_uuid",           "CUFES UUID",           "", "FK to cufes.")
 write_csv(derived, file.path(dir_meta, "metadata_derived.csv"), na = "")
 
-q <- tribble(
-  ~id, ~question, ~context, ~status, ~priority, ~answer, ~asked_date, ~answered_date, ~who, ~related_table, ~related_field,
-  "swfsc_cufes_01","Are the egg counts raw per-sample totals or standardized (e.g. per m^3 / per area)?","Determines whether to register the measurement as count vs a density.","open","high","","","","Noelle Bowlin; Ed Weber","cufes_measurement","measurement_value",
-  "swfsc_cufes_02","Confirm wind_speed units (m/s vs knots) and pump_speed units on the ERDDAP feed.","ERDDAP variable metadata to be confirmed against erdCalCOFIcufes .das.","open","normal","","","","Noelle Bowlin; Ed Weber","cufes_sample","start_wind_speed")
-write_csv(q, file.path(dir_meta, "questions.csv"), na = "")
-
-ds_path <- here("metadata/dataset.csv")
-ds <- read_csv(ds_path, show_col_types = FALSE) |> filter(!(provider=="swfsc" & dataset=="cufes"))
-ds_new <- tibble(
-  provider="swfsc", dataset="cufes", dataset_name="CalCOFI Underway CUFES Fish Eggs",
-  description="Continuous Underway Fish Egg Sampler (CUFES) egg counts (sardine, anchovy, jack mackerel, hake, squid, other) with underway environmental conditions, from CalCOFI cruises. Source: NOAA CoastWatch ERDDAP erdCalCOFIcufes.",
-  citation_main="", citation_others="",
-  link_calcofi_org="", link_data_source="https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFIcufes.html",
-  link_others="", tables="cufes_sample; cufes_measurement",
-  coverage_temporal="1996/present", coverage_spatial="CalCOFI region (underway)",
-  license="", pi_names="Noelle Bowlin")
-write_csv(bind_rows(ds, ds_new), ds_path, na = "")
-cat("wrote cufes metadata:", nrow(tbls), "tbls,", nrow(flds), "flds,", nrow(derived), "derived,", nrow(q), "questions\n")
+cat("wrote cufes redefinitions:", nrow(tbls), "tbls,", nrow(flds), "flds,", nrow(derived), "derived\n")

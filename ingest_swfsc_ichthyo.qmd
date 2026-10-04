@@ -32,6 +32,7 @@ calcofi:
     - {table: ship, shared: true, note: "ship registry; also modified by bottle/ctd ingests"}
     - {table: lookup}
     - {table: grid, shared: true, note: "spatial grid referenced across datasets"}
+    - {table: fish, note: "fish grown past the larval stage, per net and species code (SWFSC Fish)"}
   erd:
     color: "#cdebc6"
 ---
@@ -455,6 +456,40 @@ tbl(con, "lookup") |>
   datatable(caption = "Lookup table with vocabularies")
 ```
 
+## Egg stages 12-15 are screened out (swfsc_ichthyo_02)
+
+The egg stage scale this ingest publishes is Moser & Ahlstrom (1985), stages 1-11. SWFSC
+(Ed Weber, 2026-09-25): "Stages 12-15 have been used for Dover Sole and sometimes Rex Sole but I
+do not have a reference. You or I could screen them out if wanted." Ben Best (2026-10-01): "we can
+filter out the observations with egg stages 12-15". So those egg-stage rows leave the `stage`
+distribution here, before consolidation, and are written to
+`data/flagged/egg_stage_12_15_screened.csv`. The eggs themselves are still counted: the egg
+abundance (`Eggs.csv`) is a separate total and is not touched.
+
+```{r}
+#| label: screen_egg_stages
+
+d_egg_1215 <- dbGetQuery(con, "
+  SELECT e.net_uuid, e.species_id, s.scientific_name, e.stage, e.tally
+  FROM egg_stage e LEFT JOIN species s USING (species_id)
+  WHERE e.stage > 11 ORDER BY e.species_id, e.stage, e.net_uuid")
+dir_create(here("data/flagged"))
+write_csv(d_egg_1215, here("data/flagged/egg_stage_12_15_screened.csv"), na = "")
+n_before <- dbGetQuery(con, "SELECT COUNT(*) FROM egg_stage")[[1]]
+invisible(dbExecute(con, "DELETE FROM egg_stage WHERE stage > 11"))
+stopifnot(
+  "egg stages must be 1-11 (Moser & Ahlstrom 1985) after screening" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM egg_stage WHERE stage NOT BETWEEN 1 AND 11")[[1]] == 0,
+  "screening removed exactly the flagged rows" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM egg_stage")[[1]] == n_before - nrow(d_egg_1215))
+cat(glue("egg stages 12-15 screened out: {format(nrow(d_egg_1215), big.mark = ',')} rows, ",
+         "{format(sum(d_egg_1215$tally), big.mark = ',')} eggs, on ",
+         "{paste(unique(d_egg_1215$scientific_name), collapse = ', ')}\n"))
+d_egg_1215 |>
+  count(species_id, scientific_name, stage, wt = tally, name = "eggs") |>
+  datatable(caption = "Egg-stage rows screened out (stages 12-15), eggs by species and stage")
+```
+
 ## Larval size and stage from `LarvaeMeasured`
 
 The provider's 2026-09-26 export replaced `larvaesize` and `larvaestage` with one table,
@@ -692,6 +727,10 @@ if (nrow(invalid_egg_stages) > 0) {
     output_path = invalid_egg_stages_csv,
     description = invalid_egg_stages_desc
   )
+} else if (file.exists(invalid_egg_stages_csv)) {
+  # stages 12-15 are screened out above (screen_egg_stages); a sidecar from an
+  # earlier run would claim flagged rows that no longer exist
+  file.remove(invalid_egg_stages_csv)
 }
 show_flagged_file(
   invalid_egg_stages,
@@ -779,22 +818,32 @@ deprecated_lookup <- c("tow_type")
 
 # tables of the 2026-09-26 export that are loaded (so the integrity check sees
 # every source column) but NOT ingested; each needs a design decision first:
-# - cufes: CUFES is its own ingest (ingest_swfsc_cufes.qmd, from ERDDAP); switching
+# - cufes: CUFES is its own ingest (ingest_swfsc_cufes.qmd, from this export's Cufes.csv); switching
 #   its source to this export is a change to that notebook
-# - fish: juvenile/adult fish counts per net; no answered question says what they are
 # - species_itis / species_worms: the provider's ITIS/WoRMS names and lineage
-#   (swfsc_ichthyo_05/13); aggregating by AphiaID is a change to the taxon model
+#   (swfsc_ichthyo_05/13); emit_core reads SpeciesWormsLookup from the source to
+#   check the keys, so the wrangling copies are not needed
 # - preservative: a lookup nothing references in this export
-not_ingested <- c("cufes", "fish", "species_itis", "species_worms", "preservative")
+# `fish` (grown-out larvae, Ben 2026-10-04) is kept: published as its own table in
+# emit_core.
+not_ingested <- c("cufes", "species_itis", "species_worms", "preservative")
 
 # all deprecated tables
 deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup, not_ingested)
 
-# ShipLookup.ShipIces (new in the 2026-09 exports): the release's `ship` table is
-# shared with the bottle and CTD ingests (ship_key, ship_name, ship_nodc); adding a
-# column is a cross-dataset change, so it is dropped here, not ingested
-if ("ship_ices" %in% dbListFields(con, "ship"))
-  invisible(dbExecute(con, "ALTER TABLE ship DROP COLUMN ship_ices"))
+# ShipLookup.ShipIces -> ship.ship_ices, beside ship_nodc (swfsc_ichthyo_14; Ben,
+# 2026-10-01: "carry the ICES code ... as its own column on the ship and cruise
+# tables, beside the NODC code"). cruise_key stays YYYY-MM-NODC: ship_nodc is
+# untouched and still keys every cruise. The release copies it onto `cruise`.
+# Every SWFSC ship carries one; where it differs from the NODC code it is reported.
+d_ices <- dbGetQuery(con, "
+  SELECT ship_key, ship_name, ship_nodc, ship_ices FROM ship
+  WHERE ship_ices IS DISTINCT FROM ship_nodc ORDER BY 1")
+stopifnot(
+  "every SWFSC ship carries an ICES code (swfsc_ichthyo_14)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM ship WHERE ship_ices IS NULL")[[1]] == 0)
+d_ices |>
+  datatable(caption = "Ships whose ICES code differs from the NODC code (cruise_key keeps NODC)")
 
 # drop each deprecated table
 for (tbl in deprecated_tables) {
@@ -1506,12 +1555,33 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # (ichthyo + the folded invert export), so its ds_taxon_key is `calcofi:<id>`.
 # There is no ichthyo arm inside calcofi4db any more — a column renamed or
 # dropped here now fails at this call rather than becoming NA at release.
+#
+# AphiaID (swfsc_ichthyo_05/_13; Ed Weber 2026-09-25 "aggregate by AphiaID", Ben
+# Best 2026-10-01 "aggregate taxa by AphiaID ... Bill's taxonomy stands"): the ids
+# declared are the SOURCE's own Species.AphiaId / Species.Tsn, verbatim -- not the
+# species table's, which standardize_species_local() above re-points to the
+# accepted id from spp.duckdb (so ds_source_json said "source" about an id the
+# source never gave). ensure_taxon_xref() then keys each code by the ACCEPTED id
+# of its AphiaID (a key must be accepted; the source id stays in ds_source_json),
+# and the source name stays verbatim as ds_scientific_name, the display name.
+# Codes that share an AphiaID share a taxon_key; obs / obs_attribute below sum them.
+d_src_species <- d$d_csv$data$data[[which(d$d_csv$data$tbl == "Species")]] |>
+  transmute(ds_taxa_code = as.character(SppCode),
+            worms_src = as.integer(AphiaId), itis_src = as.integer(Tsn))
 d_vocab <- dbGetQuery(con, "
   SELECT CAST(species_id AS VARCHAR) AS ds_taxa_code,
          scientific_name AS ds_scientific_name,
          common_name     AS ds_common_name,
          worms_id, itis_id, gbif_id
-  FROM species ORDER BY species_id")
+  FROM species ORDER BY species_id") |>
+  left_join(d_src_species, by = "ds_taxa_code") |>
+  mutate(worms_id = coalesce(worms_src, as.integer(worms_id)),
+         itis_id  = coalesce(itis_src,  as.integer(itis_id))) |>
+  select(-worms_src, -itis_src)
+stopifnot(
+  "every source species code is in the vocabulary" =
+    all(d_src_species$ds_taxa_code %in% d_vocab$ds_taxa_code),
+  "every source species code carries its own AphiaID" = !anyNA(d_src_species$worms_src))
 n_staged <- append_dataset_taxon(con, ds_key, d_vocab, ds_prefix = "calcofi")
 
 # build_taxon_reference() reads the WoRMS lineage `taxon` table built above
@@ -1555,6 +1625,42 @@ cat(glue("vocabulary: {n_staged} CalCOFI species codes staged; ",
          "taxon {n_taxon} (pruned to {n_pruned$taxon}), ",
          "dataset_taxon {n_ds_taxon}"), "\n")
 
+# the provider's SpeciesWormsLookup ("their accepted taxon names", not updated in a
+# year) against the key each code resolved to: a code keyed to another id than its
+# source AphiaID (WoRMS has superseded it), or a lookup name WoRMS no longer uses,
+# is listed in data/flagged/species_worms_lookup_check.csv for the provider
+d_wl <- d$d_csv$data$data[[which(d$d_csv$data$tbl == "SpeciesWormsLookup")]] |>
+  transmute(worms_src = as.integer(AphiaId), lookup_name = Taxon, lookup_rank = taxon_rank)
+d_taxkey <- dbGetQuery(con, glue("
+  SELECT d.ds_taxa_code, d.ds_scientific_name, d.taxon_key,
+         t.scientific_name AS key_name, t.rank AS key_rank
+  FROM dataset_taxon d LEFT JOIN taxon t USING (taxon_key)
+  WHERE d.dataset_key = '{ds_key}'")) |>
+  left_join(d_src_species, by = "ds_taxa_code") |>
+  left_join(d_wl, by = "worms_src") |>
+  mutate(rekeyed     = taxon_key != paste0("worms:", worms_src),
+         lookup_stale = !is.na(lookup_name) & lookup_name != key_name)
+d_taxkey_flag <- d_taxkey |>
+  filter(rekeyed | lookup_stale | is.na(lookup_name)) |>
+  select(ds_taxa_code, ds_scientific_name, worms_src, lookup_name, lookup_rank,
+         taxon_key, key_name, key_rank, rekeyed, lookup_stale) |>
+  arrange(as.integer(ds_taxa_code))
+write_csv(d_taxkey_flag, here("data/flagged/species_worms_lookup_check.csv"), na = "")
+d_shared <- d_taxkey |> group_by(taxon_key, key_name) |>
+  summarize(n_codes = n(), codes = paste(sort(as.integer(ds_taxa_code)), collapse = ", "),
+            source_names = paste(unique(ds_scientific_name), collapse = "; "), .groups = "drop") |>
+  filter(n_codes > 1) |> arrange(desc(n_codes), taxon_key)
+stopifnot(
+  "every code's source AphiaID is in SpeciesWormsLookup" = all(!is.na(d_taxkey$lookup_name)))
+cat(glue("AphiaID: {nrow(d_taxkey)} codes; {sum(d_taxkey$rekeyed)} keyed to the accepted id ",
+         "of a superseded source AphiaID; {sum(d_taxkey$lookup_stale)} lookup names differ from ",
+         "WoRMS's for the key; {nrow(d_shared)} taxon_keys shared by ",
+         "{sum(d_shared$n_codes)} codes (their counts are summed below)\n"))
+d_shared |>
+  datatable(caption = "Species codes that share one taxon_key (one AphiaID): observations summed")
+d_taxkey_flag |>
+  datatable(caption = "Codes keyed to another id than their source AphiaID, or whose SpeciesWormsLookup name WoRMS no longer uses")
+
 # sample — three chained levels. `site` has no datetime of its own, so it takes
 # the earliest tow time; `tow` and `net` inherit site_key/order_occ/grid_key/
 # cruise_key from the site, and both carry the net gear code as tow_type.
@@ -1578,13 +1684,15 @@ append_sample(con, glue("
   FROM site s
   LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
          ON td.site_uuid = s.site_uuid"))
-# Net.NetDepth (new in the 2026-09-26 export): the tow's maximum depth in m, true
-# depth not wire-out (Ed Weber, 2026-09-25, swfsc_ichthyo_08). It is loaded into
-# `net` and checked here, but NOT yet projected to sample.depth_max_m: on this
-# export 210 of 59,976 ichthyo sites would put a tow more than 10 m below the
-# deepest GEBCO cell around the position, and the release's seafloor ratchet
-# (DEPTH_SEAFLOOR_OVER_MAX = 694, 686 at v2026.10.01) would fail. The projection is
-# a decision for the release, not this ingest; tow/net depth_max_m stay NULL.
+# depth_max_m of a tow and of its nets: Net.NetDepth, the MAXIMUM POSSIBLE depth of
+# the net in m (nominal, not a measured depth; not wire-out) -- swfsc_ichthyo_08,
+# and Ben's reading 2026-10-04 (swfsc_ichthyo_19, proposed to Ed). Where the sea
+# floor is shallower the net did not reach it: 210 of 59,976 stations of the
+# 2026-09-26 export put it more than 10 m below the deepest GEBCO cell around them.
+# It is published as is (never clipped), and the release reports those stations in
+# their own line of the seafloor check (check_depth_vs_seafloor(nominal_datasets =)).
+# A net column but a property of the tow: the tow takes it only where every net of
+# the tow agrees; a tow with no NetDepth (the surface Manta tows) keeps NULL.
 d_netdepth <- dbGetQuery(con, "
   SELECT t.tow_type_key,
          COUNT(*)                                        AS n_tow,
@@ -1604,7 +1712,7 @@ stopifnot(
     dbGetQuery(con, "SELECT COUNT(*) FROM net WHERE net_depth_m IS NOT NULL
                      AND (isnan(net_depth_m) OR net_depth_m <= 0)")[[1]] == 0)
 d_netdepth |>
-  datatable(caption = "Net.NetDepth per tow, by tow type (not projected to sample.depth_max_m yet)")
+  datatable(caption = "Net.NetDepth (maximum possible net depth) -> sample.depth_max_m of tows and nets, by tow type")
 
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'tow', 't.tow_uuid')} AS sample_key, 'tow' AS sample_type,
@@ -1613,11 +1721,13 @@ append_sample(con, glue("
          '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
          CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
-         0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         0::DOUBLE AS depth_min_m, CAST(nd.depth_max_m AS DOUBLE) AS depth_max_m,
          t.tow_type_key AS tow_type,
          NULL::VARCHAR AS data_stage,
          t.tow_uuid AS source_uuid
-  FROM tow t JOIN site s USING (site_uuid)"))
+  FROM tow t JOIN site s USING (site_uuid)
+  LEFT JOIN (SELECT tow_uuid, MAX(net_depth_m) AS depth_max_m
+             FROM net GROUP BY 1) nd USING (tow_uuid)"))
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'net', 'n.net_uuid')} AS sample_key, 'net' AS sample_type,
          {ns_key(ds_key, 'tow', 'n.tow_uuid')} AS parent_sample_key,
@@ -1625,43 +1735,194 @@ append_sample(con, glue("
          '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
          CAST(s.order_occ AS INTEGER) AS order_occ, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP) AS datetime,
-         0::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m,
+         0::DOUBLE AS depth_min_m, CAST(n.net_depth_m AS DOUBLE) AS depth_max_m,
          t.tow_type_key AS tow_type,
          NULL::VARCHAR AS data_stage,
          n.net_uuid AS source_uuid
   FROM net n JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)"))
 
+# the NetDepth projection landed on exactly the tows and nets that carry one
+d_depth <- dbGetQuery(con, "
+  SELECT sample_type, COUNT(*) AS n, COUNT(depth_max_m) AS n_depth_max
+  FROM sample GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "every tow with a NetDepth carries it as depth_max_m" =
+    d_depth$n_depth_max[d_depth$sample_type == "tow"] == sum(d_netdepth$n_tow_depth),
+  "every net with a NetDepth carries it as depth_max_m" =
+    d_depth$n_depth_max[d_depth$sample_type == "net"] ==
+    dbGetQuery(con, "SELECT COUNT(net_depth_m) FROM net")[[1]],
+  "a site has no depth of its own" =
+    d_depth$n_depth_max[d_depth$sample_type == "site"] == 0)
+cat(glue("depth_max_m from NetDepth: ",
+         "{paste(sprintf('%s %s of %s', d_depth$sample_type, format(d_depth$n_depth_max, big.mark=','), format(d_depth$n, big.mark=',')), collapse = '; ')}"), "\n")
+
 # obs — the abundance headline: BASE rows only (measurement_type IS NULL in the
 # source long table). taxon_key resolves through dataset_taxon on species_id —
-# the global worms:/itis: key, not the dataset-local species_id.
+# the global worms:/itis: key, not the dataset-local species_id. Aggregated by
+# AphiaID (swfsc_ichthyo_04/_05/_13): codes that share a taxon_key in one net are
+# SUMMED into one row, so (sample_key, taxon_key, life_stage, measurement_type) is
+# unique -- e.g. 683 Sebastes + 3023 S. crocotulus (both AphiaID 126175), and 788
+# S. leptorhynchus + 792 S. californiensis (both 275218). Each code keeps its own
+# dataset_taxon row and verbatim name; only the counts merge.
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'net', 'i.net_uuid')},
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
          dt.taxon_key, i.life_stage,
-         'abundance', CAST(i.tally AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+         'abundance', CAST(SUM(i.tally) AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
   FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid)
                  JOIN site s USING (site_uuid)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
-  WHERE i.measurement_type IS NULL"))
+  WHERE i.measurement_type IS NULL
+  GROUP BY i.net_uuid, s.grid_key, s.cruise_key, s.latitude, s.longitude,
+           t.datetime_start_utc, dt.taxon_key, i.life_stage"))
 
 # obs_attribute — the size and stage distributions UNDER that headline. `size`
 # takes the canonical name `body_length`; a `stage` bin also carries the human
-# label from `lookup`.
+# label from `lookup`. Summed by AphiaID exactly as obs (and, for larvae, already
+# summed over the LarvaeMeasured rows of one length or one stage).
 append_obs_attribute(con, glue("
   SELECT '{ds_key}', {ns_key(ds_key, 'net', 'i.net_uuid')},
          dt.taxon_key, i.life_stage,
          CASE i.measurement_type WHEN 'size' THEN 'body_length' ELSE i.measurement_type END,
          i.measurement_value,
          CASE WHEN i.measurement_type = 'stage' THEN lk.description ELSE NULL END,
-         i.tally, NULL::VARCHAR
+         CAST(SUM(i.tally) AS INTEGER), NULL::VARCHAR
   FROM ichthyo i
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
   LEFT JOIN lookup lk ON lk.lookup_type = i.life_stage || '_stage'
                      AND lk.lookup_num = CAST(i.measurement_value AS INTEGER)
-  WHERE i.measurement_type IN ('stage','size')"))
+  WHERE i.measurement_type IN ('stage','size')
+  GROUP BY i.net_uuid, dt.taxon_key, i.life_stage, i.measurement_type,
+           i.measurement_value, lk.description"))
+
+# the published keys are unique (Ed Weber 2026-09-25: "you will have to aggregate");
+# v2026.10.01 had 3 duplicated obs keys, the 2026-09-26 export 25 before this sum
+n_obs_dup <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT sample_key, taxon_key, life_stage, measurement_type
+                        FROM obs GROUP BY ALL HAVING COUNT(*) > 1)")[[1]]
+n_attr_dup <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT sample_key, taxon_key, life_stage, measurement_type, bin_value
+                        FROM obs_attribute GROUP BY ALL HAVING COUNT(*) > 1)")[[1]]
+n_rows_src <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid)
+                  JOIN site s USING (site_uuid) WHERE i.measurement_type IS NULL")[[1]]
+stopifnot(
+  "obs (sample_key, taxon_key, life_stage, measurement_type) must be unique" = n_obs_dup == 0,
+  "obs_attribute (sample_key, taxon_key, life_stage, measurement_type, bin_value) must be unique" =
+    n_attr_dup == 0,
+  "every obs row has a taxon_key (else unresolved codes would be summed together)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0,
+  "summing by AphiaID keeps every individual" =
+    dbGetQuery(con, "SELECT SUM(measurement_value) FROM obs")[[1]] ==
+    dbGetQuery(con, "SELECT SUM(i.tally) FROM ichthyo i JOIN net n USING (net_uuid)
+                     JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+                     WHERE i.measurement_type IS NULL")[[1]])
+n_obs_now <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+cat(glue("AphiaID aggregation: {format(n_rows_src, big.mark = ',')} source count rows -> ",
+         "{format(n_obs_now, big.mark = ',')} obs rows ({n_rows_src - n_obs_now} summed into a ",
+         "row of the same net and AphiaID)\n"))
+
+# fish — SWFSC's Fish table (Ed Weber 2026-09-26: "the Fish (i.e., grown out of
+# larvae size) table"; Ben 2026-10-04: wanted, in lower snake_case). Counts per net
+# and species code of fish past the larval stage. Published as its own table at
+# the source grain -- (sample_key of the net, species_id), with the taxon_key the
+# code resolves to -- and NOT projected into obs: no life_stage in the vocabulary
+# says "grown out of larvae" exactly (juvenile, or juvenile and adult?), and 2,923
+# of its net x species pairs also have a Larvae count, so whether a fish is also in
+# that count must be known before an abundance could be summed (swfsc_ichthyo_20).
+d_fish_orphan <- dbGetQuery(con, "
+  SELECT COUNT(*) FILTER (WHERE n.net_uuid IS NULL) AS no_net,
+         COUNT(*) FILTER (WHERE dt.taxon_key IS NULL) AS no_taxon
+  FROM fish f LEFT JOIN net n USING (net_uuid)
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo'
+                            AND dt.ds_taxa_code = CAST(f.species_id AS VARCHAR)")
+stopifnot(
+  "every fish row names a released net" = d_fish_orphan$no_net == 0,
+  "every fish species code resolves to a taxon_key" = d_fish_orphan$no_taxon == 0,
+  "fish (net, species code) is unique" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT net_uuid, species_id FROM fish
+                     GROUP BY ALL HAVING COUNT(*) > 1)")[[1]] == 0,
+  "a fish tally is a positive count" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM fish WHERE tally IS NULL OR tally <= 0")[[1]] == 0)
+invisible(dbExecute(con, glue("
+  CREATE OR REPLACE TABLE fish_pub AS
+  SELECT {ns_key(ds_key, 'net', 'f.net_uuid')} AS sample_key,
+         CAST(f.species_id AS INTEGER) AS species_id, dt.taxon_key,
+         CAST(f.tally AS INTEGER) AS tally
+  FROM fish f
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = CAST(f.species_id AS VARCHAR)
+  ORDER BY sample_key, species_id")))
+invisible(dbExecute(con, "DROP TABLE fish"))
+invisible(dbExecute(con, "ALTER TABLE fish_pub RENAME TO fish"))
+d_fish <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n, COUNT(DISTINCT sample_key) AS nets, COUNT(DISTINCT species_id) AS codes,
+         SUM(tally) AS fish FROM fish")
+cat(glue("fish: {format(d_fish$n, big.mark = ',')} rows, {format(d_fish$fish, big.mark = ',')} fish ",
+         "on {format(d_fish$nets, big.mark = ',')} nets, {d_fish$codes} species codes\n"))
+
+# net effort, as SWFSC gives it (swfsc_ichthyo_03; Ed Weber 2026-09-26: "you should
+# trust us on the standard haul factor instead of calculating based on angles for
+# every 10-m of wire"). Nothing here recomputes it: std_haul_factor is Net.Shf,
+# volume_sampled Net.Vol, prop_sorted Net.PropSorted, verbatim. "They cannot be
+# missing": a net without one stops the render (a question back to SWFSC, never a
+# silent drop). A proportion sorted outside (0, 1] is reported, not changed.
+d_effort <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n_net,
+         COUNT(*) FILTER (WHERE volume_sampled IS NULL)       AS no_volume,
+         COUNT(*) FILTER (WHERE standard_haul_factor IS NULL) AS no_shf,
+         COUNT(*) FILTER (WHERE prop_sorted IS NULL)          AS no_prop_sorted,
+         COUNT(*) FILTER (WHERE volume_sampled <= 0 OR standard_haul_factor <= 0) AS not_positive,
+         COUNT(*) FILTER (WHERE prop_sorted <= 0 OR prop_sorted > 1) AS prop_sorted_out
+  FROM net")
+stopifnot(
+  "net effort cannot be missing (swfsc_ichthyo_03): volume, standard haul factor, proportion sorted" =
+    d_effort$no_volume + d_effort$no_shf + d_effort$no_prop_sorted == 0,
+  "volume sampled and standard haul factor are positive" = d_effort$not_positive == 0)
+d_prop_out <- dbGetQuery(con, "
+  SELECT n.net_uuid, t.tow_type_key, s.cruise_key, s.site_key, n.prop_sorted,
+         n.volume_sampled, n.standard_haul_factor
+  FROM net n JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+  WHERE n.prop_sorted <= 0 OR n.prop_sorted > 1")
+
+# true zeros (swfsc_ichthyo_09; Ed Weber: "The others are true zeros and have valid
+# positive zooplankton volumes"). obs stays positive-only by design: a tow with no
+# egg, larva or invertebrate row is a ZERO for every taxon, implied by its `sample`
+# rows and their effort, which every tow and net keeps (the denominator). Only the
+# two staging cruises were removed (exclude_staging_cruises); nothing marks a tow
+# "unsorted". Zooplankton volume is measured on the oblique tows (C1, CB) only.
+d_zero <- dbGetQuery(con, "
+  WITH caught AS (SELECT DISTINCT n.tow_uuid FROM ichthyo i JOIN net n USING (net_uuid)),
+  z AS (
+    SELECT t.tow_uuid, t.tow_type_key, COUNT(n.net_uuid) AS n_net,
+           MIN(n.volume_sampled) AS vol_min, MAX(n.totalplankton) AS tp_max
+    FROM tow t LEFT JOIN net n USING (tow_uuid)
+    WHERE t.tow_uuid NOT IN (SELECT tow_uuid FROM caught)
+    GROUP BY 1, 2)
+  SELECT tow_type_key, COUNT(*) AS n_zero_tow,
+         COUNT(*) FILTER (WHERE n_net = 0)                     AS no_net,
+         COUNT(*) FILTER (WHERE n_net > 0 AND vol_min > 0)    AS volume_positive,
+         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max > 0)     AS zooplankton_positive,
+         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max IS NULL) AS zooplankton_missing
+  FROM z GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "every zero-catch tow that has a net has a positive volume sampled (true zero, in the denominator)" =
+    all(d_zero$volume_positive == d_zero$n_zero_tow - d_zero$no_net))
+d_zero |>
+  datatable(caption = "Zero-catch tows (no egg, larva or invertebrate row): true zeros, by tow type")
+cat(glue(
+  "true zeros: {format(sum(d_zero$n_zero_tow), big.mark = ',')} of ",
+  "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM tow')[[1]], big.mark = ',')} tows caught nothing; ",
+  "all {format(sum(d_zero$volume_positive), big.mark = ',')} with a net have a positive volume; ",
+  "{sum(d_zero$no_net)} tow(s) have no net at all (no effort: not in any density denominator); ",
+  "oblique (C1/CB) zero tows with no zooplankton volume: ",
+  "{sum(d_zero$zooplankton_missing[d_zero$tow_type_key %in% c('C1', 'CB')])}\n",
+  "net effort: {format(d_effort$n_net, big.mark = ',')} nets, none missing; ",
+  "{nrow(d_prop_out)} with prop_sorted outside (0, 1]\n"))
+if (nrow(d_prop_out)) d_prop_out |> datatable(caption = "Nets whose proportion sorted is outside (0, 1] (reported to SWFSC)")
 
 # sample_measurement — the five net-level effort quantities, long-formatted
 append_sample_measurement(con, glue("
@@ -1704,11 +1965,15 @@ stopifnot(
   "sample_key must be globally unique" =
     dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
                      GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
-  "obs must carry only the abundance headline" =
+  "obs must carry only the abundance headline (one row per net x AphiaID x life stage)" =
     core$obs ==
-    dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid)
-                     JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
-                     WHERE i.measurement_type IS NULL")[[1]],
+    dbGetQuery(con, "SELECT COUNT(*) FROM (
+                       SELECT DISTINCT i.net_uuid, dt.taxon_key, i.life_stage
+                       FROM ichthyo i JOIN net n USING (net_uuid)
+                       JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+                       LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo'
+                         AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
+                       WHERE i.measurement_type IS NULL)")[[1]],
   "obs must carry no size/stage rows" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs
                      WHERE measurement_type <> 'abundance'")[[1]] == 0,
@@ -1816,10 +2081,11 @@ mismatches <- list(
 
 # write parquet files with manifest
 # core shards + the shared reference tables this ingest owns for the whole
-# database (grid/cruise/ship/lookup). The per-dataset site/tow/net/ichthyo
-# tables are no longer written — they are VIEWs over the core now.
+# database (grid/cruise/ship/lookup), and the dataset's own `fish` table. The
+# per-dataset site/tow/net/ichthyo tables are no longer written — they are VIEWs
+# over the core now.
 tbls_out <- core_output_tables(
-  con, extra = c("grid", "cruise", "ship", "lookup", "dataset"))
+  con, extra = c("grid", "cruise", "ship", "lookup", "dataset", "fish"))
 parquet_stats <- write_parquet_outputs(
   con              = con,
   output_dir       = dir_parquet,
@@ -1862,6 +2128,10 @@ metadata_path <- build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
+# `fish` (this dataset's own table) is declared in core_relationships() (calcofi4db
+# dev): key (sample_key, species_id), FKs to the net in `sample` and to `taxon`
+stopifnot("calcofi4db must declare fish's key (core_relationships)" =
+            identical(core_relationships("fish")$primary_keys$fish, c("sample_key", "species_id")))
 build_relationships_json(
   rels = core_relationships(tbls_out),
   output_dir = dir_parquet,

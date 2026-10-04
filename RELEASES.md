@@ -468,19 +468,85 @@ v2026.10.01:
   pairs have measured larvae but none with a stage. Asked: `swfsc_ichthyo_18`. 974 measured rows
   (tally 2,320, lengths only) name no larva count row and cannot be placed: flagged, not released
   (`swfsc_ichthyo_17`).
-- `swfsc_ichthyo` `obs` goes 482,250 → 487,641; `obs_attribute` `body_length` 241,871 → 241,328,
-  `stage` 128,107 → 126,435; `sample` 213,122 → 212,258; `cruise` 691 → 694 rows (the two 1982
+- **Egg stages 12-15 leave** (`swfsc_ichthyo_02`; Ben Best, 2026-10-01): v2026.10.01 published 790
+  egg `stage` rows (2,029 eggs) on a scale that ends at 11; the 2026-09-26 export holds 669 (1,756
+  eggs), now screened out and listed in `data/flagged/egg_stage_12_15_screened.csv`. They are not
+  only Dover and Rex sole: 1,238 of the eggs are northern anchovy and 400 Pacific sardine at stage
+  12 (asked: `swfsc_ichthyo_22`). Egg abundance totals are unchanged.
+- **Counts are summed by AphiaID** (`swfsc_ichthyo_04`/`_05`/`_13`; "aggregate by AphiaID", Bill's
+  taxonomy stands): 31 species codes share 13 `taxon_key`s (e.g. 683 *Sebastes* and 3023 *S.
+  crocotulus*; 788 *S. leptorhynchus* and 792 *S. californiensis*, which the source gives one
+  AphiaID). Where two of them were counted in one net their rows are now one: 25 such pairs, so
+  `obs` has no duplicated (sample, taxon, life stage) any more (v2026.10.01 had 3). Every code keeps
+  its own `dataset_taxon` row and verbatim name; **no `taxon_key` changes**. `ds_source_json` now
+  holds the AphiaID the source gave: 11 codes whose AphiaID WoRMS has superseded (e.g.
+  *Myctophum lychnobium* 272723 → key `worms:1888085` *Dasyscopelus lychnobius*) used to show the
+  accepted id there.
+- **`depth_max_m` of every ichthyo tow and net is `Net.NetDepth`**, the maximum possible depth of
+  the net, nominal (`swfsc_ichthyo_08`/`_19`): 61,625 of 74,394 tows and 65,128 of 77,888 nets
+  (Manta surface tows have none); `obs_bio`'s fallback depth for ichthyo follows. Where the sea
+  floor is shallower the net did not reach it: 210 stations; the release counts these apart from
+  depth errors, with their own ratchet (210).
+- **New: `fish`**, SWFSC's Fish table (fish grown past the larval stage): 10,796 rows, 18,789 fish
+  on 7,179 nets, 240 species codes, keyed (`sample_key`, `species_id`) with `taxon_key`. Not in
+  `obs` until its life stage and overlap with the larval count are known (`swfsc_ichthyo_20`).
+- **New: `ship_ices`** on `ship` and `cruise`, beside `ship_nodc` (`swfsc_ichthyo_14`). Keys are
+  unchanged (`cruise_key` stays YYYY-MM-NODC); the codes differ for one ship, FROSTI (NODC OIFS,
+  ICES 18DN).
+- `swfsc_ichthyo` `obs` goes 482,250 → 487,616; `obs_attribute` `body_length` 241,871 → 241,328,
+  `stage` 128,107 → 125,766; `sample` 213,122 → 212,258; `cruise` 691 → 694 rows (the two 1982
   cruises leave; 1998-03, 1998-05 and 1998-06 JD and 2017-07 and 2018-07 Lasker arrive without
-  stations). `dataset_taxon` (1,167 codes) and every `taxon_key` are unchanged.
+  stations: they are CUFES-only cruises, `Cufes.CruiseId` names them).
 - **`grid` is the rebuilt 225-cell grid** (identical to `calcofi4r::cc_grid` 1.25.0, see the grid
   section above): with it 8,693 ichthyo sites (11,563 tows, 11,778 nets) change `grid_key`; none
-  gains or loses one.
-- **Not ingested yet**, each needing a decision: `Net.NetDepth` as the tow's `depth_max_m`
-  (`swfsc_ichthyo_08`; it puts 210 of 59,976 stations more than 10 m below the seafloor, past the
-  release's seafloor ratchet: `swfsc_ichthyo_19`); the new `Cufes`, `Fish`, `SpeciesItisLookup`,
-  `SpeciesWormsLookup` and `PreservativeLookup` tables; `Station` arrival/departure times, bottom
-  depth and bucket temperature; `ShipLookup.ShipIces`; aggregation by AphiaID
-  (`swfsc_ichthyo_05`/`_13`); egg stages 12-15 stay as published (669 rows, `swfsc_ichthyo_02`).
+  gains or loses one. 2,084 sites off the grid (ETP and elsewhere, `swfsc_ichthyo_07`) are kept
+  with a NULL `grid_key`.
+- **Zero catches are true zeros** (`swfsc_ichthyo_09`): 6,302 of 74,394 tows caught nothing and stay
+  as samples with their effort; every one with a net has a positive volume. Net effort is SWFSC's
+  own (the standard haul factor is not recomputed) and none is missing.
+- **Not ingested**: `Cufes` (another change repoints `ingest_swfsc_cufes.qmd` at it),
+  `SpeciesItisLookup`, `SpeciesWormsLookup` (used to check the keys,
+  `data/flagged/species_worms_lookup_check.csv`), `PreservativeLookup`, and `Station`
+  arrival/departure times, bottom depth and bucket temperature.
+
+## CUFES: the source is SWFSC's own export, and eggs per m³ are published
+
+`swfsc_cufes` was read from NOAA CoastWatch ERDDAP (`erdCalCOFIcufes`). It now reads `Cufes.csv`
+from SWFSC's CSV export of its CalCOFI database (2026-09-26, Ed Weber), where each sample carries
+its `CufesId` and the `CruiseId` of its cruise. Record by record, the export holds 47,989 of
+ERDDAP's 49,572 samples. Where both have a sample, its times and egg counts are identical, and its
+positions and environment differ by no more than float rounding (≤ 1.5e-5). Both run from
+1996-03-15 to 2022-04-27. Measured against v2026.10.01:
+
+- **1,583 samples leave** (9,016 `abundance` rows; 18,218 eggs, 15,252 of them "other fish").
+  1,563 have no position at either end, and SWFSC removed them at source (`swfsc_cufes_04`).
+  They include all of cruises 1998-09, 1999-08 and 2000-01 New Horizon. The other 20 have a stop
+  position only, and v2026.10.01 placed them there (asked: `swfsc_cufes_09`). Every remaining
+  sample has a position.
+- **A new measurement type, `egg_concentration`** (count/m³; 275,081 rows on all 47,989 samples,
+  one per egg count, same taxon and `life_stage = egg`). It is Ed Weber's standardization
+  (`swfsc_cufes_01`): eggs/m³ = (count / minutes sampled) / mean pump speed, with minutes =
+  stop − start and the pump speed in m³/min (`swfsc_cufes_02`). It is computed only where the
+  minutes and both pump speeds are positive, which every sample of this export is. The raw
+  counts still publish as `abundance` (count), unchanged. One sample's stop pump speed reads
+  40 m³/min (others 0.27–1.07), which makes its concentration about 30 times too low. It is
+  published as shipped and asked about (`swfsc_cufes_10`).
+- **Every sample has a `cruise_key`**, taken from the provider's `CruiseId` through
+  `cruise.cruise_uuid`. Before, 5,053 had none, and 6,212 keys change: 5,049 are filled (on
+  2017-07 and 2018-07 Lasker, 1998-03/05/06 and 1997-03 Jordan, and others). 1,163 move to the
+  cruise SWFSC designates: 743 from 1998-02-31JD to 1998-03-31JD, and 420 from 1996-04-31JD to
+  1996-03-31JD. The date-span rule (`resolve_cruise_key()`, span then the source's `Cruise`)
+  gives the same key on all 47,989.
+- **`sample_key` is built from `CufesId`** (`swfsc_cufes:underway:<CufesId>`, previously the
+  ERDDAP row number), and `CufesId` is released as `sample.source_uuid`, as ichthyo's UUIDs are.
+  Every CUFES `sample_key` changes.
+- `grid_key`: 9,224 samples change cell. All of them come from the rebuilt 225-cell grid (section
+  above), none from the new source. 754 samples (9,048 `obs` rows) lie outside the grid, against
+  2,319 in v2026.10.01, most of which had no position at all.
+- `swfsc_cufes` `sample` goes 49,572 → 47,989. `obs` goes 284,097 → 550,162 (`abundance`
+  275,081 + `egg_concentration` 275,081). Taxa are unchanged: the six keys, now checked against
+  SWFSC's `Species.csv` AphiaIDs. The underway temperature, salinity, wind and pump speed are
+  still not published, as before.
 
 ## Bottle: salinity quality codes above 9 become blank (calcofi_bottle_01)
 
