@@ -1,7 +1,13 @@
 table,column,name_long,units,description_md
-cufes_sample,cruise_key,Cruise Key,,"CalCOFI cruise natural key, derived from cruise_orig + ship + date."
-cufes_sample,ship_key,Ship Key,,NODC ship key; FK to ship.
-cufes_sample,geom,Geometry,,Sample-start point geometry (WGS84).
-cufes_sample,grid_key,Grid Key,,CalCOFI grid cell from spatial join.
+cufes,latitude,Latitude,decimal_degrees,"Sample position: the midpoint of the start and stop positions, else whichever end has both coordinates."
+cufes,longitude,Longitude,decimal_degrees,"Sample position: the midpoint of the start and stop positions, else whichever end has both coordinates."
+cufes,position_source,Position Source,,"Which ends of the segment gave the position: `midpoint`, `start` or `stop`."
+cufes,duration_min,Minutes Sampled,min,"Stop minus start, in minutes."
+cufes,pump_speed_mean,Mean Pump Speed,m3/min,Mean of the start and stop pump speeds.
+cufes,volume_pumped_m3,Volume Pumped,m3,duration_min x pump_speed_mean: the water the sample filtered.
+cufes,cruise_key,Cruise Key,,CalCOFI cruise natural key (YYYY-MM-NODC) of the cruise SWFSC's CruiseId names.
+cufes,cruise_key_method,Cruise Key Method,,"How cruise_key was resolved: `cruise_uuid` (the provider's CruiseId), else resolve_cruise_key()'s `span` / `source` / `month`."
+cufes,geom,Geometry,,Sample position as a point geometry (WGS84).
+cufes,grid_key,Grid Key,,CalCOFI grid cell holding the sample position (assign_grid_key()).
 cufes_measurement,cufes_measurement_id,CUFES Measurement ID,,Sequential primary key.
-cufes_measurement,sample_id,Sample ID,,FK to cufes_sample.
+cufes_measurement,cufes_uuid,CUFES UUID,,FK to cufes.
