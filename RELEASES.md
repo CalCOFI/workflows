@@ -8,6 +8,17 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Correction: the `obs` objects still ship; #92 tracks their removal
+
+The v2026.09.10 notes below say its cut was the last to ship the `obs` table's objects and that
+"the next release drops the `obs` objects and the twin". That did not happen: v2026.10.01 still
+exported the 16 `obs` partition objects and `obs.parquet`, and **this release does too**. They go
+only when every reader has moved to `obs_bio` + `obs_env` or the `obs` catalog view
+(issue [#92](https://github.com/CalCOFI/workflows/issues/92), open; seven readers break with no
+change). Until the release that drops them says so here, read `obs_bio` / `obs_env` or the view,
+not the table's objects. The `removed_in: next` mark on the table's catalog entry is a placeholder
+until then.
+
 ## DIC: every sample with a position carries a `grid_key`
 
 In v2026.10.01 `sample.grid_key` was NULL on 3,255 of 3,261 `calcofi_dic` rows. The sample arm took
