@@ -1232,10 +1232,11 @@ d_ungridded |>
 ## Grid Keys Name the Cell the Position Is In
 
 The grid was rebuilt from the official station positions (CalCOFI/workflows#130, calcofi4r's
-`cc_grid` / calcofi4db's `build_grid_reference()`): one cell per official station, and 196 of
-the previous 218 keys survive as **names** over polygons that changed. An ingest staged against
-the previous grid therefore ships keys that pass the foreign-key check on `grid_key` and name
-another piece of ocean. `check_grid_key_assignment()` recomputes the cell of every `sample`
+`cc_grid` / calcofi4db's `build_grid_reference()`): one cell per official station beside the
+previous cells it keeps, and 84 of the previous 218 keys survive as **names** over polygons that
+changed. An ingest staged against the previous grid therefore ships keys that pass the
+foreign-key check on `grid_key` and name another piece of ocean (59,688 `sample` rows, on
+v2026.10.01's own keys). `check_grid_key_assignment()` recomputes the cell of every `sample`
 position against this release's `grid`, by the rule `assign_grid_key()` applies (planar
 intersects; on a shared edge the key that sorts first), and **stops the release** on a row whose
 key is not that cell. A position inside a cell on a row that carries no key is reported, not
@@ -1980,7 +1981,8 @@ of a previous cell (`calcofi4r::cc_grid_v1`) and a cell of this release's `grid`
 overlap area and its share of each cell (`prev_frac`, `grid_frac`; areas in EPSG:3310). Shares
 are of the whole cell and are not rescaled, so a previous cell's shares sum to one less the part
 of it that is land under the finer coastline. `check_grid_crosswalk()` is the gate: every cell of
-both grids present, no repeated pair, no previous cell over one, none under 0.95.
+both grids present, no repeated pair, no previous cell over one, none under 0.95. A cell the
+rebuilt grid kept as it was (the 112 beyond the official pattern) is an identity row.
 
 It is built here, in `con_wdl`, from the assembled `grid`, so it is in `core_keep` (the default
 published set) **and** in the `gcs_prefix = NA` list of [freeze_release] (`core_spec`): no ingest

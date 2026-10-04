@@ -49,8 +49,9 @@ fd <- tribble(
   paste0("CalCOFI grid-cell key, st{station}-ln{line} (_hist for a cell of the historical pattern); FK to grid. ",
          "Assigned spatially via assign_grid_key(): the cell the position falls in, the key that sorts first on a shared edge."),
   "", "", TRUE,
-  paste0("one cell per official station since the grid was rebuilt from the official station positions ",
-         "(CalCOFI/workflows#130); a key of a release through v2026.10.01 may name another polygon: map through grid_crosswalk."),
+  paste0("one cell per official station, beside the previous cells kept as they were, since the grid was rebuilt from ",
+         "the official station positions (CalCOFI/workflows#130); a key of a release through v2026.10.01 may name ",
+         "another polygon: map through grid_crosswalk."),
 
   "cast_id", "INTEGER", "", "identifier",
   "Bottle/CTD cast identifier; primary key of casts.",
@@ -339,7 +340,7 @@ fd <- tribble(
          "through v2026.10.01); with grid_key the primary key of grid_crosswalk."),
   "", "", TRUE,
   paste0("on grid_crosswalk. Not a foreign key: the previous grid is not released. 196 of the 218 previous ",
-         "keys are also keys of the rebuilt grid, over a polygon that changed: never match it to grid_key by name."),
+         "keys are also keys of the rebuilt grid, 84 of them over a polygon that changed: never match it to grid_key by name."),
 
   "overlap_km2", "DOUBLE", "km2", "spatial",
   paste0("Area the previous cell (prev_grid_key) and the current cell (grid_key) share, in California Albers ",
@@ -354,7 +355,7 @@ fd <- tribble(
 
   "grid_frac", "DOUBLE", "", "spatial",
   paste0("overlap_km2 as a fraction of the CURRENT cell's whole area. Sums over a current cell to one, less the ",
-         "part no previous cell covered; slightly over one where previous cells overlap each other (line 93.3)."),
+         "part no previous cell covered; slightly over one where previous cells overlap each other (line 93.3 / line 100)."),
   "", "", FALSE, "on grid_crosswalk; release-derived."
 )
 

@@ -150,8 +150,9 @@ Rscript scripts/build_workflows_index.R
   stay denormalized on `obs`; `hex_id` is H3 res 10 on `obs`, aggregate with
   `h3_cell_to_parent()`; `geom` lives on `sample`, never on `obs`.
 - **A `grid_key` is the cell a position falls in, never a name carried over.**
-  The grid is one cell per official station (`calcofi4r::cc_grid`, built by
-  `cc_grid_build()`); `assign_grid_key()` and `cc_grid_key()` are the one rule
+  The grid is one cell per official station beside the previous cells kept as
+  they were (`calcofi4r::cc_grid`, built by `cc_grid_build()`);
+  `assign_grid_key()` and `cc_grid_key()` are the one rule
   (planar intersects; on a shared edge the key that sorts first);
   `check_grid_key_assignment()` stops a release whose keys were staged against
   another grid, and a key from a release through v2026.10.01 maps through

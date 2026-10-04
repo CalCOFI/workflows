@@ -27,7 +27,10 @@ positions](https://calcofi.org/sampling-info/station-positions/) and build the c
 tessellation of them.
 
 The first version of this page (2026-10-02) compared that idea (Option A) with two repairs of the
-previous grid. **On 2026-10-04 Ben decided that Option A ships in the next database release.**
+previous grid. **On 2026-10-04 Ben decided that Option A ships in the next database release**,
+and, the same day, that "kept from the previous grid" is literal: the previous cells beyond the
+official pattern keep their own boundaries, and the station cells are confined to the previous
+cells they replace (@sec-option-a).
 The cells are now built by `calcofi4r::cc_grid_build()` and bundled as `calcofi4r::cc_grid`;
 `calcofi4db::assign_grid_key()` keys a position to a cell, and the release publishes a
 `grid_crosswalk` table. This page is the **evidence pack** for that implementation: the six
@@ -414,39 +417,53 @@ ggplot() +
   zoom + theme_minimal() + labs(x = NULL, y = NULL)
 ```
 
-## The shipped grid: Voronoi of the official positions {#sec-option-a}
+## The shipped grid: one cell per official station, inside the previous grid {#sec-option-a}
 
 `calcofi4r::cc_grid` is `cc_grid_build(cc_station_positions, cc_grid_v1, cc_grid_land)`
 (`calcofi4r/data-raw/cc_grid.R`, no hand edits). The rules, as the function documents them:
 
 1. **Extent.** The outer hull of the previous grid (the union of its cells with interior holes
-   filled) minus land. Water that land cuts off from every generator is not part of the grid.
-2. **Generators.** The `r nrow(st)` official positions, plus a **seed** for each previous cell
-   whose labelled (line, station) lies more than 20 nautical miles outside the convex hull of
-   the official stations, so the extended historical grid keeps its cells and keys. A seed is
-   the cell's label under `+proj=calcofi`, on land or not, so the edge it shares with its
-   neighbours stays where the previous lattice put it. A previous cell inside the 20 nautical
-   mile zone that is not a station is retired: its water goes to the nearest generator.
-3. **Cells.** The Voronoi tessellation in metres (California Albers, not line/station units,
-   which weigh a line unit of 22.2 km and a station unit of 7.4 km alike), clipped to the extent,
-   with a vertex every 5 km along each edge so the lon/lat polygon follows the metric edge.
-4. **Pockets.** A piece of a cell that land separates from the piece holding its station joins
-   the neighbouring cell it shares the longest water edge with. A cell is then one polygon.
-5. **Sites.** A cell's site (`grid.geom_ctr`) is its generator; for a seed on land, the previous
-   cell's centre when the new cell holds it, else a point on the cell.
-6. **Attributes.** A station's cell is `nearshore` at station ≤ 60 and `offshore` beyond;
+   filled) minus land.
+2. **Kept or replaced.** A previous cell whose labelled (line, station) lies more than 20
+   nautical miles outside the convex hull of the `r nrow(st)` official stations is **kept**; the
+   others are **replaced**. Where two previous cells overlap, the overlap is the cell whose key
+   sorts first, the cell a position there keyed to.
+3. **Kept cells are the previous cells.** A kept cell keeps its key, its attributes and its own
+   boundaries, toward the other kept cells and toward the replaced region, so a historical
+   position that was in a kept cell is still in it. Only its coast side changes: it ends at the
+   new land.
+4. **Station cells.** The Voronoi tessellation of the official positions in metres (California
+   Albers, not line/station units, which weigh a line unit of 22.2 km and a station unit of 7.4 km
+   alike), **confined to the replaced region R** (the union of the replaced cells): an outer
+   station's cell stops where the previous lattice stopped it, at line 95.0 in the south (20
+   nautical miles beyond line 93.3). Each edge gets a vertex every 5 km so the lon/lat polygon
+   follows the metric edge.
+5. **Pockets.** A piece of a station's cell that land separates from the piece holding the
+   station joins the neighbouring station cell it shares the longest water edge with. A pocket
+   never joins a kept cell. Water of R that no station cell reaches stays with the station it is
+   nearest to, as a detached part, and is reported (@tbl-cases).
+6. **Gap water.** Water of the extent that no previous cell covered (the previous grid was
+   clipped by a coarser coastline) joins the cell whose edge it is nearest to, kept or replaced.
+   Gap water that touches no cell is left out.
+7. **Sites.** A station cell's site (`grid.geom_ctr`) is the station. A kept cell's site is its
+   label under `+proj=calcofi` when the cell holds it, else the previous cell's centre, else a
+   point on the cell.
+8. **Attributes.** A station's cell is `nearshore` at station ≤ 60 and `offshore` beyond;
    `standard` on lines ≥ 76.7 (the 75-station pattern) and `extended` north of it; spacing class 5
-   nearshore, 10 offshore. A kept cell keeps the previous cell's attributes and key.
+   nearshore, 10 offshore. A kept cell keeps the previous cell's attributes.
 
 The land is `calcofi4r::cc_grid_land`: OpenStreetMap land polygons
 (extract `r cc_grid_land$version`) with islets under 1 km² dropped, the coastline pulled back
 300 m and simplified to 100 m, so a ship at its berth or a nearshore position rounded to the
 minute still falls in a cell and the cells stay light enough for a browser.
 
-**How offshore cells are bounded.** An official station on the edge of the pattern (station 100
-to 120) is bounded seaward by the next historical seed, i.e. the 20-unit lattice, and finally by
-the previous outer hull, so an outer official cell reaches about halfway to the historical
-lattice beyond it.
+**Why the station cells are confined.** A first build let the official Voronoi run to the
+bisector with the kept cells' labels. The outer official cells then reached 40 nautical miles
+beyond line 93.3 (halfway to the line-100 lattice), where the previous lattice gave them 20, and
+historical line 96.7 fell on the new edge: 18,795 of its 28,367 `sample` rows left the line-100
+cells and seven of its stations were split between two cells. Confining the station cells to R
+puts every boundary of the previous grid that was not inside the official pattern back where it
+was (@tbl-line967, @tbl-kept).
 
 ```{r}
 #| label: option-a
@@ -467,15 +484,18 @@ parts_a_after <- flag_slivers(split_parts(A), gen_a)
 # the site of a cell is its generator: on its line by construction
 A_site <- st_transform(gen_a, 4326)
 A_off  <- off_line_km(st_coordinates(A_site)[, 1], st_coordinates(A_site)[, 2], A_site$line)
-seeds  <- b_ship$seeds
+prevt  <- b_ship$prev
+kept_keys <- prevt$grid_key[prevt$fate == "kept"]
+n_parts   <- function(x) vapply(st_geometry(x), function(g) if (inherits(g, "MULTIPOLYGON")) length(g) else 1L, 1L)
 rp_    <- as.list(b_ship$report)
 cat(glue(
-  "shipped: {rp_$cells} cells = {rp_$stations} official + {rp_$seeds} kept from the previous grid ",
-  "(site at the label {rp_$seeds_at_label}, at the previous centre {rp_$seeds_at_centre}, on the cell's water {rp_$seeds_at_water}); ",
-  "{rp_$prev_retired} previous cells retired; {rp_$pockets_moved} pockets joined a neighbour in {rp_$pocket_rounds} round(s); ",
-  "{rp_$multipart_cells} multi-part cells; {rp_$dropped_water} cut-off waters dropped ",
-  "({fmt(sum(b_ship$dropped$area_km2), 1)} km²); {fmt(n_vertices(cc_grid))} vertices ",
-  "(previous grid {fmt(n_vertices(cc_grid_v1))})"), "\n")
+  "shipped: {rp_$cells} cells = {rp_$stations} station cells + {rp_$kept} kept from the previous grid ",
+  "(site at the label {sum(prevt$site_at == 'label', na.rm = TRUE)}, at the previous centre {sum(prevt$site_at == 'centre', na.rm = TRUE)}, ",
+  "on the cell {sum(prevt$site_at == 'water', na.rm = TRUE)}); {rp_$replaced} previous cells replaced; ",
+  "{rp_$pockets_moved} pockets joined a neighbouring station cell; {rp_$multipart_cells} multi-part cells ",
+  "({rp_$multipart_official} of them a station cell); gap water joined to kept cells {fmt(sum(prevt$gap_km2))} km²; ",
+  "{rp_$dropped_water} gap waters left out ({fmt(sum(b_ship$dropped$area_km2), 1)} km²); {rp_$cases} case(s) reported; ",
+  "{fmt(n_vertices(cc_grid))} vertices (previous grid {fmt(n_vertices(cc_grid_v1))})"), "\n")
 ```
 
 ```{r}
@@ -613,15 +633,18 @@ cat(glue("C: {sum(c_ok)} sites moved onto their line (median {round(median(c_mov
 The one variant to show beside the shipped grid on 2026-10-08: the same build seeded from the
 regular station pattern only, i.e. the `r n_ros` ROS stations, so each of the nine ~20 m SCCOOS
 stations falls in the cell of the nearest ROS station instead of having a cell of its own.
-Everything else (extent, land, seeds, pockets, attributes) is identical. It is not shipped.
+Everything else (extent, land, kept cells, pockets, attributes) is identical. It is not shipped.
 
 ```{r}
 #| label: variant
 b_var <- cc_grid_build(stations = filter(cc_station_positions, sta_type != "SCCOOS"))
 V     <- st_transform(b_var$grid, CRS_M); V$area_km2 <- as.numeric(st_area(V)) / 1e6
 rv_   <- as.list(b_var$report)
-cat(glue("variant: {rv_$cells} cells = {rv_$stations} official + {rv_$seeds} kept; {rv_$pockets_moved} pockets joined a neighbour; ",
-         "{rv_$multipart_cells} multi-part cells; {rv_$dropped_water} cut-off waters dropped"), "\n")
+stopifnot("the variant keeps other previous cells than the shipped grid" =
+            setequal(b_var$prev$grid_key[b_var$prev$fate == "kept"], kept_keys))
+cat(glue("variant: {rv_$cells} cells = {rv_$stations} station cells + {rv_$kept} kept (the same {rv_$kept}); ",
+         "{rv_$pockets_moved} pockets joined a neighbouring station cell; {rv_$multipart_cells} multi-part cells ",
+         "({rv_$multipart_official} a station cell); {rv_$cases} case(s) reported"), "\n")
 ```
 
 ```{r}
@@ -755,97 +778,173 @@ gained |> transmute(dataset_key, `shipped cell` = key_a, longitude, latitude, da
                     `on OSM land` = on_land) |> knitr::kable()
 ```
 
-**The previous cells whose label is on land.** The 2026-10-02 notebook dropped 21 previous cells
-whose nominal position is on land as seeds. The shipped build keeps a previous cell beyond the
-20 nautical mile zone whatever its label, and generates it **from the label even on land**: the
-Voronoi edge with its seaward neighbour then stays at the lattice midpoint, and the cell keeps
-the coastal strip, and the samples, it had. Only its site is moved, to the previous cell's
-centre. (A first build moved the seed itself onto the cell's water; that pulled the edge
-seaward and handed the coastal cell its neighbour's nearshore stations, which the full-extent
-map of key changes showed at once.) @tbl-land-labels follows the `sample` rows of every previous
-cell whose label is on land.
+**The kept cells hold what they held.** The 2026-10-02 notebook dropped 21 previous cells whose
+nominal position is on land, and let the rest move with a Voronoi of their labels. In the
+shipped grid a kept cell is the previous cell, so a `sample` row whose previous cell is kept must
+carry the same key. @tbl-kept counts the exceptions.
 
 ```{r}
-#| label: tbl-land-labels
-#| tbl-cap: "Previous cells whose labelled (line, station) is on land: what the build did with each, the `sample` rows it holds in v2026.10.01, how many keep their key, and the shipped cells they key to."
-ll <- seeds |> filter(!label_ok) |> select(grid_key, in_zone, seed_at)
-ll_rows <- dbGetQuery(con, "SELECT key_now AS grid_key, key_a, count(*) AS n FROM s_key WHERE key_now IS NOT NULL GROUP BY 1, 2")
-ll |> left_join(
-  ll_rows |> group_by(grid_key) |> arrange(desc(n)) |>
-    summarize(rows = sum(n), `keep their key` = sum(n[key_a == grid_key], na.rm = TRUE), `no cell` = sum(n[is.na(key_a)]),
-              `shipped cells (rows)` = paste0(head(key_a, 4), " (", fmt(head(n, 4)), ")", collapse = "; ")),
-  by = "grid_key") |>
-  mutate(across(c(rows, `keep their key`, `no cell`), ~ coalesce(.x, 0)), seed = ifelse(seed_at == "retired", "retired (in the 20 nmi zone)", seed_at)) |>
-  select(`previous cell` = grid_key, seed, rows, `keep their key`, `no cell`, `shipped cells (rows)`) |>
-  arrange(desc(rows)) |> knitr::kable(format.args = list(big.mark = ","))
+#| label: tbl-kept
+#| tbl-cap: "Rows whose previous cell is a kept cell: how many keep their key, and every position that does not (expected: none but coast effects)."
+kept_sql <- paste0("'", kept_keys, "'", collapse = ", ")
+kept_rows <- dbGetQuery(con, glue("
+  SELECT count(*) AS rows, count(*) FILTER (WHERE key_a IS NOT DISTINCT FROM key_now) AS same_key,
+         count(*) FILTER (WHERE key_a IS DISTINCT FROM key_now) AS key_changes
+  FROM s_key WHERE key_now IN ({kept_sql})"))
+kept_moved <- dbGetQuery(con, glue("
+  SELECT dataset_key, key_now AS previous_cell, key_a AS shipped_cell, longitude, latitude, count(*) AS rows
+  FROM s_key WHERE key_now IN ({kept_sql}) AND key_a IS DISTINCT FROM key_now GROUP BY ALL ORDER BY rows DESC"))
+# and the reverse: rows now in a kept cell that were not in it
+into_kept <- dbGetQuery(con, glue("
+  SELECT count(*) AS rows, count(*) FILTER (WHERE key_now IS NULL) AS had_no_cell
+  FROM s_key WHERE key_a IN ({kept_sql}) AND key_a IS DISTINCT FROM key_now"))
+kable_kept <- tibble(
+  ` ` = c("sample rows whose previous cell is a kept cell", "  with the same key", "  whose key changes",
+          "rows now in a kept cell that were not in it", "  of which had no cell before (gap water at the coast)"),
+  rows = fmt(c(kept_rows$rows, kept_rows$same_key, kept_rows$key_changes, into_kept$rows, into_kept$had_no_cell)))
+knitr::kable(kable_kept, align = "lr")
+if (nrow(kept_moved)) knitr::kable(kept_moved) else cat("no position leaves a kept cell\n")
 ```
 
 ```{r}
-#| label: gate1-seeds
+#| label: gate1-kept
 lab_d <- {
   hull_off <- st_convex_hull(st_union(stp))
   lab_m <- st_transform(nom, CRS_M)
   tibble(grid_key = nom$grid_key, d_km = as.numeric(st_distance(lab_m, hull_off)) / 1000)
 }
-seed_gap <- lab_d |> left_join(seeds[c("grid_key", "seed_at")], by = "grid_key")
-retired_max <- max(seed_gap$d_km[seed_gap$seed_at == "retired"]); kept_min <- min(seed_gap$d_km[seed_gap$seed_at != "retired"])
-rows_retired <- dbGetQuery(con, glue("
+keep_gap <- lab_d |> left_join(prevt[c("grid_key", "fate")], by = "grid_key")
+replaced_max <- max(keep_gap$d_km[keep_gap$fate == "replaced"]); kept_min <- min(keep_gap$d_km[keep_gap$fate != "replaced"])
+rows_replaced <- dbGetQuery(con, glue("
   SELECT count(*) AS n, count(key_a) AS n_cell FROM s_key
-  WHERE key_now IN ({paste0(\"'\", seeds$grid_key[seeds$seed_at == 'retired'], \"'\", collapse = ', ')})"))
-cat(glue("20 nmi rule: the farthest retired label is {round(retired_max, 1)} km from the convex hull of the official stations, ",
+  WHERE key_now IN ({paste0(\"'\", prevt$grid_key[prevt$fate == 'replaced'], \"'\", collapse = ', ')})"))
+cat(glue("20 nmi rule: the farthest replaced label is {round(replaced_max, 1)} km from the convex hull of the official stations, ",
          "the nearest kept one {round(kept_min, 1)} km (threshold 37.04 km); ",
-         "{sum(seeds$seed_at == 'retired')} previous cells retired, holding {fmt(rows_retired$n)} sample rows, ",
-         "{fmt(rows_retired$n_cell)} of which have a shipped cell"), "\n")
+         "{sum(prevt$fate == 'replaced')} previous cells replaced, holding {fmt(rows_replaced$n)} sample rows, ",
+         "{fmt(rows_replaced$n_cell)} of which have a shipped cell; rows leaving a kept cell: {kept_rows$key_changes}"), "\n")
 ```
 
-**The 20 nautical mile rule, measured.** Of the 218 previous cells, `r sum(seeds$seed_at == "retired")`
+`r fmt(kept_rows$same_key)` of the `r fmt(kept_rows$rows)` rows whose previous cell is kept
+carry the same key; `r kept_rows$key_changes` change. `r fmt(into_kept$rows)` rows are in a kept
+cell that were not: `r fmt(into_kept$had_no_cell)` had no cell (gap water the kept cell gained at
+the coast) and the rest sat where two previous cells overlapped.
+
+**The 20 nautical mile rule, measured.** Of the 218 previous cells, `r sum(prevt$fate == "replaced")`
 have a label within 20 nautical miles (37.04 km) of the convex hull of the official stations and
-are retired; the other `r sum(seeds$seed_at != "retired")` stay as seeds. The rule is not
-sensitive to the threshold: the farthest retired label is `r round(retired_max, 1)` km from the
-hull and the nearest kept one `r round(kept_min, 1)` km. The retired cells hold
-`r fmt(rows_retired$n)` `sample` rows, every one of which has a shipped cell. One kept cell is
-not historical: `st45-ln60`, the previous extended-pattern cell off San Francisco (label on land,
-`r round(seed_gap$d_km[seed_gap$grid_key == "st45-ln60"], 1)` km from the hull; the official
+are replaced; the other `r sum(prevt$fate != "replaced")` are kept. The rule is not sensitive to
+the threshold: the farthest replaced label is `r round(replaced_max, 1)` km from the hull and the
+nearest kept one `r round(kept_min, 1)` km. The replaced cells hold `r fmt(rows_replaced$n)`
+`sample` rows, every one of which has a shipped cell. One kept cell is not historical:
+`st45-ln60`, the previous extended-pattern cell off San Francisco (label on land,
+`r round(keep_gap$d_km[keep_gap$grid_key == "st45-ln60"], 1)` km from the hull; the official
 line 60 starts at station 53).
 
-### Gate 2: every station in its own cell, every cell in one piece {#sec-gate2}
+### Gate 2: every station in its own cell, every station cell in one piece {#sec-gate2}
 
 ```{r}
 #| label: gate2
 sta_key  <- cc_grid_key(st$longitude, st$latitude, cc_grid)
 ctr_xy_a <- st_coordinates(cc_grid_ctrs)
 site_key <- cc_grid_key(ctr_xy_a[, 1], ctr_xy_a[, 2], cc_grid)
-n_multi  <- sum(st_geometry_type(cc_grid) != "POLYGON")
+np_a     <- n_parts(cc_grid)
+n_multi  <- sum(np_a > 1)
+n_multi_off  <- sum(np_a > 1 & cc_grid$sta_source == "official")
+n_multi_kept <- sum(np_a > 1 & cc_grid$sta_source == "previous")
+np_v1    <- setNames(n_parts(cc_grid_v1), cc_grid_v1$grid_key)
 n_per_cell_a <- table(sta_key)
 pk <- b_ship$pockets |> mutate(lon = st_coordinates(suppressWarnings(st_point_on_surface(geom)))[, 1],
                               lat = st_coordinates(suppressWarnings(st_point_on_surface(geom)))[, 2])
 pk$rows <- vapply(seq_len(nrow(pk)), function(i) sum(pos$n[lengths(st_intersects(pos_sf, pk[i, ])) > 0]), numeric(1))
 cat(glue("official stations in their own cell: {sum(sta_key == st$grid_key)} of {nrow(st)}; sites in their own cell: ",
-         "{sum(site_key == cc_grid_ctrs$grid_key)} of {nrow(cc_grid_ctrs)}; multi-part cells: {n_multi}; invalid cells: {sum(!st_is_valid(cc_grid))}; ",
-         "cells holding ≥ 2 official stations: {sum(n_per_cell_a >= 2)}; sites more than {OFF_KM} km off their line: {sum(A_off > OFF_KM)} ",
-         "(all kept cells whose seed is not at its label: {sum(A_off > OFF_KM & A_site$gen_source == 'official')} official); ",
-         "area {fmt(min(A$area_km2), 1)} to {fmt(max(A$area_km2))} km²"), "\n")
+         "{sum(site_key == cc_grid_ctrs$grid_key)} of {nrow(cc_grid_ctrs)}; multi-part cells: {n_multi} ",
+         "({n_multi_off} station cell, {n_multi_kept} kept cells; previous grid {sum(np_v1 > 1)}, {sum(np_v1[kept_keys] > 1)} of them kept); ",
+         "invalid cells: {sum(!st_is_valid(cc_grid))}; cells holding ≥ 2 official stations: {sum(n_per_cell_a >= 2)}; ",
+         "sites more than {OFF_KM} km off their line: {sum(A_off > OFF_KM)} ({sum(A_off > OFF_KM & A_site$gen_source == 'official')} official); ",
+         "area {fmt(min(A$area_km2), 1)} to {fmt(max(A$area_km2))} km² (station cells {fmt(min(A$area_km2[A$gen_source == 'official']), 1)} ",
+         "to {fmt(max(A$area_km2[A$gen_source == 'official']))})"), "\n")
 ```
 
 All `r sum(sta_key == st$grid_key)` of `r nrow(st)` official stations, and all
-`r sum(site_key == cc_grid_ctrs$grid_key)` sites, lie inside their own cell, and
+`r sum(site_key == cc_grid_ctrs$grid_key)` sites, lie inside their own cell.
 **`r n_multi` cells are in more than one piece** (the previous grid:
-`r sum(parts_now$part == 1 & parts_now$n_parts > 1)`). The 2026-10-02 notebook left 131 cut-off
-water pockets and cell edges that cut across the Channel Islands. Here each piece of a cell that
-land separates from its station joined the neighbour it shares the longest water edge with
-(@tbl-pockets), and the `r nrow(b_ship$dropped)` waters that touch no cell at all (lagoons
-behind the previous grid's coarser coastline, `r fmt(sum(b_ship$dropped$area_km2), 1)` km² in
-all, holding `r n_in_dropped` `sample` rows) are left out of the grid. A cell edge still crosses
-an island where the two sides of the island stay connected to their stations around its ends:
-that is geography, and the land between is not part of either cell.
+`r sum(np_v1 > 1)`): `r n_multi_kept` kept cells and `r n_multi_off` station cell.
+
+- **Station cells.** Each piece of a station's cell that land separates from its station joined
+  the neighbouring station cell it shares the longest water edge with (@tbl-pockets), so
+  `r sum(cc_grid$sta_source == "official") - n_multi_off` of the 113 station cells are one polygon.
+  The exception is in @tbl-cases.
+- **Kept cells.** A kept cell is the previous cell, pieces and all: that is the rule that keeps a
+  historical position in its cell. `r sum(np_v1[kept_keys] > 1)` of the kept cells were already in
+  several pieces (cells that span the Baja California peninsula, or islands); the finer coastline
+  splits `r n_multi_kept - sum(np_v1[kept_keys] > 1)` more (@tbl-multipart).
+- **Water left out.** `r nrow(b_ship$dropped)` gap waters that touch no cell
+  (`r fmt(sum(b_ship$dropped$area_km2), 1)` km², `r n_in_dropped` `sample` rows) are left out.
+
+A cell edge still crosses an island where the two sides of the island stay connected to their
+stations around its ends: that is geography, and the land between is not part of either cell.
 
 ```{r}
 #| label: tbl-pockets
-#| tbl-cap: "Gate 2: every piece that changed cell because land cuts it off from its nearest station: the cell whose station is nearest, the cell it joined, its area, a point inside it and the `sample` rows it holds."
+#| tbl-cap: "Gate 2: every piece that changed station cell because land cuts it off from its nearest station: the cell whose station is nearest, the cell it joined, its area, a point inside it and the `sample` rows it holds."
 pk |> st_drop_geometry() |> arrange(desc(area_km2)) |>
   transmute(`nearest station's cell` = key_from, `joined` = key_to, `area (km²)` = round(area_km2, 1),
             lon = round(lon, 3), lat = round(lat, 3), `sample rows` = rows) |>
   knitr::kable(format.args = list(big.mark = ","))
+```
+
+```{r}
+#| label: tbl-cases
+#| tbl-cap: "What the rules could not attach (`cc_grid_build()$cases`): a station outside the replaced region stops the build; water of a replaced cell that no station cell reaches stays with its nearest station as a detached part; and whether the replaced region is one piece of water."
+cs <- b_ship$cases
+cs$rows <- vapply(seq_len(nrow(cs)), function(i) {
+  g <- st_cast(st_geometry(cc_grid[cc_grid$grid_key == sub(",.*$", "", cs$grid_key[i]), ]), "POLYGON")
+  if (length(g) < 2) return(NA_real_)
+  small <- g[order(as.numeric(st_area(g)))][seq_len(length(g) - 1)]
+  sum(pos$n[lengths(st_intersects(pos_sf, st_union(small))) > 0])
+}, numeric(1))
+if (nrow(cs)) cs |> transmute(case, `station cell` = grid_key, `area (km²)` = round(area_km2, 1), note, `sample rows in it` = rows) |> knitr::kable() else
+  cat("no case: every station is in the replaced region, every piece of it is reached, and it is one piece\n")
+```
+
+```{r}
+#| label: gate2-cases
+n_sta_out <- sum(!cc_grid_key(st$longitude, st$latitude, cc_grid_v1) %in% prevt$grid_key[prevt$fate == "replaced"])
+# the cells the detached piece touches, other than its own: what it opens into
+cs_nb <- if (nrow(cs)) {
+  g <- st_cast(st_geometry(cc_grid[cc_grid$grid_key == cs$grid_key[1], ]), "POLYGON")
+  small <- st_transform(g[which.min(as.numeric(st_area(g)))], CRS_M)
+  setdiff(cc_grid$grid_key[lengths(st_is_within_distance(st_transform(cc_grid, CRS_M), small, 1)) > 0], cs$grid_key[1])
+} else character(0)
+cat(glue("official stations whose previous cell is not a replaced cell: {n_sta_out}; cases reported: {nrow(cs)}; ",
+         "the detached piece touches: {paste(cs_nb, collapse = ', ')}"), "\n")
+```
+
+The three things the confinement could have broken, and what was found:
+
+- **A station outside R.** None: all `r nrow(st) - n_sta_out` official stations lie in a replaced
+  cell (`cc_grid_build()` stops otherwise: a station inside a kept cell has no cell to be the
+  station of).
+- **Water of R that no station reaches.** One piece: `r if (nrow(cs)) round(cs$area_km2[1], 1) else 0`
+  km² of the previous `st50-ln60` in Tomales Bay, north of Point Reyes. The bay opens to the sea
+  through the kept cell `r paste(cs_nb, collapse = ", ")`, so no station cell reaches it by water inside R. Rule
+  applied, the smallest that leaves the kept cell untouched: it stays with the station it is
+  nearest to (`st53-ln60`) as a detached part. It holds
+  `r if (nrow(cs)) cs$rows[1] else 0` `sample` rows.
+- **R in one piece.** R is one connected piece of water but for that same piece.
+
+```{r}
+#| label: tbl-multipart
+#| tbl-cap: "Cells in more than one piece: the parts of each under the shipped grid and under the previous grid, the area outside its largest part, and the `sample` rows there."
+mp <- cc_grid[np_a > 1, ]
+mp_tbl <- lapply(seq_len(nrow(mp)), function(i) {
+  g <- st_cast(st_geometry(mp[i, ]), "POLYGON"); a <- as.numeric(st_area(st_transform(g, CRS_M))) / 1e6
+  small <- g[-which.max(a)]
+  tibble(cell = mp$grid_key[i], source = mp$sta_source[i], parts = length(g),
+         `parts in the previous grid` = unname(np_v1[mp$grid_key[i]]),
+         `area outside the largest part (km²)` = round(sum(a) - max(a), 1),
+         `sample rows there` = sum(pos$n[lengths(st_intersects(pos_sf, st_union(small))) > 0]))
+}) |> bind_rows()
+knitr::kable(arrange(mp_tbl, source, desc(`area outside the largest part (km²)`)), format.args = list(big.mark = ","))
 ```
 
 ### Gate 3: a crosswalk that covers every previous key {#sec-gate3}
@@ -867,6 +966,9 @@ xw_chk <- check_grid_crosswalk(con_g)                 # stops on a failure
 xp <- filter(xw_chk, side == "prev"); xg <- filter(xw_chk, side == "grid")
 same_name <- xw |> filter(prev_grid_key == grid_key)
 sn_off    <- same_name |> filter(grid_key %in% st$grid_key)
+# the kept cells: identity rows, and whatever else a kept previous cell overlaps
+xw_id   <- same_name |> filter(grid_key %in% kept_keys)
+xw_koth <- xw |> filter(prev_grid_key %in% kept_keys, prev_grid_key != grid_key)
 cat(glue("grid: {n_grid} rows; grid_crosswalk: {fmt(nrow(xw))} pairs; previous keys covered {sum(xp$n > 0)} of {nrow(xp)}; ",
          "sum of prev_frac: {sum(abs(xp$frac - 1) <= 1e-6)} equal one within 1e-6, {sum(xp$status == 'partial')} fall short, min {round(min(xp$frac), 4)} ",
          "({xp$grid_key[which.min(xp$frac)]}); shipped keys covered {sum(xg$n > 0)} of {nrow(xg)}, sum of grid_frac min {round(min(xg$frac), 4)}, ",
@@ -886,12 +988,36 @@ Every one of the `r nrow(xp)` previous keys is in the crosswalk. The shares of
 `r sum(xp$status == "partial")` fall short by the share of the cell that is land under the
 OpenStreetMap coastline (the previous cells were clipped by Natural Earth), at most
 `r pct(1 - min(xp$frac))` (`r xp$grid_key[which.min(xp$frac)]`). On the other side,
-`r sum(xg$status == "overlapped")` shipped cells along line 93.3 are covered slightly more than
+`r sum(xg$status == "overlapped")` shipped cells either side of the line 93.3 / line 100 boundary are covered slightly more than
 once (at most `r signif(max(xg$frac) - 1, 2)` of the cell), because the previous cells overlap
 each other there: the previous grid was assembled in `+proj=calcofi` and glued by hand, and is
 not an exact partition in longitude/latitude. The gate in the release is
 `check_grid_crosswalk()`: every cell of both grids present, no repeated pair, no previous cell
-over one, none under 0.95.
+over one, none under 0.95. A pair that overlaps by less than 100 m² is left out as numerical (the
+vertices are rounded to 10⁻⁹ degrees).
+
+**The kept cells are identity rows.** Each of the `r length(kept_keys)` kept cells has a row
+against itself (@tbl-gate3-kept): `r sum(abs(xw_id$prev_frac - 1) <= 1e-6)` hold the whole of
+the previous cell (`prev_frac` = 1 within 10⁻⁶) and the other
+`r sum(abs(xw_id$prev_frac - 1) > 1e-6)` all but the part that is land under the finer coastline
+(least `r round(min(xw_id$prev_frac), 4)`). The only other rows a kept previous cell has are the
+`r nrow(xw_koth)` where previous cells overlapped each other (`r round(sum(xw_koth$overlap_km2), 2)`
+km² in all, at most `r signif(max(c(0, xw_koth$prev_frac)), 2)` of a cell).
+
+```{r}
+#| label: tbl-gate3-kept
+#| tbl-cap: "Gate 3: the crosswalk rows of the kept cells. Identity rows (previous key = shipped key) by the share of the previous cell they hold and the share of the shipped cell they make up (under one where the cell gained gap water at the coast); and the other rows of a kept previous cell."
+bind_rows(
+  tibble(rows = "identity rows", n = nrow(xw_id),
+         `prev_frac = 1` = sum(abs(xw_id$prev_frac - 1) <= 1e-6), `min prev_frac` = round(min(xw_id$prev_frac), 4),
+         `grid_frac = 1` = sum(abs(xw_id$grid_frac - 1) <= 1e-6), `min grid_frac` = round(min(xw_id$grid_frac), 4),
+         `overlap (km²)` = fmt(sum(xw_id$overlap_km2))),
+  tibble(rows = "other rows of a kept previous cell", n = nrow(xw_koth),
+         `prev_frac = 1` = 0L, `min prev_frac` = if (nrow(xw_koth)) signif(min(xw_koth$prev_frac), 2) else NA_real_,
+         `grid_frac = 1` = 0L, `min grid_frac` = if (nrow(xw_koth)) signif(min(xw_koth$grid_frac), 2) else NA_real_,
+         `overlap (km²)` = fmt(sum(xw_koth$overlap_km2), 2))) |>
+  knitr::kable(align = "lrrrrrr")
+```
 
 **The name is not the cell.** Of the `r nrow(sn_off)` official station cells that keep a previous
 name, the same-named previous cell contributes a median `r pct(median(sn_off$grid_frac))` of the
@@ -915,7 +1041,8 @@ sn_off |> arrange(prev_frac) |> head(10) |>
 
 The cells are built in metres and tested in longitude/latitude. The published polygon is the
 definition: a vertex every 5 km along each Voronoi edge keeps the lon/lat chord within a metre
-of the metric edge, the same vertices are shared by the cells on both sides, and both engines
+of the metric edge, a kept cell's edges are the previous cell's own lon/lat edges, the same
+vertices are shared by the cells on both sides, and both engines
 apply one rule (planar intersects; on a shared edge the key that sorts first in byte order:
 `calcofi4r::cc_grid_key()` in R, `min(grid_key)` in `calcofi4db::assign_grid_key()`). Until now
 the DuckDB rule was `LIMIT 1` with no order.
@@ -924,8 +1051,9 @@ the DuckDB rule was `LIMIT 1` with no order.
 #| label: gate4
 # every distinct sample position, every vertex of every cell (on an edge two cells share, or a
 # junction of three) and the midpoint of every boundary segment, keyed by both engines
-vx  <- as.data.frame(unique(st_coordinates(cc_grid)[, 1:2])); names(vx) <- c("longitude", "latitude")
-seg <- do.call(rbind, lapply(st_geometry(cc_grid), function(p) do.call(rbind, lapply(unclass(p), function(r) (r[-1, 1:2] + r[-nrow(r), 1:2]) / 2))))
+cc_poly <- st_cast(st_cast(st_geometry(cc_grid), "MULTIPOLYGON"), "POLYGON")   # one polygon per part
+vx  <- as.data.frame(unique(st_coordinates(cc_poly)[, 1:2])); names(vx) <- c("longitude", "latitude")
+seg <- do.call(rbind, lapply(cc_poly, function(p) do.call(rbind, lapply(unclass(p), function(r) (r[-1, 1:2] + r[-nrow(r), 1:2]) / 2))))
 mid <- distinct(data.frame(longitude = seg[, 1], latitude = seg[, 2]))
 g4  <- bind_rows(
   transmute(pos, longitude, latitude, kind = "sample position"),
@@ -1034,10 +1162,11 @@ cat(glue("all: {fmt(tot$a_changed)} of {fmt(tot$n)} rows change key ({pct(tot$a_
 
 In all, `r fmt(tot$a_changed)` of `r fmt(tot$n)` `sample` rows (`r pct(tot$a_changed / tot$n)`)
 change key and `r pct(tot$a_moved / tot$n)` move to a cell that is not their previous cell
-renamed. The change is concentrated inshore, where the lattice and the stations disagree
-(@tbl-zone-change, @fig-change-full): the offshore official cells are the previous lattice cells
-almost unchanged, and the kept historical cells change along their edge with the official
-pattern (below) and around the six cells the previous build merged by hand.
+renamed. The change is inside the official pattern, and concentrated inshore, where the lattice
+and the stations disagree (@tbl-zone-change, @fig-change-full): the offshore station cells are
+the previous lattice cells almost unchanged, and the kept cells do not change at all
+(@tbl-kept), which is why the share before 1984, when most of the sampling beyond the pattern
+was done, is the smaller one.
 
 ```{r}
 #| label: tbl-zone-change
@@ -1072,7 +1201,7 @@ p_change(c(bb[["xmin"]], bb[["xmax"]]), c(bb[["ymin"]], bb[["ymax"]]))
 
 ```{r}
 #| label: fig-change-pattern
-#| fig-cap: "Gate 5, the official pattern (lines 60 to 93.4, out to station 120): the same shares. Offshore cells are the previous lattice cells nearly unchanged; the keys that change are inshore of station 60, on line 66.7 and along the pattern's outer edge."
+#| fig-cap: "Gate 5, the official pattern (lines 60 to 93.4, out to station 120): the same shares. Offshore cells are the previous lattice cells nearly unchanged; the keys that change are inshore of station 60 and on line 66.7. The kept cells around the pattern are white: their edges did not move."
 #| fig-height: 7.2
 #| fig-width: 6
 #| dpi: 180
@@ -1108,21 +1237,16 @@ sp |> transmute(stations_of, grid, stations = fmt(stations), `split (< 90% in on
   knitr::kable(align = "llrrr")
 ```
 
-**A consequence to decide: historical line 96.7 sits on an edge.** The official pattern ends at
-line 93.3 and the nearest kept cells are the line-100 cells of the historical lattice, 6.7 line
-units (80 nautical miles) south, so the Voronoi edge between them falls at line 96.65, 40
-nautical miles out, where the previous lattice put it at line 95.0 (20 nautical miles).
-Historical line 96.7 runs along that edge (@tbl-line967): the previous grid keyed all of it to
-the line-100 cells; the shipped grid keys most of it to the official line-93.3 cells and splits
-some of its stations. The stated rule is that a historical position takes an official station's
-cell within 20 nautical miles of it; the Voronoi gives the outer official cells 40. This is the
-2026-10-02 notebook's "offshore bound" question, and it is unchanged from that notebook's Option
-A: bounding the outer official cells at 20 nautical miles, or seeding the well-occupied
-historical stations, would each put line 96.7 back in cells of its own.
+**Historical line 96.7 keys as it always did.** The official pattern ends at line 93.3 and the
+nearest kept cells are the line-100 cells of the historical lattice, whose northern edge the
+previous grid put at line 95.0, 20 nautical miles beyond line 93.3. Historical line 96.7 lies
+south of that edge. A free Voronoi of the stations would have moved the edge to line 96.65 (40
+nautical miles out), onto the line itself; confined to the replaced region, the station cells
+stop at line 95.0 and every row of line 96.7 stays in its line-100 cell (@tbl-line967).
 
 ```{r}
 #| label: tbl-line967
-#| tbl-cap: "`sample` rows on historical line 96.7 by the line of the cell they key to, under the previous and the shipped grid, before and from 1984, and the line-96.7 stations (at least 20 rows) with under 90% of their rows in one cell."
+#| tbl-cap: "`sample` rows on historical line 96.7 by the line of the cell they key to, under the previous and the shipped grid, before and from 1984 (expected: every row in a line-100 cell under both)."
 l967 <- dbGetQuery(con, "
   SELECT era,
          count(*) FILTER (WHERE key_now LIKE '%-ln100_hist') AS prev_ln100_hist,
@@ -1139,15 +1263,22 @@ bind_rows(l967, summarize(l967, era = "all", across(-era, sum))) |>
   transmute(era, rows = fmt(rows), `previous: line-100 cells` = fmt(prev_ln100_hist), `previous: line-93.3 cells` = fmt(prev_ln93_3),
             `shipped: line-100 cells` = fmt(shipped_ln100_hist), `shipped: line-93.3 cells` = fmt(shipped_ln93_3)) |>
   knitr::kable(align = "lrrrrr")
-cat(glue("line 96.7: {l967_split$stations} stations with 20 or more rows, {l967_split$split} with under 90% of their rows in one shipped cell ",
-         "({fmt(l967_split$rows_outside)} rows outside their station's modal cell)"), "\n")
+l967_prev_split <- dbGetQuery(con, "
+  WITH c AS (SELECT station, key_now AS cell, count(*) AS rows FROM s_sta WHERE station LIKE '096.7 %' AND key_now IS NOT NULL GROUP BY 1, 2),
+       m AS (SELECT station, sum(rows) AS n, max(rows) AS top FROM c GROUP BY 1 HAVING sum(rows) >= 20)
+  SELECT count(*) FILTER (WHERE top < 0.9 * n) AS split FROM m")
+l967_changed <- dbGetQuery(con, "SELECT count(*) AS n FROM s_sta WHERE station LIKE '096.7 %' AND key_a IS DISTINCT FROM key_now")$n
+cat(glue("line 96.7: {l967_split$stations} stations with 20 or more rows; with under 90% of their rows in one cell: ",
+         "{l967_split$split} under the shipped grid, {l967_prev_split$split} under the previous one ",
+         "(a station whose occupations straddle an edge between two line-100 cells, the same edge in both); ",
+         "rows on line 96.7 whose key changes: {l967_changed}"), "\n")
 ```
 
 ### Gate 6: the variant without SCCOOS cells {#sec-gate6}
 
 The headline numbers of the variant (@sec-variant) are the `no SCCOOS` column of @tbl-headline.
 Its `r rv_$cells` cells are the shipped ones except near the nine SCCOOS stations
-(@fig-variant): `r sum(tot$v_changed)` of `r fmt(tot$n)` rows change key against the previous
+(@fig-variant): `r fmt(tot$v_changed)` of `r fmt(tot$n)` rows change key against the previous
 grid (`r pct(tot$v_changed / tot$n)`; shipped `r pct(tot$a_changed / tot$n)`), and each SCCOOS
 station shares the cell of its nearest ROS station.
 
@@ -1175,16 +1306,20 @@ position falls in a cell, under either grid. `ingest_calcofi_dic.qmd` never call
 the matched bottle cast (`c.grid_key` after `LEFT JOIN casts c ON d.cast_id = c.cast_id`), and it
 mints a `calcofi_dic:bottle:*` row only for a Niskin `calcofi_bottle` does not already publish,
 which are almost all rows with no matched cast. So the key is NULL exactly where there is no
-parent cast (the `key_null_iff_no_parent` column). The fix belongs to that ingest: load `grid`,
-`assign_grid_key(con, "dic_sample")` after its `add_point_geom()`, and project
-`COALESCE(c.grid_key, d.grid_key)`. `calcofi_phytoplankton` is region-pooled: its positions are
-region centroids, and it is ungridded by design.
+parent cast (the `key_null_iff_no_parent` column). The ingest has since been changed (2026-10-04,
+RELEASES.md "DIC: every sample with a position carries a `grid_key`") to key each sample by its
+own position, keeping a matched cast's key where there is one. That last clause meets the new
+release gate: `check_grid_key_assignment()` stops on a row whose key is not the cell its own
+position is in, and a cast-matched DIC sample taken a little off its cast's position can carry
+the cast's cell (1 of the 6 in the previous grid). Either the ingest keys every sample by its own
+position, or the gate is told which rows inherit a key. `calcofi_phytoplankton` is region-pooled:
+its positions are region centroids, and it is ungridded by design.
 
 ### The gates, in one table {#sec-gate-table}
 
 ```{r}
 #| label: tbl-gates
-#| tbl-cap: "The six gates on the shipped grid, measured on v2026.10.01."
+#| tbl-cap: "The six gates on the shipped grid, and the kept-cell rule, measured on v2026.10.01."
 ok <- function(x) ifelse(x, "pass", "FAIL")
 gates <- tribble(
   ~gate, ~result, ~number, ~status,
@@ -1193,10 +1328,14 @@ gates <- tribble(
   "2a. every official station in its own cell", "stations / sites inside their own cell",
     glue("{sum(sta_key == st$grid_key)} of {nrow(st)} / {sum(site_key == cc_grid_ctrs$grid_key)} of {nrow(cc_grid_ctrs)}"),
     ok(all(sta_key == st$grid_key) && all(site_key == cc_grid_ctrs$grid_key)),
-  "2b. every cell in one piece", "multi-part cells; pockets joined to a neighbour; cut-off waters left out",
-    glue("{n_multi}; {nrow(b_ship$pockets)}; {nrow(b_ship$dropped)} ({fmt(sum(b_ship$dropped$area_km2), 1)} km², {n_in_dropped} sample rows)"), ok(n_multi == 0),
-  "3. the crosswalk covers every previous key", "previous keys present; shares summing to one within 1e-6; smallest sum",
-    glue("{sum(xp$n > 0)} of {nrow(xp)}; {sum(abs(xp$frac - 1) <= 1e-6)}; {round(min(xp$frac), 4)}"),
+  "2b. every station cell in one piece", "station cells in several pieces; pockets joined to a neighbouring station cell; kept cells in several pieces (previous grid)",
+    glue("{n_multi_off} ({paste(cc_grid$grid_key[np_a > 1 & cc_grid$sta_source == 'official'], collapse = ', ')}: {round(sum(cs$area_km2[1]), 1)} km², {sum(cs$rows[1])} sample rows); ",
+         "{nrow(b_ship$pockets)}; {n_multi_kept} ({sum(np_v1[kept_keys] > 1)})"),
+    ifelse(n_multi_off == 0, "pass", ifelse(all(cc_grid$grid_key[np_a > 1 & cc_grid$sta_source == "official"] %in% cs$grid_key), "pass but 1, reported", "FAIL")),
+  "2c. a kept cell holds what it held", "rows whose previous cell is kept: key changes",
+    glue("{kept_rows$key_changes} of {fmt(kept_rows$rows)}"), ok(kept_rows$key_changes == 0),
+  "3. the crosswalk covers every previous key", "previous keys present; shares summing to one within 1e-6; smallest sum; kept cells with an identity row",
+    glue("{sum(xp$n > 0)} of {nrow(xp)}; {sum(abs(xp$frac - 1) <= 1e-6)}; {round(min(xp$frac), 4)}; {nrow(xw_id)} of {length(kept_keys)}"),
     ok(all(xp$n > 0) && all(xp$frac <= 1 + 1e-6) && min(xp$frac) >= 0.95),
   "4. R and DuckDB assign the same key", "differences over sample positions, cell vertices and edge midpoints",
     glue("{sum(g4_tbl[['R ≠ DuckDB']])} of {fmt(nrow(g4))} ({fmt(sum(g4$n_cells >= 2))} on a shared edge)"),
@@ -1307,49 +1446,54 @@ row_share <- function(col) pct(tot[[col]] / tot$n)
 area_rng  <- function(a) glue("{fmt(min(a), 1)} to {fmt(max(a))}")
 hl <- tibble(
   ` ` = c("cells", "cells in more than one piece", glue("sites > {OFF_KM} km off their line"),
-          "sliver parts touching another cell", "cells holding ≥ 2 official stations", "cell area (km²)",
+          "sliver parts touching another cell", "cells holding ≥ 2 official stations", "cell area (km²)", "station cell area (km²)",
           "sample rows that lose their cell", "sample rows whose grid_key changes", "  of which a real move (not a rename)",
           "cells × month with ≥ 3 cruises (1993–2013)", "climatology rows relabelled", "vertices"),
   previous = c(nrow(grid), n_multi_parts(parts_now), sum(grid$off_km > OFF_KM), sum(parts_now$sliver & parts_now$touches_other),
-            sum(n_per_cell >= 2), area_rng(as.numeric(st_area(gm)) / 1e6), "", "", "", clim_tbl[[2]][1], "", fmt(n_vertices(cc_grid_v1))),
+            sum(n_per_cell >= 2), area_rng(as.numeric(st_area(gm)) / 1e6), "", "", "", "", clim_tbl[[2]][1], "", fmt(n_vertices(cc_grid_v1))),
   shipped = c(nrow(A), n_multi_parts(parts_a_after), sum(A_off > OFF_KM), sum(parts_a_after$sliver & parts_a_after$touches_other),
-        sum(n_per_cell_a >= 2), area_rng(A$area_km2), sum(g1$lost), row_share("a_changed"), row_share("a_moved"),
+        sum(n_per_cell_a >= 2), area_rng(A$area_km2), area_rng(A$area_km2[A$gen_source == "official"]),
+        sum(g1$lost), row_share("a_changed"), row_share("a_moved"),
         clim_tbl[[2]][2], clim_tbl[[3]][2], fmt(n_vertices(cc_grid))),
   `no SCCOOS` = c(nrow(V), n_multi_parts(parts_v_after), sum(V_off > OFF_KM), sum(parts_v_after$sliver & parts_v_after$touches_other),
-        sum(table(cc_grid_key(st$longitude, st$latitude, b_var$grid)) >= 2), area_rng(V$area_km2), sum(g1$lost_variant),
+        sum(table(cc_grid_key(st$longitude, st$latitude, b_var$grid)) >= 2), area_rng(V$area_km2),
+        area_rng(V$area_km2[b_var$grid$sta_source == "official"]), sum(g1$lost_variant),
         row_share("v_changed"), row_share("v_moved"), clim_tbl[[2]][3], clim_tbl[[3]][3], fmt(n_vertices(b_var$grid))),
   B = c(nrow(B), n_multi_parts(parts_b_after), sum(B_off > OFF_KM), sum(parts_b_after$sliver & parts_b_after$touches_other),
-        sum(table(first_hit(stp, B)) >= 2), area_rng(as.numeric(st_area(B)) / 1e6), "", row_share("b_changed"), row_share("b_changed"),
+        sum(table(first_hit(stp, B)) >= 2), area_rng(as.numeric(st_area(B)) / 1e6), "", "", row_share("b_changed"), row_share("b_changed"),
         clim_tbl[[2]][4], clim_tbl[[3]][4], ""),
   C = c(nrow(grid), n_multi_parts(parts_now), sum(!c_ok), sum(parts_now$sliver & parts_now$touches_other),
-        sum(n_per_cell >= 2), area_rng(as.numeric(st_area(gm)) / 1e6), "0", "0.0%", "0.0%", clim_tbl[[2]][5], "0", fmt(n_vertices(cc_grid_v1))))
+        sum(n_per_cell >= 2), area_rng(as.numeric(st_area(gm)) / 1e6), "", "0", "0.0%", "0.0%", clim_tbl[[2]][5], "0", fmt(n_vertices(cc_grid_v1))))
 hl <- mutate(hl, across(everything(), as.character))
 knitr::kable(hl)
 ```
 
-The `r sum(A_off > OFF_KM)` shipped sites more than `r OFF_KM` km off their line are kept cells
-whose seed is not at its label (the label is on land) or whose "line" is the historical lattice's
-(`r sum(A_off > OFF_KM & A_site$gen_source == "official")` are official stations).
+The shipped grid's `r hl$shipped[2]` cells in more than one piece, its `r hl$shipped[4]` sliver
+parts and its `r sum(A_off > OFF_KM)` sites more than `r OFF_KM` km off their line
+(`r sum(A_off > OFF_KM & A_site$gen_source == "official")` of them official stations) are all kept
+cells, which are the previous cells as they were (@tbl-multipart), but for the one station cell of
+@tbl-cases.
 
 ## What shipped, and what is still a question {#sec-recommendation}
 
-**Shipped** (Ben, 2026-10-04): the Voronoi of the 113 official positions, SCCOOS stations
-included, with a key crosswalk. It is the only option that fixes both defects at the source:
-every official site *is* an official position, which `+proj=calcofi` reproduces to within
-`r round(max(st$dist_m))` m; no cell is a remnant of an idealized lattice, so every cell is one
-polygon; and no cell holds two official stations (the previous grid: `r hl$previous[5]` cells),
-which ends the station mixing that #86 and the climatology work routed around with `site_key`.
-Option B removes the slivers but keeps the nominal lattice (`r hl$B[3]` sites still more than
-`r OFF_KM` km off their line, `r hl$B[5]` cells still holding several official stations); Option
-C moves the dots and nothing else, and cannot place `r sum(!c_ok)` sites at all because their own
-line misses their cell.
+**Shipped** (Ben, 2026-10-04): one cell per official station, SCCOOS stations included, as the
+Voronoi of the 113 official positions confined to the previous cells it replaces; the previous
+cells beyond the official pattern kept as they were; and a key crosswalk. It is the only option
+that fixes both defects at the source: every official site *is* an official position, which
+`+proj=calcofi` reproduces to within `r round(max(st$dist_m))` m; no station cell is a remnant
+of an idealized lattice; and no cell holds two official stations (the previous grid:
+`r hl$previous[5]` cells), which ends the station mixing that #86 and the climatology work routed
+around with `site_key`. Option B removes the slivers but keeps the nominal lattice
+(`r hl$B[3]` sites still more than `r OFF_KM` km off their line, `r hl$B[5]` cells still holding
+several official stations); Option C moves the dots and nothing else, and cannot place
+`r sum(!c_ok)` sites at all because their own line misses their cell.
 
-The price is `r hl$shipped[8]` of `sample` rows changing `grid_key`, `r hl$shipped[9]` moving to
-a different cell rather than a renamed one (@tbl-per-dataset), and `r fmt(ca$changed)` of
-`r fmt(ca$n_rows)` climatology rows (`r ca$stations` stations) taking a new modal-cell label;
-the climatology means do not move (they are keyed on `site_key`), and the cell-month grain with
-three or more cruises grows from `r clim_tbl[[2]][1]` to `r clim_tbl[[2]][2]` because the inshore
-stations stop sharing cells.
+The price is `r hl$shipped[9]` of `sample` rows changing `grid_key`, `r hl$shipped[10]` moving to
+a different cell rather than a renamed one (@tbl-per-dataset), all of them inside the official
+pattern, and `r fmt(ca$changed)` of `r fmt(ca$n_rows)` climatology rows (`r ca$stations`
+stations) taking a new modal-cell label; the climatology means do not move (they are keyed on
+`site_key`), and the cell-month grain with three or more cruises grows from
+`r clim_tbl[[2]][1]` to `r clim_tbl[[2]][2]` because the inshore stations stop sharing cells.
 
 **Choices the build makes that the 2026-10-08 meeting has not seen** (each is one argument or one
 rule of `cc_grid_build()` / `cc_grid_land_prep()`, and can change without touching anything else):
@@ -1365,26 +1509,44 @@ rule of `cc_grid_build()` / `cc_grid_land_prep()`, and can change without touchi
    extended north of it, historical for a kept cell (one kept cell, `st45-ln60`, stays
    `extended`). `spacing`: the nominal class 5 / 10 / 20, not the measured distance to the next
    station. `zone` = `{shore}-{pattern}`.
-4. **A historical cast** keys to the nearest official station's cell within 20 nautical miles of
-   the official pattern (90.0 32, 1959–84, keys to
+4. **Kept cells are the previous cells** (Ben, 2026-10-04): the `r length(kept_keys)` previous
+   cells whose label is more than 20 nautical miles outside the official pattern keep their own
+   boundaries and their pieces (`r n_multi_kept` are in several). No `sample` row leaves one
+   (@tbl-kept).
+5. **The station cells are confined to the previous cells they replace** (Ben, 2026-10-04), so
+   the outer station cells stop where the previous lattice stopped them: line 95.0 in the south,
+   and the previous cells' outer edges to the north and offshore. Three replaced cells are
+   historical ones just beyond the pattern (`r paste(prevt$grid_key[prevt$fate == "replaced" & prevt$sta_pattern == "historical"], collapse = ", ")`):
+   the outer station cells take their water, up to `r fmt(max(A$area_km2[A$gen_source == "official"]))` km².
+6. **A historical cast** inside the replaced region keys to the nearest official station's cell
+   (90.0 32, 1959–84, keys to
    `r cc_grid_key(cc_calcofi_to_lonlat(90, 32)$longitude, cc_calcofi_to_lonlat(90, 32)$latitude)`),
-   and to its historical cell beyond. @tbl-a-multi lists the stations this affects since 2004.
-5. **Seeds on land.** A kept cell is generated from its label even where the label is on land,
-   so its edges stay on the previous lattice; its site is then the previous cell's centre
-   (`r rp_$seeds_at_centre` cells) or a point on the cell (`r rp_$seeds_at_water`), not on its line.
-6. **The coastline** is OpenStreetMap's, islets under 1 km² dropped, pulled back 300 m and
+   and to its kept cell beyond. @tbl-a-multi lists the stations this affects since 2004.
+7. **A kept cell's site** is its label, else the previous cell's centre
+   (`r sum(prevt$site_at == "centre", na.rm = TRUE)` cells, label on land), else a point on the
+   cell (`r sum(prevt$site_at == "water", na.rm = TRUE)`).
+8. **The coastline** is OpenStreetMap's, islets under 1 km² dropped, pulled back 300 m and
    simplified to 100 m; cells therefore reach up to 300 m onto land, and `area_km2` includes that
-   strip.
-7. **Pockets** join the neighbour with the longest shared water edge (@tbl-pockets); water
-   touching no cell is left out.
-8. **Offshore bound.** An outer official cell reaches halfway to the next historical seed, not a
-   fixed distance: 40 nautical miles south of line 93.3, which puts historical line 96.7 on the
-   edge (@tbl-line967).
+   strip. Water between the previous grid's coarser coastline and this one joins the cell it is
+   nearest to (`r fmt(sum(prevt$gap_km2))` km² to the kept cells).
+9. **Pockets** join the neighbouring station cell with the longest shared water edge
+   (@tbl-pockets), never a kept cell.
+10. **Previous cells that overlap** (along the line 93.3 / line 100 boundary, under 1 km² in all):
+    the overlap is the cell whose key sorts first, which is the cell `cc_grid_key()` gives a
+    position there in the previous grid.
 
-**Still open:** the offshore bound and line 96.7 (@tbl-line967), which is the one result here
-that argues with the rule as it was stated; which 9 stations of line 66.7 are the 113-only
-infill (the page does not say; all 11 have a cell); whether `st45-ln60` (San Francisco Bay and
-its approaches) should exist; and whether the Navy stations need anything on a map.
+**Still open:**
+
+- the one piece of the replaced region no station cell reaches (@tbl-cases): Tomales Bay stays
+  with `st53-ln60` as a detached part, because joining it to the kept cell it opens into would
+  move a kept cell's boundary;
+- whether the kept cells should stay in pieces (@tbl-multipart): keeping them literal is what
+  keeps every historical key, and `r n_multi_kept` of them are multi-part as
+  `r sum(np_v1[kept_keys] > 1)` already were;
+- which 9 stations of line 66.7 are the 113-only infill (the page does not say; all 11 have a
+  cell);
+- whether `st45-ln60` (San Francisco Bay and its approaches) should exist;
+- whether the Navy stations need anything on a map.
 
 ```{r}
 #| label: cleanup
