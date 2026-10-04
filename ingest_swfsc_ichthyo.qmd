@@ -1578,13 +1578,15 @@ append_sample(con, glue("
   FROM site s
   LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
          ON td.site_uuid = s.site_uuid"))
-# depth_max_m of a tow and of its nets: Net.NetDepth, the tow's maximum depth in m,
-# true depth not wire-out (Ed Weber, 2026-09-25, swfsc_ichthyo_08). It is a net
-# column but a property of the tow, so the tow takes it only where every net of the
-# tow agrees; a tow with no NetDepth (the surface Manta tows) keeps NULL.
-# NOT release-ready on its own: on the 2026-09-26 export 210 of 59,976 sites then sit
-# more than 10 m below the deepest GEBCO cell around them, past the release's
-# DEPTH_SEAFLOOR_OVER_MAX ratchet (694; 686 at v2026.10.01) -- swfsc_ichthyo_19.
+# depth_max_m of a tow and of its nets: Net.NetDepth, the MAXIMUM POSSIBLE depth of
+# the net in m (nominal, not a measured depth; not wire-out) -- swfsc_ichthyo_08,
+# and Ben's reading 2026-10-04 (swfsc_ichthyo_19, proposed to Ed). Where the sea
+# floor is shallower the net did not reach it: 210 of 59,976 stations of the
+# 2026-09-26 export put it more than 10 m below the deepest GEBCO cell around them.
+# It is published as is (never clipped), and the release reports those stations in
+# their own line of the seafloor check (check_depth_vs_seafloor(nominal_datasets =)).
+# A net column but a property of the tow: the tow takes it only where every net of
+# the tow agrees; a tow with no NetDepth (the surface Manta tows) keeps NULL.
 d_netdepth <- dbGetQuery(con, "
   SELECT t.tow_type_key,
          COUNT(*)                                        AS n_tow,
@@ -1604,7 +1606,7 @@ stopifnot(
     dbGetQuery(con, "SELECT COUNT(*) FROM net WHERE net_depth_m IS NOT NULL
                      AND (isnan(net_depth_m) OR net_depth_m <= 0)")[[1]] == 0)
 d_netdepth |>
-  datatable(caption = "Net.NetDepth -> sample.depth_max_m of tows and nets, by tow type")
+  datatable(caption = "Net.NetDepth (maximum possible net depth) -> sample.depth_max_m of tows and nets, by tow type")
 
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'tow', 't.tow_uuid')} AS sample_key, 'tow' AS sample_type,
