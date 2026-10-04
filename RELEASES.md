@@ -174,6 +174,46 @@ The release gate `check_taxon_registries()` now skips `taxon_override.csv` rows 
 (`exclude = ds_excluded`, calcofi4db 4.17.2); the 13 rows these three ingests add would otherwise have
 stopped the release.
 
+## `sample` and `sample_root` carry `hex7`, so a per-sample value can be drawn in hexagons
+
+A value held per sampling event in `sample_measurement` (a cast's mixed-layer depth, a net's volume
+filtered) had no H3 cell: the cell lived only on observations (`obs_bio.hex7`, `obs_env.hex7`), and a
+per-sample value has no observation row to borrow one from. The Explorer's Hexagons lens could not
+draw the seven per-cast `calcofi_ctd-derived` types for that reason.
+
+- **`sample.hex7` and `sample_root.hex7` (new column, `UBIGINT`, last on each table).** The H3 cell
+  at resolution 7 of the event's own position, `NULL` where the position is missing or not finite.
+  `sample_root.hex7` is its root's `sample.hex7`, copied. The change touches no other column: on a
+  dry run over v2026.10.01 every other value of both tables is unchanged, row for row.
+- **One definition with the observations.** `hex7` is the resolution-7 **parent of the
+  resolution-10 cell** of the position, built from the same SQL as `obs.hex_id` and
+  `obs_bio.hex7` / `obs_env.hex7`. It is not the resolution-7 cell the position falls in: H3 cells
+  do not nest exactly, and the two differ for 101,770 of 1,463,329 positioned samples (7.0 %).
+- **By how much** (dry run on v2026.10.01): 1,463,329 of 1,469,239 `sample` rows and 415,628 of
+  421,538 `sample_root` rows get a cell. The rest have no place: 5,761 samples with no position
+  (`calcofi_mets` 4,039, `swfsc_cufes` 1,563, `cce-lter_zoodb` 155, `cdfw_dungeness-crab` 4) and 149
+  `calcofi_mets` samples holding one coordinate without the other. Of the 652,879
+  `sample_measurement` values, 652,871 now reach a hexagon through `sample`; through `sample_root`
+  alone 332,152 do, because 320,719 values sit on non-root samples (ichthyoplankton nets, crab
+  subsamples). `sample` grows 25.9 → 27.7 MB (+6.7 %), `sample_root` 10.5 → 11.5 MB (+9.0 %).
+- **A sample's cell is not always its observations' cell, and that is correct.** `sample` holds one
+  position per event; a CTD observation holds its own scan's position, and a DIC draw its own. Where
+  the ship drifts across a cell edge during a cast, some scans are in the neighbouring hexagon:
+  1,012,956 of 33,139,449 observations (3.1 %), on 925 of 9,674 `calcofi_ctd-cast` casts, 893 of the
+  9,275 casts with `calcofi_ctd-derived` profiles and 235 of 789 `calcofi_dic` samples. None of the
+  other 13 datasets differs, and no observation that sits at exactly its sample's position
+  (17,341,531 of them) is in another cell.
+- **Gate.** `check_sample_hex7()` (`release_database.qmd`, chunk `browser_objects`) fails the
+  release unless a cell is present exactly where the position is finite, is at resolution 7, is
+  equal on `sample` and `sample_root` for every root, and equals the cell of every observation at
+  the same position. Observations in another cell than their sample are reported. Four
+  `test_release.qmd` contract rows assert the same on the published objects.
+
+**Consumers:** additive, nothing to change. To place a per-sample value, join `sample_measurement`
+to `sample` on `sample_key` and read `hex7` (`sample_root` reaches root samples only). Coarser
+hexagons are `calcofi4db::h3_parent_sql(hex7, res)`, plain bit arithmetic that needs no extension.
+Join an observation to its sample on `sample_key`, never on the cell.
+
 # v2026.10.01
 
 ## CTD: the corrected 2607 file, provider flags on every series, cruise-corrected oxygen
