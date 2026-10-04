@@ -267,30 +267,46 @@ change, `oxygen_umol_kg_ave_sta_corr` on 2022-04-3322 rebuilt from the other sen
 above counted 441 casts of `EstNO3_CruiseCorr` alone, across 20 cruises; the cells in the table
 are the ones the render withheld.
 
-**Why only 32: the guard judged scans, not casts; now judged per cast (predicted, not yet
-rendered).** The chunk grouped by `ctd_cast_uuid`, which hashes each scan's time, so a "cast" held
-one value except in minute-resolution files, and the 32 cells were stretches of a cast inside one
-minute. It now groups by `(cruise_key, cast_key, cast_dir)` (calcofi4db
-`check_depth_constant_series()` takes a composite `cast_col`). Predicted from the 2026-10-04
-wrangling database, against the staged shard:
+**Why only 32, and the second test (predicted, not yet rendered).** The chunk grouped by
+`ctd_cast_uuid`, which hashes each scan's time, so a "cast" held one value except in
+minute-resolution files, and the 32 cells were stretches of a cast inside one minute. It now
+judges `(cruise_key, cast_key, cast_dir)`, one direction of one occupation, with two tests
+(calcofi4db: `check_depth_constant_series()` with a composite `cast_col`, and the new
+`check_zero_runs()`):
 
-| series | casts (D + U) | cruises | `obs_ctd_full` rows removed | `obs` rows removed |
-|---|---:|---:|---:|---:|
-| `est_nitrate_cruise_corr` | 864 | 21 | 365,573 | 28,917 |
-| `oxygen_umol_kg_1_cruise_corr` | 391 | 3 | 180,561 | — (not canonical) |
-| `oxygen_umol_kg_ave_sta_corr` | 247 | 4 | 114,002 | 9,794 |
-| `oxygen_umol_kg_1_sta_corr` / `_2_sta_corr` | 16 / 10 | 3 / 5 | 5,399 / 2,792 | — |
-| `est_chlorophyll_a_sta_corr` | 8 | 3 | 1,596 | 144 |
-| `oxygen_ml_l_1` / `_2` / `_ave_sta_corr` | 6 / 7 / 6 | 2-3 | 1,990 / 2,511 / 1,994 | 160 each |
+1. **whole cast constant**: >= 6 values over >= 50 m, range below 1e-9, every judged series;
+2. **a run of exact zeros within a cast**: >= 6 consecutive zeros over >= 50 m (a step of
+   <= 5 m inside a run), the run only, on the bottle-corrected oxygen and salinity. Not on
+   estimated nitrate or chlorophyll: their zeros are the estimate clipped at zero where the
+   quantity vanishes (nitrate's long zero runs start at the surface, 623 of 700, beside
+   ~0.1 µM; chlorophyll's reach the 200 m end of its range below the chlorophyll layer, 1,259 of
+   1,480, beside ~0.003 µg/L). Station-corrected oxygen ramps to 0 where its per-cast
+   regression fails (2408SR cast 033: sensor 26 µmol/kg at 322 m, 0.0 from 322 to 517 m).
 
-1,555 (cast, series) cells, 676,418 values. Downcasts of `est_nitrate_cruise_corr`: 435 against
-the census's 441 (the census counts 2105SH's two upcasts filed in the downcast file and the
-duplicate copies of 0707, 1701 as extra casts). Every withheld value outside
-`est_nitrate_cruise_corr` is an exact 0 (oxygen of 0 from 1 to 517 m beside a sensor reading
-5.4 mL/L), so no real near-constant profile is caught. Knock-on: seven casts lose one sensor of a
-pair, so 1,490 `obs_ctd_full` (72 `obs`) oxygen averages become the other sensor instead of its
-mean with 0. 1,051 values the 2026-10-04 render withheld return (2204SH, 1501NH: zero-filled
-stretches of casts that otherwise vary).
+Predicted from the 2026-10-04 wrangling database, rows removed from the staged shard:
+
+| series | test | casts (D + U) | cruises | `obs_ctd_full` | `obs` |
+|---|---|---:|---:|---:|---:|
+| `est_nitrate_cruise_corr` | whole cast | 864 | 21 | 365,573 | 28,917 |
+| `oxygen_umol_kg_1_cruise_corr` | whole cast | 391 | 3 | 180,561 | (not canonical) |
+| `est_chlorophyll_a_sta_corr` | whole cast | 8 | 3 | 1,596 | 144 |
+| `oxygen_umol_kg_1_sta_corr` | both | 16 + 194 runs | 20 | 36,308 | (not canonical) |
+| `oxygen_umol_kg_2_sta_corr` | both | 10 + 208 runs | 20 | 34,099 | (not canonical) |
+| `oxygen_ml_l_1_sta_corr` | both | 6 + 40 runs | 19 | 13,099 | 979 |
+| `oxygen_ml_l_2_sta_corr` | both | 7 + 48 runs | 16 | 13,407 | 1,189 |
+| `oxygen_umol_kg_ave_sta_corr` | rebuilt from its sensors | | | 142,660 (+5,343 changed) | 11,676 (+357 changed) |
+| `oxygen_ml_l_ave_sta_corr` | rebuilt from its sensors | | | 13,136 (+2,577 changed) | 1,144 (+262 changed) |
+
+The averages are rebuilt from the sensors that remain, so they follow the sensors: an average
+whose sensors are both withheld goes, one with a single sensor left becomes that sensor instead of
+its mean with 0 (178 + 42 casts change, by up to 328 µmol/kg / 7.5 mL/L). Downcasts of
+`est_nitrate_cruise_corr`: 435 against the census's 441 (the census counts 2105SH's two upcasts
+filed in the downcast file and the duplicate copies of 0707, 1701). Every value either test
+withholds outside `est_nitrate_cruise_corr` is an exact 0, so no real near-constant profile is
+caught. Of the 1,051 values the 2026-10-04 render withheld on 2204SH and 1501NH, the 752 oxygen
+values stay withheld (zero runs); the 299 `est_chlorophyll_a_sta_corr` zeros return. ctd-derived:
+8 cast records lose their `chl_*` (all-zero `est_chlorophyll_a_sta_corr`); `sigma_theta_ave`,
+spice and the mixed-layer depths rest on temperature and salinity, which neither test touches.
 
 ## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
 

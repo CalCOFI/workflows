@@ -3093,20 +3093,33 @@ of seven cruises (2304SH, 2504SH, 2301RL, 2307SR, 2105SH, 2411SR, 0810NH), while
 2026-10-01; Rasmus Swalethorp's 2026-09-29 transect-plotter screenshot of line 93.3 showed it as
 vertical stripes). Most of those values are exactly 0 (an unfilled column), the rest a non-zero
 per-cast offset: a constant written where a profile belongs. A declared bound cannot see it (the value is in range) and the provider
-set no flag, so the test is on the **shape**: `calcofi4db::check_depth_constant_series()` finds
-each (cast, derived series) with at least 6 finite values over at least 50 m that do not move
-(the cast is `cruise_key` + `cast_key` + `cast_dir`, never the per-scan `ctd_cast_uuid`, which
-judged a minute of a cast at most and withheld 32 cells on the 2026-10-04 render; per cast, the
-same data hold 1,555 constant (cast, series) cells, predicted until the next render)
-(range below 1e-9), and this chunk **drops** those values. Dropped, not flagged: a flagged value
-still reaches the table and a consumer that forgets `cc_qual_ok_sql()` would plot it, which is
-how the stripes reached the screenshot. It runs after the provider's flags, the accepted-flag
-ledger and the overrides, and **before** anything is derived from the series (the sensor-pair
-averages below, `ctd_summary`, `ctd_thin`), so a withheld sensor can never enter an average.
+set no flag, so the test is on the **shape**, and this chunk **drops** what two tests find:
 
-Only the derived and estimated series are judged (bottle-corrected salinity and oxygen,
-estimated nitrate and chlorophyll): a raw sensor that holds still is a different failure. A short
-cast is never judged. `libs/census_depth_constant_ctd.R` measures how widespread this is across
+1. **The whole cast is constant** (`calcofi4db::check_depth_constant_series()`): a (cast,
+   series) with at least 6 finite values over at least 50 m whose range is below 1e-9.
+2. **A run of exact zeros within a cast** (`calcofi4db::check_zero_runs()`): at least 6
+   consecutive values, all exactly 0, over at least 50 m (a step of up to 5 m inside a run; a
+   non-zero value ends it), and only the run is dropped. The station-corrected oxygen ramps to 0
+   where its per-cast regression fails and stays there (2408SR cast 033: the sensor reads
+   26 µmol/kg at 322 m, `Ox1uM_StaCorr` 0.0 from 322 to 517 m); an exact 0 that entered a
+   sensor-pair average would halve it. Bottle-corrected salinity and oxygen only: an exact 0 in
+   the **estimated nitrate and chlorophyll** is the provider's estimate clipped at zero where
+   the quantity truly vanishes (nitrate's zero runs start at the surface beside ~0.1 µM;
+   chlorophyll's sit below the chlorophyll layer, to the 200 m end of its range, beside
+   ~0.003 µg/L), so those keep their zeros.
+
+The cast is `cruise_key` + `cast_key` + `cast_dir`, one direction of one occupation, never the
+per-scan `ctd_cast_uuid`: grouped by that, a "cast" was at most a minute of one and the
+2026-10-04 render withheld only 32 cells. On the same data the two tests hold 1,555 constant
+(cast, series) cells and 710 zero runs (predicted until the next render). Dropped, not flagged: a
+flagged value still reaches the table and a consumer that forgets `cc_qual_ok_sql()` would plot
+it, which is how the stripes reached the screenshot. It runs after the provider's flags, the
+accepted-flag ledger and the overrides, and **before** anything is derived from the series (the
+sensor-pair averages below, `ctd_summary`, `ctd_thin`), so a withheld sensor can never enter an
+average.
+
+Only the derived and estimated series are judged: a raw sensor that holds still is a different
+failure. A short cast or run is never judged. `libs/census_depth_constant_ctd.R` measures how widespread this is across
 every downcast CSV (`data/qc/ctd_depth_constant_census.csv`); whether `EstNO3_CruiseCorr` is a
 per-cast offset in these files and whether to withhold or recompute it is
 `questions.csv` Q42.
@@ -3173,6 +3186,71 @@ if (nrow(d_const) == 0) {
   datatable(d_const_by_cruise, rownames = FALSE, options = list(pageLength = 15, scrollX = TRUE),
             caption = paste("Derived series withheld because they hold one value at every depth,",
                             "per cruise and series (data/qc/ctd_depth_constant_dropped.csv)"))
+}
+
+# --- a run of exact zeros WITHIN a cast ---------------------------------------
+# The whole-cast test misses a series that varies and then holds 0: the station-
+# corrected oxygen ramps to 0 where the per-cast regression fails and stays there
+# (2408SR cast 033: sensor 26 umol/kg at 322 m, Ox1uM_StaCorr 0.0 from 322 to 517 m;
+# 2107SR cast 015u: 0.0 from 55 to 517 m beside 5.6 mL/L), and an exact 0 that enters a
+# sensor-pair average halves it. calcofi4db::check_zero_runs() finds each run of exact
+# zeros of >= 6 values over >= 50 m (a step of <= 5 m inside a run: bins are 1 m and
+# 99.9% of steps in these series are <= 1 m; a non-zero value ends a run), and only the
+# run is withheld. Runs left after the whole-cast test, so a cast of zeros only is
+# counted there, once.
+#
+# NOT the estimated nitrate and chlorophyll. There an exact 0 is the provider's estimate
+# clipped at zero where the quantity truly vanishes: est_nitrate_sta_corr's long zero
+# runs start at the surface (623 of 700) beside values of ~0.1 uM, a depleted mixed
+# layer; est_chlorophyll_a_sta_corr's sit below ~110-190 m (1,259 of 1,480 reach the
+# bottom of its 0-200 m range) beside ~0.003 ug/L, below the chlorophyll layer. Oxygen
+# cannot be 0 where the sensor beside it reads 15-250 umol/kg. (2026-10-04 data; Q42.)
+zr_types <- dc_types |> str_subset("^est_", negate = TRUE)
+d_zrun <- calcofi4db::check_zero_runs(
+  con, tbl = "_m_by_cast", cast_col = dc_cast_cols, types = zr_types)
+
+if (nrow(d_zrun) == 0) {
+  cat("no run of exact zeros >= 50 m within a cast\n")
+} else {
+  dbWriteTable(con, "_zero_runs",
+               d_zrun |> select(all_of(dc_cast_cols), measurement_type, run, n,
+                                depth_min_m, depth_max_m),
+               overwrite = TRUE)
+  zr_join <- "m.ctd_cast_uuid = c.ctd_cast_uuid AND c.cruise_key = k.cruise_key AND
+              c.cast_key = k.cast_key AND c.cast_dir = k.cast_dir AND
+              m.measurement_type = k.measurement_type AND m.measurement_value = 0 AND
+              m.depth_m BETWEEN k.depth_min_m AND k.depth_max_m"
+  n_zr_rows <- dbGetQuery(con, glue("
+    SELECT COUNT(*) AS n FROM ctd_measurement m, ctd_cast c, _zero_runs k
+    WHERE {zr_join}"))$n
+  stopifnot("every zero-run value is counted once" = n_zr_rows == sum(d_zrun$n))
+  dbExecute(con, glue("
+    DELETE FROM ctd_measurement m
+    USING ctd_cast c, _zero_runs k
+    WHERE {zr_join}"))
+  d_zrun_by_cruise <- dbGetQuery(con, "
+    SELECT cruise_key, measurement_type,
+           COUNT(DISTINCT cast_key || '|' || cast_dir) AS n_casts, COUNT(*) AS n_runs,
+           SUM(n) AS n_values_dropped, MIN(depth_min_m) AS depth_min_m,
+           MAX(depth_max_m) AS depth_max_m
+    FROM _zero_runs
+    GROUP BY ALL ORDER BY n_values_dropped DESC, cruise_key, measurement_type")
+  dbExecute(con, "DROP TABLE _zero_runs")
+  stopifnot("zero runs were not all removed" =
+    nrow(calcofi4db::check_zero_runs(
+      con, tbl = "_m_by_cast", cast_col = dc_cast_cols, types = zr_types)) == 0)
+
+  cat(glue("{nrow(d_zrun)} run(s) of exact zeros within a cast, ",
+           "{format(n_zr_rows, big.mark = ',')} value(s) dropped:"), "\n")
+  for (ty in sort(unique(d_zrun$measurement_type)))
+    cat(glue("  {ty}: {sum(d_zrun$measurement_type == ty)} run(s), ",
+             "{format(sum(d_zrun$n[d_zrun$measurement_type == ty]), big.mark = ',')} value(s)"), "\n")
+
+  dir_create(here("data/qc"))
+  write_csv(d_zrun_by_cruise, here("data/qc/ctd_zero_runs_dropped.csv"), na = "")
+  datatable(d_zrun_by_cruise, rownames = FALSE, options = list(pageLength = 15, scrollX = TRUE),
+            caption = paste("Runs of exact zeros (>= 50 m) withheld within a cast,",
+                            "per cruise and series (data/qc/ctd_zero_runs_dropped.csv)"))
 }
 dbExecute(con, "DROP VIEW IF EXISTS _m_by_cast")
 ```
