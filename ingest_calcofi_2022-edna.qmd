@@ -9,9 +9,6 @@ calcofi:
   output: data/parquet/calcofi_2022-edna/manifest.json
   provider: calcofi
   dataset: 2022-edna
-  # staged, not released, until the provider questions on zero-detection runs
-  # (Q08), read filtering (Q07) and the ASV/replicate summing (Q06) are answered
-  in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_calcofi_2022-edna.html
   questions_file: metadata/calcofi/2022-edna/questions.csv
   dataset_meta:
@@ -62,7 +59,10 @@ same type `sio_cetacean-edna` uses), and the reads are published per assay
 in `sample_measurement` (`edna_reads_filtered_*`), which turn them into a
 relative read abundance within an assay. The archive carries positive detections
 only: a filter, or an assay run, with no detection is absent, so a 0 is never
-emitted and absence cannot be inferred (provider question).
+emitted and absence cannot be inferred (provider question Q08). The dataset
+ships as **detections only** (Ben, 2026-10-04): the absence of an `obs` row is
+not a non-detection here, unlike `sio_cetacean-edna`, where a 0 is a
+non-detection in a sequenced sample.
 
 **Not a wide CSV.** This ingest reads the DwC-A's three tables directly
 (`occurrence.txt`, `dnaderiveddata.txt`, `extendedmeasurementorfact.txt`,
@@ -678,7 +678,7 @@ append_sample(con, glue("
 #   (a) edna_presence -- the cross-dataset headline, the same type and meaning as
 #       sio_cetacean-edna: 1 = the taxon's DNA was detected (reads > 0 after the
 #       provider's own filtering) by any assay in this filter. Positive
-#       detections only, so never 0 here.
+#       detections only, so never 0 here: no row is NOT a non-detection (Q08).
 #   (b) edna_reads_<assay> -- reads summed over ASVs and PCR replicate libraries
 #       (edna_detection), one row per filter x taxon x assay.
 obs_cols <- glue("
