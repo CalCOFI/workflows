@@ -1225,6 +1225,37 @@ d_ungridded |>
     "with status `open` until the provider says which of the three it is."))
 ```
 
+## Grid Keys Name the Cell the Position Is In
+
+The grid was rebuilt from the official station positions (CalCOFI/workflows#130, calcofi4r's
+`cc_grid` / calcofi4db's `build_grid_reference()`): one cell per official station, and 196 of
+the previous 218 keys survive as **names** over polygons that changed. An ingest staged against
+the previous grid therefore ships keys that pass the foreign-key check on `grid_key` and name
+another piece of ocean. `check_grid_key_assignment()` recomputes the cell of every `sample`
+position against this release's `grid`, by the rule `assign_grid_key()` applies (planar
+intersects; on a shared edge the key that sorts first), and **stops the release** on a row whose
+key is not that cell. A position inside a cell on a row that carries no key is reported, not
+failed: `calcofi_phytoplankton` is region-pooled and ungridded by design.
+
+```{r}
+#| label: grid_key_assignment
+
+# the released grid is the one the installed calcofi4r bundles: the ichthyo ingest writes `grid`
+# from calcofi4r::cc_grid, so a `grid` shard staged before the rebuild fails here, by name
+stopifnot(
+  "the assembled `grid` is not calcofi4r::cc_grid: re-stage ingest_swfsc_ichthyo.qmd with the installed calcofi4r" =
+    setequal(dbGetQuery(con_wdl, "SELECT grid_key FROM grid")$grid_key, calcofi4r::cc_grid$grid_key))
+
+d_grid_keys <- check_grid_key_assignment(con_wdl)   # halts when any keyed row is in another cell
+cat(glue("grid_key assignment: {format(sum(d_grid_keys$n_same), big.mark = ',')} of ",
+         "{format(sum(d_grid_keys$n), big.mark = ',')} sample rows carry the key of the cell their position is in ",
+         "(or none, outside every cell); {format(sum(d_grid_keys$n_unkeyed_in_cell), big.mark = ',')} sit in a cell unkeyed\n"))
+datatable(d_grid_keys, caption = paste(
+  "sample.grid_key against the cell each position falls in (check_grid_key_assignment):",
+  "`n_wrong` stops the release; `n_unkeyed_in_cell` is a question for the owning ingest.")) |>
+  formatCurrency(setdiff(names(d_grid_keys), "dataset_key"), currency = "", digits = 0, mark = ",")
+```
+
 ## Scan Manifests for Mismatches
 
 ```{r}
@@ -1820,7 +1851,8 @@ stopifnot(all(obs_parity$ok), sum(obs_parity$n_pair) == n_bio + n_env,
             dbGetQuery(con_wdl, "SELECT count(*) AS n FROM obs")$n)
 ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
-# station (sample.site_key since 4.8.0 — the inshore grid cells hold 2–4 stations, so the cell blended them;
+# station (sample.site_key since 4.8.0 — the inshore grid cells then held 2–4 stations, so the cell blended them;
+# the grid rebuilt in #130 has one official station per cell, and the climatology stays on the station;
 # grid_key rides along as the station's modal cell) x calendar month x 10 m depth_bin x measurement type over
 # 1993-2013, >= 5 cruises per cell (3 until v2026.09.06), the window
 # stamped on every row. ctd-transects, the Explorer's Sections lens and calcofi4r::cc_climatology() subtract this
@@ -1859,7 +1891,8 @@ jsonlite::write_json(cov, coverage_path, auto_unbox = TRUE, digits = NA)
 # the per-station year x month card, its own sidecar so the first paint stays small
 coverage_stations_path <- file.path(dir_frozen, "coverage_stations.json")
 jsonlite::write_json(build_coverage_stations(con_wdl, release_version), coverage_stations_path, auto_unbox = TRUE, digits = NA)
-# the two GeoJSON sidecars the map draws without a spatial extension: grid cells + centroids, and the
+# the two GeoJSON sidecars the map draws without a spatial extension: grid cells + their sites (lon_ctr /
+# lat_ctr: the cell's station since the #130 rebuild, no longer the centroid of its largest polygon), and the
 # polygon layers (simplified for display; membership is exact and lives in sample_spatial)
 grid_geojson_path    <- file.path(dir_frozen, "grid.geojson")
 spatial_geojson_path <- file.path(dir_frozen, "spatial.geojson")
@@ -1894,6 +1927,36 @@ cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_s
 core_keep         <- c(core_keep, "sample_spatial", "climatology",   # climatology: default table, in the ERD (FKs to grid, dataset, measurement_type)
                        "obs_bio", "obs_env")
 supplemental_keep <- c(supplemental_keep, "sample_root")
+```
+
+### Grid crosswalk
+
+84 of the 113 station cells of the rebuilt grid (#130) reuse a key whose polygon changed, so
+nothing may map a `grid_key` of a release through v2026.10.01 to this one by name.
+`build_grid_crosswalk()` (calcofi4db) writes **`grid_crosswalk`**: one row per overlapping pair
+of a previous cell (`calcofi4r::cc_grid_v1`) and a cell of this release's `grid`, with the
+overlap area and its share of each cell (`prev_frac`, `grid_frac`; areas in EPSG:3310). Shares
+are of the whole cell and are not rescaled, so a previous cell's shares sum to one less the part
+of it that is land under the finer coastline. `check_grid_crosswalk()` is the gate: every cell of
+both grids present, no repeated pair, no previous cell over one, none under 0.95.
+
+It is built here, in `con_wdl`, from the assembled `grid`, so it is in `core_keep` (the default
+published set) **and** in the `gcs_prefix = NA` list of [freeze_release] (`core_spec`): no ingest
+writes it, and the exported bytes are what ships.
+
+```{r}
+#| label: grid_crosswalk
+
+xw       <- build_grid_crosswalk(con_wdl)
+d_xw_chk <- check_grid_crosswalk(con_wdl)      # halts on a cell that is not accounted for
+xw_prev  <- d_xw_chk[d_xw_chk$side == "prev", ]
+cat(glue("grid_crosswalk: {nrow(xw)} pairs; {sum(xw_prev$n > 0)} of {nrow(xw_prev)} previous cells covered; ",
+         "{sum(abs(xw_prev$frac - 1) <= 1e-6)} with shares summing to one, smallest sum {round(min(xw_prev$frac), 4)}; ",
+         "{sum(xw$prev_grid_key == xw$grid_key)} pairs share a name\n"))
+datatable(d_xw_chk, caption = paste(
+  "grid_crosswalk — every cell of the previous grid (`prev`) and of this release's (`grid`): the cells of the",
+  "other grid it overlaps, its summed share, the cell holding its largest share (check_grid_crosswalk)."))
+core_keep <- c(core_keep, "grid_crosswalk")
 ```
 
 ### Relationship integrity
@@ -2089,6 +2152,8 @@ core_spec <- dplyr::bind_rows(
   # browser-shaped objects built in [browser_objects]; obs_env and climatology are one object per variable
   tibble(table       = c("sample_spatial", "sample_root", "obs_bio", "obs_env", "climatology"),
          partitioned = c(FALSE,            FALSE,         FALSE,     TRUE,      TRUE)),
+  # built in [grid_crosswalk] from the assembled grid: no ingest writes it, so it must be exported here
+  tibble(table = "grid_crosswalk", partitioned = FALSE),
   tibble(table = supp_tbls, partitioned = TRUE))
 core_spec <- core_spec |>
   filter(table %in% dbListTables(con_wdl), !table %in% freeze_stats$table) |>

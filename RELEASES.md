@@ -8,6 +8,96 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The grid is one cell per official station, and a key no longer names the same water
+
+`grid` was 218 Voronoi cells of an idealized lattice (5, 10 and 20 station units in `+proj=calcofi`),
+clipped by a coarse coastline and patched by hand: 48 sites lay more than 1 km off their line, 19
+cells were in several pieces, and 13 cells held two to four of the official stations, which is
+why the climatology moved to `site_key` in v2026.09 (CalCOFI/workflows#130, #86,
+CalCOFI/db-viz-station#19). It is now the **Voronoi tessellation of the 113 official station
+positions** (<https://calcofi.org/sampling-info/station-positions/>, the nine SCCOOS inshore
+stations included), clipped to the previous grid's outer hull and to the OpenStreetMap coastline,
+plus the 112 previous cells whose label lies more than 20 nautical miles outside the official
+pattern, which keep their keys. 225 cells; every cell is one polygon; every official station is
+the site of its own cell (`grid.geom_ctr`, on its line by construction); no cell holds two
+official stations. The table's columns are unchanged. Built by `calcofi4r::cc_grid_build()`
+(calcofi4r's `cc_grid`), with the rules and the evidence in
+[`explore_grid_voronoi`](https://calcofi.io/workflows/explore_grid_voronoi.html).
+
+- **Keys.** The form is unchanged (`st{station}-ln{line}`, `_hist` for a kept historical cell);
+  a key names the station whose cell it is, decimals as listed (`st26.7-ln93.3`, `st27.7-ln90`,
+  `st26.4-ln93.4`). 29 keys are new and 22 retire. **196 of the previous 218 keys survive as
+  names, 84 of them on an official station's cell whose polygon changed**: `st30-ln90` was the
+  cell of four stations and keeps 52% of its water.
+- **New table `grid_crosswalk`** (`prev_grid_key`, `grid_key`, `overlap_km2`, `prev_frac`,
+  `grid_frac`; primary key the pair; `grid_key` → `grid`): every overlapping pair of a previous
+  and a current cell, with the overlap area (EPSG:3310) and its share of each. All 218 previous
+  keys are in it. Shares are of the whole cell and are not rescaled: 180 previous cells sum to
+  one within 1e-6 and 38 fall short by the part of the cell that is land under the finer
+  coastline, at most 2.2%.
+- **`sample.grid_key` / `obs.grid_key`.** On v2026.10.01's positions 15.8% of `sample` rows change
+  key (13.4% of rows before 1984, 18.3% from 1984), 8.9% to a cell that is not their previous cell
+  renamed; 36% of the rows in nearshore standard cells and 3% in offshore standard ones. No row
+  that had a cell loses it, and 5 gain one.
+- **Assignment is deterministic.** `assign_grid_key()` took `LIMIT 1` with no order, so a position
+  on an edge two cells share keyed to either; it is now the key that sorts first, and
+  `calcofi4r::cc_grid_key()` is the same rule in R (identical on all 226,762 distinct `sample`
+  positions and on every cell vertex).
+- **New gates.** `check_grid_key_assignment()` recomputes the cell of every `sample` position and
+  stops the release on a key that is not that cell. It is what catches an ingest staged against
+  the previous grid: of v2026.10.01's keys, 231,601 name another cell of the new grid and 105,528
+  of those are surviving names that pass the foreign-key check. `check_grid_crosswalk()` gates
+  the crosswalk.
+- **Unchanged:** the climatology is keyed on `site_key` and no mean moves; `climatology.grid_key`
+  (the station's modal cell) takes a new label on about one row in nine.
+
+**Rows whose `grid_key` changed, per dataset** (`sample`, this release against v2026.10.01):
+
+<!-- GRID-KEY-DIFF: measured at re-stage. Replace the `this release` column, per dataset, with
+     the count of `sample` rows whose `grid_key` differs from v2026.10.01's on the same
+     `sample_key` (NULL counts as a value), and delete this comment. The `predicted` column is
+     v2026.10.01's positions keyed against the new grid (explore_grid_voronoi.qmd, gate 5); a
+     dataset whose measured count is far from it was not re-staged, or changed for another reason. -->
+
+| dataset | rows (v2026.10.01) | predicted | this release |
+|---|---:|---:|---:|
+| `calcofi_bottle` | 931,015 | 121,667 (13.1%) | _to measure_ |
+| `swfsc_ichthyo` | 213,122 | 41,704 (19.6%) | _to measure_ |
+| `sio_pic-zooplankton` | 82,343 | 16,726 (20.3%) | _to measure_ |
+| `calcofi_mets` | 77,791 | 19,348 (24.9%) | _to measure_ |
+| `farallon_bird-mammal` | 64,421 | 10,814 (16.8%) | _to measure_ |
+| `swfsc_cufes` | 49,572 | 10,069 (20.3%) | _to measure_ |
+| `calcofi_ctd-cast` | 19,330 | 4,791 (24.8%) | _to measure_ |
+| `cce-lter_picoplankton-bacteria` | 16,017 | 3,375 (21.1%) | _to measure_ |
+| `cce-lter_euphausiids` | 7,482 | 1,955 (26.1%) | _to measure_ |
+| `calcofi_dic` | 3,261 | 773 (23.7%) | _to measure_ |
+| `calcofi_phyllosoma` | 1,859 | 712 (38.3%) | _to measure_ |
+| `cce-lter_zooscan` | 1,483 | 300 (20.2%) | _to measure_ |
+| `cdfw_dungeness-crab` | 526 | 62 (11.8%) | _to measure_ |
+| `cce-lter_zoodb` | 506 | 73 (14.4%) | _to measure_ |
+| `calcofi_phytoplankton` | 409 | 0 (ungridded) | _to measure_ |
+| `sio_mesopelagic-fish` | 102 | 16 (15.7%) | _to measure_ |
+| **all** | 1,469,239 | 232,385 (15.8%) | _to measure_ |
+
+`calcofi_dic` is predicted from its positions; in v2026.10.01 3,255 of its 3,261 rows carry no
+`grid_key` at all, because the ingest takes the key from the matched bottle cast and never
+assigns one spatially.
+
+**Open, for the provider of the pattern:** an outer official cell reaches halfway to the next
+kept cell, 40 nautical miles south of line 93.3, which puts historical line 96.7 on the edge:
+of its 28,367 gridded rows, all in line-100 historical cells before, 18,795 now key to line-93.3
+cells and 7 of its 41 stations with 20 or more rows are split between two cells.
+
+**Consumers:** a `grid_key` stored from an earlier release (a URL, a cache, a per-cell statistic)
+must be mapped through `grid_crosswalk`, not matched by name. `grid.station` and `grid.line` are
+no longer whole numbers for some cells, and seven lines hold a single station (81.7, 81.8, 85.4,
+86.8, 88.5, 91.7, 93.4: six SCCOOS stations and the rosette station 81.8 46.9), so a section
+along line 93.3 no longer includes station 93.4 26.4 and code that rounds a line or matches it
+within 0.5 picks up 93.4 with 93.3. `grid.geom_ctr`
+(`lon_ctr` / `lat_ctr` in `grid.geojson`) is the station, not a centroid. `grid.geojson` grows
+from 7,474 to 30,588 vertices. `calcofi4r::cc_grid*` change with it (`sta_lin` / `sta_pos` are
+doubles; `cc_grid_v1` is the previous grid).
+
 ## CTD casts: two provider questions on bottle values after 2021-05
 
 `calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
