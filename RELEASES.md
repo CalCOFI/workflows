@@ -8,6 +8,19 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## DIC: every sample with a position carries a `grid_key`
+
+In v2026.10.01 `sample.grid_key` was NULL on 3,255 of 3,261 `calcofi_dic` rows. The sample arm took
+`grid_key` only from the matched `calcofi_bottle` cast, and 3,255 DIC samples match no cast, though
+every one carries a latitude, longitude and datetime. The ingest now assigns `grid_key` from each
+sample's own position (`assign_grid_key()` against the `swfsc_ichthyo` grid) and keeps a matched
+cast's key where there is one: 3,261 of 3,261 resolve (0 outside the grid; of the 6 cast-matched
+samples 5 agree with the position's cell). Only `sample.grid_key` changes (NULL → key on 3,255
+rows); no `obs` row, measurement type or count changes, and `cruise_key` is untouched (still
+`calcofi_dic_07`). `calcofi_phytoplankton` stays NULL by design: it is region-pooled. **Known gap, not
+fixed here:** those 3,255 samples have no `obs` rows (the `obs` arm joins `casts`), so the DIC, TA,
+CTD temperature and salinity values on Niskins with no bottle-database match are not in the release.
+
 ## Ichthyoplankton: cruises 198202JD and 198212JD leave (swfsc_ichthyo_09)
 
 SWFSC (Ed Weber, 2026-09-25) moved cruises **198202JD** and **198212JD** (`1982-02-31JD`,
