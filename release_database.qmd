@@ -1146,7 +1146,11 @@ ORPHAN_CRUISES_MAX <- c(
   # Taken as served (Q11, high, asked 2026-09-04); the transects are real effort
   # and the Explorer keeps samples with no observation row out of every
   # denominator. Ben, 2026-09-04: allow by name. Drops to 0 when Q11 is answered.
-  "farallon_bird-mammal" =  2L)
+  "farallon_bird-mammal" =  2L,
+  # sio_cetacean-edna (un-held 2026-10-04): the 10 samples of cruise 2015-07-32OC are
+  # all "not sequenced, PCR negative", which publish a sample and no edna_presence
+  # (Q04, held by design, Ben 2026-10-01). Drops to 0 when Q04 is answered.
+  "sio_cetacean-edna"    =  1L)
 
 # NOT `d_cov` — that name is live from the `dataset_coverage` chunk above and is
 # read again in `upload_frozen` (d_cov$coverage_temporal_observed). Reusing it
@@ -1799,9 +1803,47 @@ pattern.
 # Built after normalize_crs so non-finite coordinates are already NULL.
 qual_sql <- calcofi4r::cc_qual_ok_sql("o")
 dens_sql <- calcofi4r::cc_density_sql()
+# --- hex7 on sample and sample_root (Ben, 2026-10-02; the Explorer's per-cast grain, explore#13) -----
+# A per-sample value in sample_measurement (a cast's mixed-layer depth, a net's volume) has no
+# observation row to borrow an H3 cell from, so the Hexagons lens could not draw it. add_sample_hex7()
+# stamps `sample.hex7` — the resolution-7 PARENT of the resolution-10 cell of the event's own position,
+# from the same two SQL fragments as obs.hex_id and obs_bio / obs_env.hex7, NULL without a finite
+# position — and build_sample_root() carries it. Not the resolution-7 cell the position falls in: H3
+# cells do not nest exactly (101,770 of 1,463,329 positioned samples differ on v2026.10.01).
+# It rebuilds `sample` by SELECT (never UPDATE: the table holds the CRS-tagged geom), appends the column
+# last, and is the LAST thing to touch `sample` before the freeze; both tables are exported from this
+# connection ([freeze_release]: `sample` and `sample_root` are in `core_spec`, gcs_prefix = NA), so the
+# column reaches the published bytes. The gate is check_sample_hex7(), below, once obs_bio / obs_env exist.
+stopifnot("hex7 on sample needs calcofi4db with add_sample_hex7() / check_sample_hex7(); pull ../calcofi4db" =
+            exists("add_sample_hex7") && exists("check_sample_hex7"))
+n_hex7 <- add_sample_hex7(con_wdl)
 n_root <- build_sample_root(con_wdl)
 n_bio  <- build_obs_slim(con_wdl, "bio", qual_ok_sql = qual_sql, density_sql = dens_sql)
 n_env  <- build_obs_slim(con_wdl, "env", qual_ok_sql = qual_sql, density_sql = dens_sql)
+# hex7 is present exactly where the position is finite (so count(hex7) = the count of finite positions,
+# on both tables), is a resolution-7 cell, is equal on sample and sample_root for every root, and an
+# observation sitting at its own sample's position is in its sample's cell (the proof, on this release's
+# rows, that the two sides share one definition). `obs_other_cell` is a REPORT: a CTD scan or a DIC draw
+# carries its own position, the cast carries one, and a cast that drifts across a cell edge puts some
+# scans in the neighbouring hexagon (v2026.10.01: 1,012,956 of 33,139,449 observations, on 1,160
+# samples of calcofi_ctd-cast, calcofi_ctd-derived and calcofi_dic; none at the sample's own position).
+d_hex7 <- check_sample_hex7(con_wdl)
+datatable(d_hex7, caption = "hex7 on sample and sample_root (check_sample_hex7: `fail` stops the release; `obs_other_cell` is reported)")
+datatable(dbGetQuery(con_wdl, "
+  SELECT dataset_key, sample_type, count(*) AS n_sample, count(hex7) AS n_hex7,
+         count(*) FILTER (WHERE latitude IS NULL AND longitude IS NULL) AS n_no_position,
+         count(*) FILTER (WHERE (latitude IS NULL) <> (longitude IS NULL)) AS n_half_position
+  FROM sample GROUP BY 1, 2 ORDER BY 1, 2"),
+  caption = "sample.hex7 per dataset and sample_type (a half position is one coordinate without the other: no place, no cell)")
+stopifnot(
+  "hex7 on sample / sample_root is inconsistent with the positions, the roots or the observations" =
+    all(d_hex7$status != "fail"),
+  "sample lost its EPSG:4326 tag when hex7 was stamped" = nrow(dbGetQuery(con_wdl, "
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'main' AND table_name = 'sample' AND data_type LIKE 'GEOMETRY%'
+      AND data_type NOT LIKE '%EPSG:4326%'")) == 0,
+  "hex7 must be the last column of sample and of sample_root (columns are appended, never reordered)" =
+    tail(dbListFields(con_wdl, "sample"), 1) == "hex7" && tail(dbListFields(con_wdl, "sample_root"), 1) == "hex7")
 # --- D-S1 (pre-release plan 2026-09-03; calcofi4db >= 3.31.0): the pair IS the observation store ----
 # obs_bio / obs_env now carry sample_key, measurement_prec and hex_id too, so each is a strict superset
 # of obs under a name mapping (realm = the table, value = measurement_value), and `obs` becomes a VIEW

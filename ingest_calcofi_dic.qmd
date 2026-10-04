@@ -56,6 +56,14 @@ Niskin bottle samples, archived at NCEI accession
 `dic_summary`. The base `dic_sample` table retains only
 position/time/FK columns — no measurement values.
 
+**Published scope.** A DIC value on a Niskin the bottle database also carries is published
+once, on that bottle. A value on a sample that matches **no** bottle cast is published on
+the sample's own key wherever the source gives a depth (the source's `Depth` is metres,
+`-999` is its missing sentinel); these values are **not linked to a bottle cast**. The one
+unmatched sample with no depth stays a `sample` row with no observations. See
+[Scope of the published values](#scope-of-the-published-values) and questions
+`calcofi_dic_01` / `calcofi_dic_07`.
+
 ### Data Flow
 
 ```{mermaid}
@@ -614,10 +622,71 @@ cc_erd(
 
 ## Add Spatial
 
+Three things are derived from the source's own ship, date and position, **before** the
+geometry column exists (a table holding a CRS-tagged `geom` cannot be `UPDATE`d):
+
+1. **`ship_key`** — the EXPOCODE's NODC prefix against `ship.ship_nodc`, else the source's
+   own `Ship_Name` against `ship.ship_name` (NOAA's and SWFSC's NODC codes differ for six
+   ships: EXPOCODE `33RL` is SWFSC `33UD`, Reuben Lasker). A ship the reference does not
+   carry (Westwind) stays NULL.
+2. **`cruise_key`** — `resolve_cruise_key()`: span containment on the sample's date first, then
+   the event's month, keys the reference `cruise` table does not hold left NULL
+   (`require_in_cruise`). The EXPOCODE's own start month is **not** passed as a designation:
+   `calcofi_dic_07` is open, and the EXPOCODE's start month differs from the span-resolved
+   cruise's month in 545 of the 1,971 rows the span alone resolves (a cruise starting
+   28 Jan is designated February).
+3. **`grid_key`** — from the sample's own position (`assign_grid_key()`).
+
 ```{r}
 #| label: spatial
 
+load_prior_tables(
+  con,
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables      = c("ship", "cruise", "grid"),
+  geom_tables = "grid",
+  as_view     = TRUE)
+
+# ship_key (WS-1004X2): NODC prefix first, then the source's Ship_Name
+dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
+dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS ship_key_method VARCHAR")
+dbExecute(con, "
+  UPDATE dic_sample d SET ship_key = s.ship_key, ship_key_method = 'nodc'
+  FROM ship s WHERE s.ship_nodc = left(d.expocode, 4)")
+ship_name_sql <- function(x)
+  glue("regexp_replace(regexp_replace(upper(trim({x})), '^RV ', ''), '[.]', '', 'g')")
+dbExecute(con, glue("
+  UPDATE dic_sample d SET ship_key = s.ship_key, ship_key_method = 'name'
+  FROM ship s WHERE d.ship_key IS NULL
+    AND {ship_name_sql('s.ship_name')} = {ship_name_sql('d.ship_name')}"))
+dbGetQuery(con, "
+  SELECT COALESCE(ship_key_method, 'none') AS ship_key_method,
+         COUNT(*) AS n_rows, COUNT(DISTINCT expocode) AS n_expocodes
+  FROM dic_sample GROUP BY 1 ORDER BY 1") |>
+  datatable(caption = "ship_key resolution (EXPOCODE NODC, then Ship_Name)")
+
+# cruise_key: span containment, then month; never a key the reference does not hold
+resolve_cruise_key(con, "dic_sample", datetime_col = "datetime_start_utc",
+                   require_in_cruise = TRUE) |>
+  datatable(caption = "cruise_key resolution method (DIC rows)")
+
+# grid_key from the sample's OWN position (WS-1004X). Until v2026.10.01 the sample
+# arm below took grid_key only from the matched bottle cast (`c.grid_key`), so the
+# 3,255 DIC samples that match no cast (3,261 minted samples; every one carries a
+# latitude, a longitude and a datetime) all shipped with grid_key NULL. The grid is
+# the swfsc_ichthyo shard's, as every other ingest that places points uses it.
 add_point_geom(con, "dic_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "dic_sample") |> datatable(caption = "Grid assignment by position")
+
+# every sample with a finite position gets a key (3,261/3,261 measured against the
+# v2026.10.01 shard, 0 outside the grid)
+n_pos_nogrid <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dic_sample
+  WHERE grid_key IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
+    AND isfinite(latitude) AND isfinite(longitude)")[[1]]
+stopifnot("every DIC sample with a position must resolve a grid_key" = n_pos_nogrid == 0)
+cat(glue("grid_key by position: {dbGetQuery(con, 'SELECT COUNT(grid_key) FROM dic_sample')[[1]]}/",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM dic_sample')[[1]]} dic_sample rows"), "\n")
 ```
 
 ## Data Preview
@@ -672,6 +741,18 @@ double-counting the bottle. Only a DIC sample on a Niskin that `calcofi_bottle`
 does **not** carry mints its own `calcofi_dic:bottle:<md5>` key — and that md5
 must be spelled identically in the `sample` and `obs` arms, or `obs` orphans.
 
+**What is published (WS-1004X2, Ben 2026-10-04).** The observations of a DIC sample that
+matches no bottle cast are published too, on the sample's own `calcofi_dic:bottle:<md5>`
+key, **wherever the source gives the sample a depth**: the source's own depth, the
+`grid_key` of its position, the `cruise_key` the reference resolves (span, then month;
+NULL where the reference holds none) and the station the source states. These samples
+have **no cast foreign key**: `parent_sample_key` is NULL and `root_sample_key` is the
+sample itself, because the source names no cast (`calcofi_dic_01`). The values are
+**not linked to a bottle cast**, and a consumer must not join them to one. A sample the
+source gives no depth stays a `sample` row with no observations (counted and named in
+the scope section below). The observations of the samples that do match a cast are
+exactly what they were.
+
 ```{r}
 #| label: emit_core
 
@@ -690,7 +771,10 @@ dic_md5 <- function(a) glue("md5(concat_ws('|', {a}.expocode,
 #
 # sample — bottle-shaped leaf events, minting ONLY the Niskins calcofi_bottle
 # does not already publish (the shared ones reuse bottle's sample_key in obs
-# below). Parented to the matched cast where one was found.
+# below). Parented to the matched cast where one was found. cruise_key: a matched
+# cast's own (as published since v2026.10.01); a sample that matched no cast takes the
+# one resolved from its ship + date in the Add Spatial section (NULL where the
+# reference cruise table holds none).
 append_sample(con, glue("
   SELECT * FROM (
     SELECT 'calcofi_dic:bottle:' || {dic_md5('d')} AS sample_key, 'bottle' AS sample_type,
@@ -700,7 +784,10 @@ append_sample(con, glue("
              CASE WHEN c.cast_id IS NULL THEN NULL
                   ELSE 'calcofi_bottle:cast:' || CAST(c.cast_id AS VARCHAR) END,
              'calcofi_dic:bottle:' || {dic_md5('d')}) AS root_sample_key,
-           '{ds_key}' AS dataset_key, c.grid_key, d.site_key, c.cruise_key,
+           '{ds_key}' AS dataset_key,
+           COALESCE(c.grid_key, d.grid_key) AS grid_key,  -- a matched cast's key wins; else the sample's own position
+           d.site_key,
+           CASE WHEN c.cast_id IS NULL THEN d.cruise_key ELSE c.cruise_key END AS cruise_key,
            CAST(c.order_occ AS INTEGER) AS order_occ,
            d.latitude, d.longitude, CAST(d.datetime_start_utc AS TIMESTAMP) AS datetime,
            d.depth_m AS depth_min_m, d.depth_m AS depth_max_m,
@@ -709,8 +796,9 @@ append_sample(con, glue("
     WHERE d.bottle_id IS NULL OR d.bottle_id NOT IN (SELECT bottle_id FROM bottle)
   ) q QUALIFY row_number() OVER (PARTITION BY sample_key) = 1"))
 
-# obs — dedup onto calcofi_bottle: a DIC row sharing a physical Niskin points at
-# that bottle's sample_key; only the non-shared Niskins use the minted DIC key
+# obs, arm 1 — dedup onto calcofi_bottle: a DIC row sharing a physical Niskin points at
+# that bottle's sample_key; only the non-shared Niskins use the minted DIC key. Rows of
+# a matched cast only: unchanged since v2026.10.01 (asserted in the scope section).
 append_obs(con, glue("
   SELECT 'env', '{ds_key}',
          CASE WHEN dm.bottle_id IS NOT NULL AND dm.bottle_id IN (SELECT bottle_id FROM bottle)
@@ -721,6 +809,20 @@ append_obs(con, glue("
          NULL::VARCHAR, NULL::VARCHAR, dm.measurement_type, dm.measurement_value,
          dm.measurement_qual, NULL::DOUBLE
   FROM dic_measurement dm JOIN casts c USING (cast_id)"))
+n_obs_cast <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+
+# obs, arm 2 -- a sample that matched NO cast, wherever the source gives it a depth.
+# Keyed on the sample's own minted key; grid_key / cruise_key are read back from that
+# sample row, so an obs row can never disagree with its sample. There is no cast
+# foreign key to fabricate: the source names none (calcofi_dic_01).
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', s.sample_key, s.grid_key, s.cruise_key,
+         dm.latitude, dm.longitude, CAST(dm.datetime_start_utc AS TIMESTAMP),
+         dm.depth_m, dm.depth_m, NULL::VARCHAR, NULL::VARCHAR,
+         dm.measurement_type, dm.measurement_value, dm.measurement_qual, NULL::DOUBLE
+  FROM dic_measurement dm
+  JOIN sample s ON s.sample_key = 'calcofi_dic:bottle:' || {dic_md5('dm')}
+  WHERE dm.cast_id IS NULL AND dm.depth_m IS NOT NULL"))
 
 core <- list(
   sample = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
@@ -734,9 +836,17 @@ n_shared <- dbGetQuery(con,
 n_dup <- dbGetQuery(con, "
   SELECT COUNT(*) FROM (SELECT sample_key FROM sample GROUP BY 1 HAVING COUNT(*) > 1)")[[1]]
 stopifnot(
-  "obs must be one row per DIC measurement" =
-    n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)")[[1]],
+  "obs must be one row per DIC measurement of a matched cast, plus one per unmatched sample's measurement with a depth" =
+    n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)")[[1]] +
+             dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement
+                              WHERE cast_id IS NULL AND depth_m IS NOT NULL")[[1]],
   "sample_key must be unique (the md5 dedup)" = n_dup == 0,
+  # grid_key was NULL on 3,255 of 3,261 samples at v2026.10.01 (taken from the matched
+  # cast alone); a sample with a position now carries its own, a cast's wins
+  "every emitted DIC sample with a position must carry a grid_key" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE dataset_key = 'calcofi_dic'
+                     AND grid_key IS NULL AND latitude IS NOT NULL
+                     AND longitude IS NOT NULL")[[1]] == 0,
   "some DIC obs must dedup onto calcofi_bottle" = n_shared > 0,
   "every obs.sample_key must resolve in sample or in the bottle dataset" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
@@ -750,6 +860,152 @@ stopifnot(
                        AND s.sample_key IS NULL")[[1]] == 0)
 cat(glue("obs: {format(n_obs, big.mark=',')} rows, {format(n_shared, big.mark=',')} ",
          "sharing a Niskin with calcofi_bottle"), "\n")
+```
+
+### Scope of the published values
+
+The counts below were measured on the NCEI delivery `CALCOFI_DIC_20250122.csv` (4,391
+source rows) against the v2026.10.01 shards, and are asserted: a re-delivered file that
+changes them stops the notebook rather than shipping a different scope unannounced.
+
+```{r}
+#| label: scope-assertions
+
+# measured WS-1004X2 2026-10-04 (read-only run of this notebook's own SQL)
+dic_scope <- list(
+  samples_minted        = 3261L,  # 6 matched a cast but no bottle, 3,255 matched no cast
+  samples_with_cast     = 6L,
+  samples_no_cast       = 3255L,
+  samples_no_cast_depth = 3254L,  # published with observations
+  samples_no_depth      = 1L,     # matched no cast AND no source depth: a sample row, no obs
+  obs_cast              = c(alkalinity = 937L, ctdtemp_its90 = 835L, dic = 1028L, salinity_pss78 = 908L),
+  obs_new               = c(alkalinity = 3126L, ctdtemp_its90 = 3174L, dic = 3208L, salinity_pss78 = 3173L),
+  obs_left_out          = c(alkalinity = 1L, dic = 1L))
+as_counts <- function(d) setNames(as.integer(d$n), d$measurement_type)
+
+# 1. the observations of a matched cast are exactly what v2026.10.01 published (3,708)
+d_obs_cast <- dbGetQuery(con, "
+  SELECT measurement_type, COUNT(*) AS n FROM dic_measurement
+  WHERE cast_id IS NOT NULL GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "cast-matched DIC observations must be unchanged, per type" =
+    identical(as_counts(d_obs_cast), dic_scope$obs_cast[sort(names(dic_scope$obs_cast))]),
+  "obs arm 1 (cast-matched) must hold exactly those rows" =
+    n_obs_cast == sum(dic_scope$obs_cast))
+
+# 2. samples: who has a cast, who has none, who has no depth
+d_scope <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n_minted,
+         COUNT(*) FILTER (WHERE parent_sample_key IS NOT NULL) AS n_with_cast,
+         COUNT(*) FILTER (WHERE parent_sample_key IS NULL)     AS n_no_cast,
+         COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND depth_min_m IS NOT NULL) AS n_no_cast_depth,
+         COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND depth_min_m IS NULL)     AS n_no_depth
+  FROM sample WHERE dataset_key = 'calcofi_dic'")
+stopifnot(
+  "minted DIC samples" = d_scope$n_minted == dic_scope$samples_minted,
+  "minted samples on a matched cast" = d_scope$n_with_cast == dic_scope$samples_with_cast,
+  "minted samples matching no cast" = d_scope$n_no_cast == dic_scope$samples_no_cast,
+  "samples matching no cast, with a depth" = d_scope$n_no_cast_depth == dic_scope$samples_no_cast_depth,
+  "samples matching no cast, with no depth" = d_scope$n_no_depth == dic_scope$samples_no_depth,
+  # no cast foreign key is fabricated: a sample that matched no cast is its own root
+  "a sample matching no cast must be its own root" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE dataset_key = 'calcofi_dic'
+                     AND parent_sample_key IS NULL AND root_sample_key <> sample_key")[[1]] == 0,
+  # every sample matching no cast, with a depth, carries observations; none without
+  "every no-cast sample with a depth must carry observations, none without a depth" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) FROM sample s
+      WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NULL
+        AND (s.depth_min_m IS NOT NULL) <> EXISTS (SELECT 1 FROM obs o WHERE o.sample_key = s.sample_key)")[[1]] == 0)
+
+# 3. the observations newly published, per type, and those left out for want of a depth
+d_new <- dbGetQuery(con, "
+  SELECT o.measurement_type, COUNT(*) AS n
+  FROM obs o JOIN sample s USING (sample_key)
+  WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NULL
+  GROUP BY 1 ORDER BY 1")
+d_left <- dbGetQuery(con, "
+  SELECT measurement_type, COUNT(*) AS n FROM dic_measurement
+  WHERE cast_id IS NULL AND depth_m IS NULL GROUP BY 1 ORDER BY 1")
+stopifnot(
+  "newly published DIC observations per measurement type" =
+    identical(as_counts(d_new), dic_scope$obs_new[sort(names(dic_scope$obs_new))]),
+  "observations left out for want of a depth, per measurement type" =
+    identical(as_counts(d_left), dic_scope$obs_left_out[sort(names(dic_scope$obs_left_out))]))
+cat(glue("newly published (no cast, with a depth): {format(sum(d_new$n), big.mark = ',')} obs on ",
+         "{d_scope$n_no_cast_depth} samples; left out for want of a depth: {sum(d_left$n)} obs on ",
+         "{d_scope$n_no_depth} sample"), "\n")
+
+# name what stays out: a sample row, no observations (calcofi_dic_07)
+dbGetQuery(con, "
+  SELECT expocode, site_key, CAST(datetime_start_utc AS DATE) AS date, latitude, longitude,
+         STRING_AGG(measurement_type || '=' || CAST(measurement_value AS VARCHAR), '; ') AS values_left_out
+  FROM dic_measurement WHERE cast_id IS NULL AND depth_m IS NULL
+  GROUP BY 1, 2, 3, 4, 5") |>
+  datatable(caption = "Samples matching no cast with no source depth: a sample row, no observations")
+
+# depth is a coordinate: finite, >= 0 and <= CC_DEPTH_MAX_M on every DIC row of sample and obs
+d_depth <- check_depth_bounds(con, tbls = c("sample", "obs")) |> filter(dataset_key == ds_key)
+stopifnot("DIC depth coordinates must pass check_depth_bounds()" = all(d_depth$status == "ok"))
+datatable(d_depth, caption = "check_depth_bounds() on the DIC rows of sample and obs")
+```
+
+### Measurement bounds on the published values
+
+`check_measurement_bounds()` over everything the DIC `obs` now carries, matched and
+unmatched alike; read-only (nothing is dropped, and no bound is set to an observed range).
+
+```{r}
+#| label: bounds
+
+bounds_dic <- check_measurement_bounds(
+  con, "obs", mt = d_meas_type, dataset_key = ds_key, depth_col = "depth_min_m")
+bounds_datatable(bounds_dic)
+stopifnot("every published DIC type must respect its declared bound" =
+            all(bounds_dic$status == "ok"))
+```
+
+### Cruise and ship resolution of the minted samples
+
+A sample is keyed to a cruise only through a ship the SWFSC reference carries and a cruise it
+holds for that ship; the rest are left NULL, never keyed to a cruise the reference does not
+know (the release's `complete_cruise_reference()` derived-row ratchet only ever goes down).
+
+```{r}
+#| label: cruise-assertions
+
+d_ck <- dbGetQuery(con, "
+  SELECT COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND cruise_key IS NOT NULL) AS n_no_cast_keyed,
+         COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND cruise_key IS NULL)     AS n_no_cast_null,
+         COUNT(*) FILTER (WHERE parent_sample_key IS NOT NULL AND cruise_key IS NULL) AS n_cast_null
+  FROM sample WHERE dataset_key = 'calcofi_dic'")
+# measured 2026-10-04: 2,920 keyed (span or month), 335 NULL on 8 EXPOCODEs for which the
+# ingest's `cruise` reference holds no cruise of that ship and month (the named table
+# below; 240 are NOAA Ship Sally Ride, 33P4, whose cruises the ichthyo export lacks). The
+# release's key_null_max ratchet for calcofi_dic may be lowered to this number once seen.
+# Counted and asserted, so a change in the reference or the source is seen, not absorbed.
+CRUISE_NULL_NO_CAST <- 335L
+CRUISE_NULL_CAST    <- 0L
+stopifnot(
+  "samples matching no cast: NULL cruise_key (named in the table below)" =
+    d_ck$n_no_cast_null == CRUISE_NULL_NO_CAST,
+  "samples on a matched cast: NULL cruise_key (the cast's own, unchanged)" =
+    d_ck$n_cast_null == CRUISE_NULL_CAST)
+cat(glue("cruise_key on minted DIC samples matching no cast: {d_ck$n_no_cast_keyed} keyed, ",
+         "{d_ck$n_no_cast_null} NULL; {d_ck$n_cast_null} NULL on a matched cast"), "\n")
+
+dbGetQuery(con, "
+  SELECT d.expocode, MIN(d.ship_name) AS ship_name, MIN(d.ship_key) AS ship_key,
+         COUNT(DISTINCT s.sample_key) AS n_samples,
+         CASE WHEN MIN(d.ship_key) IS NULL THEN 'ship not in the SWFSC ship reference'
+              ELSE 'no reference cruise for that ship and month' END AS why_null
+  FROM sample s
+  JOIN dic_sample d ON s.sample_key = 'calcofi_dic:bottle:' || md5(concat_ws('|', d.expocode,
+       CAST(d.datetime_start_utc AS VARCHAR), CAST(d.latitude AS VARCHAR),
+       CAST(d.longitude AS VARCHAR), CAST(d.depth_m AS VARCHAR)))
+  WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NULL AND s.cruise_key IS NULL
+  GROUP BY d.expocode ORDER BY d.expocode") |>
+  datatable(caption = "DIC cruises left without a cruise_key (calcofi_dic_07)")
 ```
 
 

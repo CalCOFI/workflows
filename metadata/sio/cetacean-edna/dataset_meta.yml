@@ -8,9 +8,13 @@
     samples collected by the NOAA CalCOFI Genomics Program (NCOG) at 10-40 m
     (a few deeper) on CalCOFI cruises, 2014-2016. Seven dolphin and whale
     species detected by metabarcoding: 1 = detected, 0 = not detected in a
-    sequenced sample (a non-detection, not a confirmed absence). Samples that
-    failed PCR are kept as samples with no result until the provider says what
-    a PCR negative means. Each sample is timed by its CTD-rosette bottle cast.
+    sequenced sample (a non-detection, not a confirmed absence). The 62
+    samples listed as "not sequenced, PCR negative" did not amplify, so they
+    say nothing about any species: each stays a sample with no
+    edna_presence rows (not a 0) until the provider says what a PCR negative
+    means (Q04). Samples have no parent sample (each is a root event); the
+    CalCOFI bottle each was filtered from is matched only as evidence of its
+    time and cruise. Each sample is timed by its CTD-rosette bottle cast.
     Staged from the CalCOFI marine mammal Shiny app repository
     (CalCOFI/marmam-app).
   # no formal citation stated in the source repository -- Q02
@@ -37,6 +41,8 @@
     - "Marine Turtles, Birds, and Mammals"
   quality_control_md: 'QC flags present: No. eDNA_Process (sequenced / not sequenced PCR negative) decides what is published: a sequenced sample gives edna_presence 1/0 for each of the seven species, with the process verbatim in obs.measurement_qual; a PCR-negative sample is a sample row with no obs (held until Q04 is answered).'
   maintenance: archived
-  funding: "Office of Naval Research, Award N00014-22-1-2719"
+  # blank 2026-10-04: marmam-app's info page names ONR award N00014-22-1-2719, an
+  # FY22 award that cannot have funded the 2014-2016 data; asked in Q02
+  funding: ""
   keywords_gcmd:
     - "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > MAMMALS"

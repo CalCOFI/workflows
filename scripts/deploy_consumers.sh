@@ -170,24 +170,98 @@ curl -s --max-time 60 https://h3t.calcofi.io/h3t/health | sed 's/^/      /'
 #   * calcofi4r and calcofi4py are consumers whose README examples gated this
 #     release (test_release.qmd, package_examples); their CI re-runs the examples
 #     and vignettes against the promoted latest and republishes the sites.
+#   * CalCOFI/CalCOFI.github.io (calcofi.io) draws its /datasets/, /measurements/
+#     and /species/ sections from the promoted release's datasets.json,
+#     measurements.json and taxa.json (scripts/fetch_release.sh), so it is a
+#     release consumer like the book. It was missing from this loop until
+#     2026-10-04 and followed a promotion only through test_release.qmd's
+#     gh_dispatch table and its Monday cron; a dispatch that is not in the deploy
+#     script is a dispatch nobody checks. Its refresh.yml also reads the two media
+#     sidecars (species + measurement faces) at BUILD time, so the manual step 7
+#     below re-dispatches it once the media are uploaded.
 echo "==> 6/6 dispatching the hosted consumers (GitHub Actions)"
+SITE_DISPATCHED=0
 if command -v gh >/dev/null 2>&1; then
   for spec in "refresh.yml CalCOFI/db-viz-station" \
               "refresh.yml CalCOFI/ctd-transects" \
+              "refresh.yml CalCOFI/CalCOFI.github.io" \
               "render_book.yml CalCOFI/docs" \
               "pkgdown.yaml CalCOFI/calcofi4r" \
               "test.yml CalCOFI/calcofi4py"; do
     set -- $spec
-    printf '    %-16s %-24s ' "$1" "$2"
-    if gh workflow run "$1" --ref main -R "$2" >/dev/null 2>&1; then echo "dispatched"; else echo "FAILED (run it by hand)"; fi
+    printf '    %-16s %-28s ' "$1" "$2"
+    if gh workflow run "$1" --ref main -R "$2" >/dev/null 2>&1; then
+      echo "dispatched"; [ "$2" = "CalCOFI/CalCOFI.github.io" ] && SITE_DISPATCHED=1
+    else echo "FAILED (run it by hand)"; fi
   done
 else
   echo "    gh not installed — run by hand:"
   echo "      gh workflow run refresh.yml     --ref main -R CalCOFI/db-viz-station"
   echo "      gh workflow run refresh.yml     --ref main -R CalCOFI/ctd-transects"
+  echo "      gh workflow run refresh.yml     --ref main -R CalCOFI/CalCOFI.github.io"
   echo "      gh workflow run render_book.yml --ref main -R CalCOFI/docs"
   echo "      gh workflow run pkgdown.yaml    --ref main -R CalCOFI/calcofi4r"
   echo "      gh workflow run test.yml        --ref main -R CalCOFI/calcofi4py"
 fi
 
+# 6b. the landing site shows the promoted version -----------------------------------------
+# Dispatching is not deploying: refresh.yml fetches the record, builds Jekyll and publishes
+# Pages, and any of those can fail while the dispatch above still says "dispatched". calcofi.io
+# carries the release version in the text of every section built from a record, so read the LIVE
+# pages and require the promoted version on each:
+#   /data.json       the DCAT catalog on the front door   <- datasets.json
+#   /measurements/   the measurement index                <- measurements.json
+#   /species/        the species index                    <- taxa.json
+# Polled (a refresh run takes ~1.5-2 min); a cache-busting query defeats the Pages CDN. A stale
+# section is a FAILURE (exit 1 after the manual block below is printed), not a warning: it is the
+# whole point of the dispatch. Skipped, saying so, where the dispatch did not fire.
+SITE="${CALCOFI_SITE:-https://calcofi.io}"
+site_fail=0
+if [ "$SITE_DISPATCHED" -eq 1 ]; then
+  echo "==> 6b/6 waiting for $SITE to show $RELEASE (up to ~12 min per page)"
+  for page in data.json measurements/ species/; do
+    ok=0
+    for i in $(seq 1 24); do
+      # into a variable, not `curl | grep -q`: grep exits at the first match, curl then dies of
+      # SIGPIPE and pipefail turns a match into a failure
+      body=$(curl -sf --max-time 30 "$SITE/$page?cb=$(date +%s)" || true)
+      if grep -qF "$RELEASE" <<<"$body"; then ok=1; break; fi
+      sleep 30
+    done
+    if [ "$ok" -eq 1 ]; then printf '    %-16s shows %s\n' "$page" "$RELEASE"
+    else printf '    %-16s DOES NOT show %s\n' "$page" "$RELEASE"; site_fail=1; fi
+  done
+  [ "$site_fail" -eq 0 ] || echo "    $SITE is stale: gh run list -R CalCOFI/CalCOFI.github.io -L 3, then gh run view <id> --log-failed" >&2
+else
+  echo "==> 6b/6 skipped: the CalCOFI.github.io dispatch did not fire. Dispatch it, then: curl -s $SITE/data.json | grep -o 'release v[0-9.]*'"
+fi
+
+# 7. MANUAL: the media, then the site again ----------------------------------------------
+# The species faces (taxa_media.json) and the measurement faces (measurements_media.json) are NOT
+# release content: scripts/fetch_species_media.py and scripts/fetch_measurement_faces.py build
+# them from public services into gs://calcofi-files-public/{species,measurement}-media/, ONE copy
+# for every release. Their GitHub workflows are `if: false` (no GCP_SA_KEY secret), so this stays a
+# human step on a machine whose gcloud is authenticated as calcofi-admin. It is printed, not run,
+# because it writes to a public bucket and the species pass takes ~1.2 h cold (a warm .cache/
+# resumes, so only the taxa new in this release are fetched). Run it AFTER the dispatch above and
+# then dispatch the site once more, because Jekyll reads both sidecars at build time: a species the
+# release added draws no face until its entry exists, a measurement key it added no structure.
+cat <<EOF
+==> 7/7 MANUAL: the media for $RELEASE (this script does not run it)
+    cd ../CalCOFI.github.io                      # the landing site checkout
+    scripts/fetch_release.sh                     # _data/taxa.json + measurements.json of the promoted release
+    # species faces (Pillow only; resumable; a warm cache fetches just the new taxa)
+    scripts/fetch_species_media.py
+    scripts/check_species_media.py               # the gate, BEFORE anything reaches the bucket
+    scripts/fetch_species_media.py --upload      # rsync to gs://calcofi-files-public/species-media/
+    # measurement faces (RDKit, in the ignored venv: requirements-media.txt)
+    [ -d .venv-media ] || { uv venv --python 3.12 .venv-media && uv pip install --python .venv-media/bin/python -r requirements-media.txt; }
+    .venv-media/bin/python scripts/fetch_measurement_faces.py
+    python3 scripts/check_measurement_faces.py
+    .venv-media/bin/python scripts/fetch_measurement_faces.py --upload
+    # the site reads both sidecars at build time: rebuild it, then re-run the 6b check
+    gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io
+EOF
+
 echo "==> consumers deployed for $RELEASE"
+[ "$site_fail" -eq 0 ] || exit 1
