@@ -8,6 +8,50 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
+
+`calcofi_ctd-derived` now computes its per-cast products by the definitions Rasmus Swalethorp gave on
+2026-09-23 (questions.csv Q01, Q02; adopted 2026-10-01; CalCOFI/workflows#101, #102). v2026.10.01
+shipped interim choices, so **the value changes on every cast** that has one.
+
+- **Mixed-layer depth: a new headline key, `mld_sigma_theta_002`.** It is the depth at which
+  sigma-theta is 0.02 kg m⁻³ greater than at 10 m, the CalCOFI legacy definition. The interim
+  headline **`mld_sigma_theta_003` (Δσθ 0.03) is retired**: its registry row stays, marked
+  `RETIRED` with `is_canonical = FALSE`, and no row carries it. The key is new rather than reused
+  because the old name states its 0.03 threshold. A consumer that asked for
+  `mld_sigma_theta_003` by name must switch; the Explorer reads its per-cast list from the registry
+  and needs no change. `mld_sigma_theta_0125` and `mld_temperature_02` are unchanged, now described
+  as alternatives to the headline. A cast that starts below 10 m, or never crosses the threshold,
+  still has no value.
+- **`chl_max_depth` / `chl_max`** (same keys) are the depth and value of the highest **3 m running
+  mean** of `est_chlorophyll_a_sta_corr`. v2026.10.01 used a 5 m running median. `chl_max` is now
+  the mean at that depth.
+- **`chl_integrated`** (same key) is the **sum of the 1 m bins** over the top 200 m, or to the
+  bottom on shallower casts. v2026.10.01 integrated with trapezoids, so values move slightly.
+  `chl_integrated_depth` is unchanged.
+- **Registry fix:** the nine `calcofi_ctd-derived` types (`spiciness0`, `sigma_theta_ave`, the MLD
+  and chlorophyll types) listed `calcofi_ctd-cast` as their `_source_datasets`. They now name the
+  dataset that publishes them, `calcofi_ctd-derived`.
+- **`measurements.json` lists the per-cast types.** The mixed-layer depths, `chl_max_depth`,
+  `chl_max`, `chl_integrated` and `chl_integrated_depth` each get an entry with `grain: "sample"`,
+  so calcofi.io can give them a page. `counts.sample_measurement_rows` counts their rows.
+- **Correction to v2026.10.01's notes:** that section listed `ctd_geostrophic` as a new table, but
+  `release_database.qmd` did not publish it, and it is not in this release either. It is still
+  computed and staged, pending questions Q03/Q04 (CalCOFI/workflows#103). `datasets.json` no longer
+  lists it among the dataset's tables.
+
+**Per-type change against v2026.10.01** (filled after the re-stage; rows changed, filled and removed,
+and the largest change per `measurement_type`):
+
+<!-- COORDINATOR: fill from the stage-vs-release diff after ingest_calcofi_ctd-derived is re-staged -->
+| measurement_type | casts v2026.10.01 | casts now | changed | largest change |
+|---|---|---|---|---|
+| `mld_sigma_theta_002` (new; vs `mld_sigma_theta_003`) | TBD | TBD | TBD | TBD |
+| `mld_sigma_theta_003` (retired) | TBD | 0 | — | — |
+| `chl_max_depth` | TBD | TBD | TBD | TBD |
+| `chl_max` | TBD | TBD | TBD | TBD |
+| `chl_integrated` | TBD | TBD | TBD | TBD |
+
 ## CTD casts: two provider questions on bottle values after 2021-05
 
 `calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
