@@ -2,7 +2,16 @@
   visibility: public
   description: >
     Ichthyoplankton (fish eggs and larvae) collected by bongo and manta net
-    tows on CalCOFI cruises, processed by SWFSC.
+    tows on CalCOFI cruises, processed by SWFSC. Counts are per net, with
+    SWFSC's own effort (volume filtered, standard haul factor, proportion
+    sorted). A tow with no egg, larva or invertebrate record is a true zero:
+    it stays as a sample with its effort, and abundance rows are positive only.
+    Counts of species codes that share a WoRMS AphiaID are summed per net; each
+    code keeps its own name. A tow's and net's maximum depth is the maximum
+    possible depth of the net (SWFSC NetDepth), not a measured depth: over a
+    shallower sea floor the net did not reach it. Egg stages 12-15 are left
+    out of the egg stage distribution. Fish grown past the larval stage are
+    in their own table, fish. MOCNESS tows are not in the source.
   # no year/DOI/URL is embedded in this string and no source states one; left
   # as-is pending Ed Weber's confirmation of the proposed year+URL version —
   # see metadata/swfsc/ichthyo/questions.csv Q10. checked 2026-09-03
