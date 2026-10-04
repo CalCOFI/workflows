@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## calcofi.io measurement pages: face, why and method rows for the keys that had none
+
+The landing site draws each `/measurements/` page from `measurements.json`, which carries the five
+face registries (`metadata/measurement_{face,why,method,chem,scale}.csv`). In v2026.10.01 three
+published keys had no face (`oxygen_ml_l_ave_cruise_corr`, `sigma_theta_ave`, `spiciness0`), four no
+why (those and `uws_flow`) and three no method. They now have rows, so their pages publish all three
+sections: `oxygen_ml_l_ave_cruise_corr` reuses the dissolved-oxygen rows (face, chemistry, why),
+`sigma_theta_ave` stands in for `sigma_theta`, and `spiciness0` and `uws_flow` get their own why rows.
+Rows are also written for the per-cast mixed-layer-depth and chlorophyll types of
+`calcofi_ctd-derived`, the eDNA types (`edna_presence`, `edna_reads_*`) and `group_size` /
+`acoustic_presence`; these keys have no `/measurements/` page, because `build_measurements_catalog()`
+reads `obs_env` only, so they render nowhere until the catalog carries per-cast and `obs_bio` keys.
+No data changes.
+
 ## CTD casts: two provider questions on bottle values after 2021-05
 
 `calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
