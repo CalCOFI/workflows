@@ -455,6 +455,40 @@ tbl(con, "lookup") |>
   datatable(caption = "Lookup table with vocabularies")
 ```
 
+## Egg stages 12-15 are screened out (swfsc_ichthyo_02)
+
+The egg stage scale this ingest publishes is Moser & Ahlstrom (1985), stages 1-11. SWFSC
+(Ed Weber, 2026-09-25): "Stages 12-15 have been used for Dover Sole and sometimes Rex Sole but I
+do not have a reference. You or I could screen them out if wanted." Ben Best (2026-10-01): "we can
+filter out the observations with egg stages 12-15". So those egg-stage rows leave the `stage`
+distribution here, before consolidation, and are written to
+`data/flagged/egg_stage_12_15_screened.csv`. The eggs themselves are still counted: the egg
+abundance (`Eggs.csv`) is a separate total and is not touched.
+
+```{r}
+#| label: screen_egg_stages
+
+d_egg_1215 <- dbGetQuery(con, "
+  SELECT e.net_uuid, e.species_id, s.scientific_name, e.stage, e.tally
+  FROM egg_stage e LEFT JOIN species s USING (species_id)
+  WHERE e.stage > 11 ORDER BY e.species_id, e.stage, e.net_uuid")
+dir_create(here("data/flagged"))
+write_csv(d_egg_1215, here("data/flagged/egg_stage_12_15_screened.csv"), na = "")
+n_before <- dbGetQuery(con, "SELECT COUNT(*) FROM egg_stage")[[1]]
+invisible(dbExecute(con, "DELETE FROM egg_stage WHERE stage > 11"))
+stopifnot(
+  "egg stages must be 1-11 (Moser & Ahlstrom 1985) after screening" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM egg_stage WHERE stage NOT BETWEEN 1 AND 11")[[1]] == 0,
+  "screening removed exactly the flagged rows" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM egg_stage")[[1]] == n_before - nrow(d_egg_1215))
+cat(glue("egg stages 12-15 screened out: {format(nrow(d_egg_1215), big.mark = ',')} rows, ",
+         "{format(sum(d_egg_1215$tally), big.mark = ',')} eggs, on ",
+         "{paste(unique(d_egg_1215$scientific_name), collapse = ', ')}\n"))
+d_egg_1215 |>
+  count(species_id, scientific_name, stage, wt = tally, name = "eggs") |>
+  datatable(caption = "Egg-stage rows screened out (stages 12-15), eggs by species and stage")
+```
+
 ## Larval size and stage from `LarvaeMeasured`
 
 The provider's 2026-09-26 export replaced `larvaesize` and `larvaestage` with one table,
@@ -692,6 +726,10 @@ if (nrow(invalid_egg_stages) > 0) {
     output_path = invalid_egg_stages_csv,
     description = invalid_egg_stages_desc
   )
+} else if (file.exists(invalid_egg_stages_csv)) {
+  # stages 12-15 are screened out above (screen_egg_stages); a sidecar from an
+  # earlier run would claim flagged rows that no longer exist
+  file.remove(invalid_egg_stages_csv)
 }
 show_flagged_file(
   invalid_egg_stages,
