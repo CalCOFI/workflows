@@ -8,6 +8,107 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The grid is one cell per official station, and a key no longer names the same water
+
+`grid` was 218 Voronoi cells of an idealized lattice (5, 10 and 20 station units in `+proj=calcofi`),
+clipped by a coarse coastline and patched by hand: 48 sites lay more than 1 km off their line, 19
+cells were in several pieces, and 13 cells held two to four of the official stations, which is
+why the climatology moved to `site_key` in v2026.09 (CalCOFI/workflows#130, #86,
+CalCOFI/db-viz-station#19). It is now **one cell per official station, beside the previous cells
+it keeps**: 225 cells.
+
+- **113 station cells**: the Voronoi tessellation of the official station positions
+  (<https://calcofi.org/sampling-info/station-positions/>, the nine SCCOOS inshore stations
+  included), confined to the 106 previous cells it replaces, so an outer station's cell stops
+  where the previous grid stopped it (line 95.0 in the south, 20 nautical miles beyond line
+  93.3). Every official station is the site of its own cell (`grid.geom_ctr`, on its line by
+  construction) and no cell holds two.
+- **112 kept cells**: the previous cells whose label lies more than 20 nautical miles outside the
+  official pattern, with their own boundaries, pieces and keys. No `sample` row whose previous
+  cell is kept changes key (0 of 455,930), and historical line 96.7 stays in the line-100 cells.
+- Both end at the OpenStreetMap coastline (islets under 1 km² dropped, pulled back 300 m,
+  simplified to 100 m) instead of Natural Earth's. The table's columns are unchanged.
+
+Built by `calcofi4r::cc_grid_build()` (calcofi4r's `cc_grid`), with the rules and the evidence in
+[`explore_grid_voronoi`](https://calcofi.io/workflows/explore_grid_voronoi.html).
+
+- **Keys.** The form is unchanged (`st{station}-ln{line}`, `_hist` for a kept historical cell);
+  a station cell is named for its station, decimals as listed (`st26.7-ln93.3`, `st27.7-ln90`,
+  `st26.4-ln93.4`). 29 keys are new and 22 retire. **196 of the previous 218 keys survive as
+  names; for the 112 kept cells the name is the same water, for 84 it is an official station's
+  cell whose polygon changed**: `st30-ln90` was the cell of four stations and keeps 52% of its
+  water.
+- **New table `grid_crosswalk`** (`prev_grid_key`, `grid_key`, `overlap_km2`, `prev_frac`,
+  `grid_frac`; primary key the pair; `grid_key` → `grid`): every overlapping pair of a previous
+  and a current cell, with the overlap area (EPSG:3310) and its share of each. All 218 previous
+  keys are in it. Shares are of the whole cell and are not rescaled: 180 previous cells sum to
+  one within 1e-6 and 38 fall short by the part of the cell that is land under the finer
+  coastline, at most 2.2%. Each kept cell is an identity row (82 of the 112 with a share of
+  exactly one).
+- **`sample.grid_key` / `obs.grid_key`.** On v2026.10.01's positions 12.7% of `sample` rows change
+  key (8.2% of rows before 1984, 17.2% from 1984), 5.4% to a cell that is not their previous cell
+  renamed; all of them inside the official pattern: 34% of the rows in nearshore standard cells,
+  1% in offshore standard ones, none in a kept cell. No row that had a cell loses it, and 5 gain
+  one.
+- **Assignment is deterministic.** `assign_grid_key()` took `LIMIT 1` with no order, so a position
+  on an edge two cells share keyed to either; it is now the key that sorts first, and
+  `calcofi4r::cc_grid_key()` is the same rule in R (identical on all 226,762 distinct `sample`
+  positions and on every cell vertex).
+- **New gates.** `check_grid_key_assignment()` recomputes the cell of every `sample` position and
+  stops the release on a key that is not that cell. It is what catches an ingest staged against
+  the previous grid: of v2026.10.01's keys, 185,761 name another cell of the new grid and 59,688
+  of those are surviving names that pass the foreign-key check. `check_grid_crosswalk()` gates
+  the crosswalk.
+- **Not single-piece everywhere.** 13 kept cells are in several pieces, as 10 of them already
+  were (cells that span the Baja California peninsula): keeping them as they were is what keeps
+  every historical key. One station cell, `st53-ln60`, carries 21 km² of Tomales Bay as a
+  detached part: that water was in a replaced cell and opens to the sea only through a kept one.
+- **Unchanged:** the climatology is keyed on `site_key` and no mean moves; `climatology.grid_key`
+  (the station's modal cell) takes a new label on about one row in nine.
+
+**Rows whose `grid_key` changed, per dataset** (`sample`, this release against v2026.10.01):
+
+<!-- GRID-KEY-DIFF: measured at re-stage. Replace the `this release` column, per dataset, with
+     the count of `sample` rows whose `grid_key` differs from v2026.10.01's on the same
+     `sample_key` (NULL counts as a value), and delete this comment. The `predicted` column is
+     v2026.10.01's positions keyed against the new grid (explore_grid_voronoi.qmd, gate 5); a
+     dataset whose measured count is far from it was not re-staged, or changed for another reason
+     (calcofi_dic: its 3,255 NULL keys are also filled in this release, see below). -->
+
+| dataset | rows (v2026.10.01) | predicted | this release |
+|---|---:|---:|---:|
+| `calcofi_bottle` | 931,015 | 89,194 (9.6%) | _to measure_ |
+| `swfsc_ichthyo` | 213,122 | 32,659 (15.3%) | _to measure_ |
+| `sio_pic-zooplankton` | 82,343 | 13,280 (16.1%) | _to measure_ |
+| `calcofi_mets` | 77,791 | 19,345 (24.9%) | _to measure_ |
+| `farallon_bird-mammal` | 64,421 | 10,777 (16.7%) | _to measure_ |
+| `swfsc_cufes` | 49,572 | 9,227 (18.6%) | _to measure_ |
+| `calcofi_ctd-cast` | 19,330 | 4,791 (24.8%) | _to measure_ |
+| `cce-lter_picoplankton-bacteria` | 16,017 | 3,375 (21.1%) | _to measure_ |
+| `cce-lter_euphausiids` | 7,482 | 1,954 (26.1%) | _to measure_ |
+| `calcofi_dic` | 3,261 | 768 (23.6%) | _to measure_ |
+| `calcofi_phyllosoma` | 1,859 | 712 (38.3%) | _to measure_ |
+| `cce-lter_zooscan` | 1,483 | 300 (20.2%) | _to measure_ |
+| `cdfw_dungeness-crab` | 526 | 51 (9.7%) | _to measure_ |
+| `cce-lter_zoodb` | 506 | 73 (14.4%) | _to measure_ |
+| `calcofi_phytoplankton` | 409 | 0 (ungridded) | _to measure_ |
+| `sio_mesopelagic-fish` | 102 | 16 (15.7%) | _to measure_ |
+| **all** | 1,469,239 | 186,522 (12.7%) | _to measure_ |
+
+`calcofi_dic` is predicted from its positions against the previous grid's cell for the same
+position; in v2026.10.01 3,255 of its 3,261 rows carry no `grid_key` at all (see "DIC: every
+sample with a position carries a `grid_key`" below), so its measured count will be near 3,261.
+
+**Consumers:** a `grid_key` stored from an earlier release (a URL, a cache, a per-cell statistic)
+must be mapped through `grid_crosswalk`, not matched by name. `grid.station` and `grid.line` are
+no longer whole numbers for some cells, and seven lines hold a single station (81.7, 81.8, 85.4,
+86.8, 88.5, 91.7, 93.4: six SCCOOS stations and the rosette station 81.8 46.9), so a section
+along line 93.3 no longer includes station 93.4 26.4 and code that rounds a line or matches it
+within 0.5 picks up 93.4 with 93.3. `grid.geom_ctr` (`lon_ctr` / `lat_ctr` in `grid.geojson`) is
+the station, not a centroid. `grid.geojson` grows from 7,474 to 31,660 vertices. `grid.geom` is
+still a mix of polygons and multipolygons. `calcofi4r::cc_grid*` change with it (`sta_lin` /
+`sta_pos` are doubles; `cc_grid_v1` is the previous grid).
+
 ## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
 
 `calcofi_ctd-derived` now computes its per-cast products by the definitions Rasmus Swalethorp gave on
@@ -51,6 +152,53 @@ and the largest change per `measurement_type`):
 | `chl_max_depth` | TBD | TBD | TBD | TBD |
 | `chl_max` | TBD | TBD | TBD | TBD |
 | `chl_integrated` | TBD | TBD | TBD | TBD |
+
+## CTD casts: one copy per file, casts tested by their median position, two stations repaired, pigment floors (#131)
+
+Five defects in `ingest_calcofi_ctd-cast.qmd` found by auditing v2026.10.01 against the provider's
+`*_CTDBTL_*` files (CalCOFI/workflows#131).
+
+- **One copy of each file (2204SH).** The archive holds the bottle-merged file twice, `db-csvs/`
+  (May 2022) and `csvs-plots/` (February 2025 re-export: nutrients, `BTL_Temp`, 559 more `OxBuM`,
+  corrected `Ox*uM_StaCorr`; times to the minute, SPAR/PAR to three figures). Both were read and,
+  writing the time differently, both survived dedup: **2,941,303 duplicated keys** in `obs` +
+  `obs_ctd_full`. Where a May 2022 scan fell on a whole minute the keys matched and the older copy
+  won the tiebreak: 14 bottles lost nutrients, `BTL_Temp` and `OxBuM`, the **92 missing values**.
+  Now the re-export alone is read (`CTD_COPY_PREFER`; seven other archives hold byte-identical
+  copies and keep the shortest path, as dedup did). The re-export also drops 7 shallow bottles and
+  moves one, which leave with the old copy.
+- **Distance filter on the cast's median position.** A cast within 10 km of its station keeps every
+  scan; a scan more than 0.05 deg from the median (a GPS glitch) keeps its values at the median
+  position. A cast whose median fails keeps the old per-scan test. Restores 2404SH's 626 glitch
+  scans (11 bottles) and GPS-glitched scans on 0801JD, 0711NH, 0310NH, 1507OC and 10 other cruises.
+- **Stations.** 2204SH casts 094/095 write line 066.3 but sit on 063.3 (`CTD_STATION_OVERRIDE`,
+  questions.csv Q43); 2504SH cast 045 is a real occupation 11.0 km off 083.3 039.4, kept at its
+  true position (`CTD_OFF_STATION_KEEP`).
+- **Pigment floors.** `btl_chlorophyll_a` -1 and `btl_phaeopigment` -5, the floors `calcofi_bottle`
+  declares; near-zero negative readings return, -99 still falls.
+- **Mis-filed upcasts (1604SH, 2105SH).** Direction comes from the Cast_ID; seven upcasts filed in
+  the downcast file stop doubling (**75,310 duplicated keys**).
+- **Ratchets.** A (cast, depth) read twice stops the render outside `CTD_DUP_SCAN_CRUISES`;
+  `CTD_DUP_SCAN_MAX` holds the cruises still open (1501NH `dualTCO/` re-processing, 9510NH /
+  9504NH extra casts reusing cast numbers, six with 1-177 scans: 1,951,755 keys) to their count.
+
+**Predicted** (the changed rules re-run on the source files of the 39 affected cruises by a
+mini-pipeline that reproduces v2026.10.01's `obs` and `obs_ctd_full` row for row under the old
+rules; excludes #127's depth-constant drop and 2026-07's re-issued archive):
+
+| table | added | removed | changed | duplicated keys |
+|---|---|---|---|---|
+| `obs` | 21,587 | 169,369 | 12,882 | 161,144 → 1,550 |
+| `obs_ctd_full` | 273,352 | 2,863,345 | 321,217 | 2,864,642 → 7,623 |
+
+2022-04 alone: `obs` +3,928 / −151,648 / ~12,882, `obs_ctd_full` +73,988 / −2,796,552 / ~321,217
+(changed = the re-export's oxygen µmol/kg station-corrected, SPAR/PAR rounding, `EstChl_StaCorr`).
+Bottle-grain `obs` rows (`btl_*`, `salinity_btl`, `oxygen_btl_*`): +303 / −3,409 in 2022-04,
++127 in 2024-04, +57 in 2025-04, +840 / +346 in 2008-01 / 2007-11, −364 / −176 in 2016-04 / 2021-05
+(the doubled upcasts), +384 pigment values elsewhere. Per type and cruise:
+`prediction_by_cruise_type.csv` in the #131 hand-off.
+
+**Measured** (`diff_stage_vs_release()` after the re-stage): _to fill_.
 
 ## CTD: derived series that hold one value at every depth are withheld (not yet rendered)
 

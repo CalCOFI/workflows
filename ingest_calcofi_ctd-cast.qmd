@@ -1047,6 +1047,82 @@ if (nrow(d_csv_nodir) > 0)
         "direction (alternate renderings beside the canonical D/U pair)"),
       fname = "ctd_files_no_cast_direction")
 
+# --- one copy of each file: an archive holding two is resolved here, once ----------
+# Eight preliminary archives carry the same db file twice, under two folders
+# (db-csvs/ + csvs-plots/ or db-csvs/ + metadata/). Seven pairs are byte-identical,
+# so reading both cost nothing but time: [dedup_ctd_raw] collapsed every row. The
+# 2204SH pair is NOT identical (CalCOFI/workflows#131): db-csvs/ is the May 2022
+# export, csvs-plots/ the February 2025 re-export, which adds nutrients (NO3, NO2,
+# NH4, PO4, SIL), BTL_Temp and 559 more OxBuM bottles, corrects Ox*uM_StaCorr (the
+# May 2022 copy holds ~57-81 µmol/kg at the surface beside ~282 from the cruise
+# correction) and re-derives Ox*_StaCorr / EstChl_StaCorr; it also writes times to
+# the minute and SPAR/PAR to three significant figures, no longer carries 7
+# shallow bottles (casts 007d, 008d, 079d, 100d) and moves one (040d, 101 -> 102 m).
+# Because the two copies write the time differently, dedup's key never matched:
+# v2026.10.01 shipped both, 2,941,303 duplicated (cast, depth, type) keys in obs +
+# obs_ctd_full. Where a May 2022 scan fell on a whole minute (hh:mm:00) its key DID
+# match the re-export's minute, and the shorter db-csvs/ path won dedup's tiebreak:
+# 14 bottles lost their nutrients, BTL_Temp and (8 of them) OxBuM, the 92 values
+# #131 found missing.
+#
+# So a cruise is read from ONE copy, chosen before any row is read: byte-identical
+# copies keep the shortest path (what dedup picked anyway, so no value changes);
+# differing copies keep the folder declared below and stop the render when none
+# is declared, because which export is current is a fact about the provider's
+# processing, not something a path length can decide.
+CTD_COPY_PREFER <- tibble::tribble(
+  ~cruise_key, ~keep_folder,  ~reason,
+  "2204SH",    "csvs-plots", paste(
+    "February 2025 re-export: nutrients, BTL_Temp, corrected Ox*uM_StaCorr;",
+    "the May 2022 db-csvs/ copy has neither (CalCOFI/workflows#131)"))
+
+d_csv_copies <- d_csv |>
+  group_by(cruise_key, dir_unzip, file_stem) |>
+  filter(n() > 1) |>
+  mutate(
+    md5        = unname(tools::md5sum(path)),
+    identical  = n_distinct(md5) == 1,
+    folder     = str_extract(path_unzip, "[^/]+(?=/[^/]+$)")) |>
+  left_join(CTD_COPY_PREFER, by = "cruise_key") |>
+  mutate(
+    keep = if_else(
+      identical,
+      row_number(paste(str_pad(nchar(path_unzip), 4, pad = "0"), path_unzip)) == 1,
+      !is.na(keep_folder) & folder == keep_folder)) |>
+  ungroup()
+
+copies_undeclared <- d_csv_copies |>
+  group_by(cruise_key, dir_unzip, file_stem) |>
+  filter(sum(keep) != 1) |>
+  ungroup()
+if (nrow(copies_undeclared) > 0)
+  stop(glue(
+    "an archive holds differing copies of the same CTD file and CTD_COPY_PREFER ",
+    "names no single one to read: ",
+    paste(unique(copies_undeclared$path_unzip), collapse = "; "),
+    ". Decide which export is current (compare the columns) and declare it."))
+
+if (nrow(d_csv_copies) > 0) {
+  say(glue(
+    "one copy per file: {sum(!d_csv_copies$keep)} duplicate file(s) not read in ",
+    "{n_distinct(d_csv_copies$cruise_key)} cruise(s) ",
+    "({sum(!d_csv_copies$keep & !d_csv_copies$identical)} differing: ",
+    "{paste(unique(d_csv_copies$cruise_key[!d_csv_copies$identical]), collapse = ', ')})"))
+  d_csv_copies |>
+    transmute(cruise_key, path_unzip, identical, read = keep,
+              reason = if_else(identical, "byte-identical copy: shortest path read", reason)) |>
+    arrange(cruise_key, path_unzip) |>
+    dt(caption = paste(
+      "Archives holding the same CTD file twice: the copy read, the copy skipped",
+      "(differing copies resolved by CTD_COPY_PREFER)"),
+      fname = "ctd_files_copies_resolved")
+  d_csv <- d_csv |>
+    filter(!path_unzip %in% d_csv_copies$path_unzip[!d_csv_copies$keep])
+}
+stopifnot(
+  "one file per (cruise, archive, file stem) after resolving copies" =
+    !any(duplicated(d_csv[c("cruise_key", "dir_unzip", "file_stem")])))
+
 # Every cruise must keep a downcast. [ctd_thin] takes one direction per physical
 # cast and prefers D, so a cruise with no D produces no thin rows and therefore
 # no `obs` — and because write_parquet_outputs() DELETES a partition that has
@@ -1343,6 +1419,41 @@ d_bind <- d_bind |>
     )
   )
 
+# --- a cast's direction is its Cast_ID's, not its file's ---------------------
+# The downcast files of 1604SH and 2105SH carry seven UPcasts (1604_003u, _034u,
+# _042u, _082u, _099u; 2105_019u, _043u: 1,756 rows), each the only cast of its
+# occupation and each byte-for-byte the same rows as in the U file. Tagged with the
+# file's direction they kept a `cast_dir` of D, so [dedup_ctd_raw] (which keys on
+# cast_dir) never matched them to their U-file twins and every one reached obs and
+# obs_ctd_full twice under the same sample_key (CalCOFI/workflows#131 item 5:
+# 75,310 duplicated keys in v2026.10.01). Take the direction from the Cast_ID's last letter; drop
+# a mis-filed row whose twin sits in the file of its own direction, and re-tag one
+# that has no twin so nothing is lost.
+id_dir <- toupper(str_extract(d_bind$cast_id, "[dDuU]$"))
+i_misdir <- which(!is.na(id_dir) & id_dir != d_bind$cast_dir)
+if (length(i_misdir) > 0) {
+  d_misdir <- d_bind[i_misdir, c("cruise_key", "_source_file", "cast_id", "depth", "date_time_utc")]
+  # only the rows of the same casts: the whole frame is ~30M scans
+  i_same   <- setdiff(which(d_bind$cast_id %in% unique(d_misdir$cast_id)), i_misdir)
+  ok_dir   <- d_bind[i_same, c("cruise_key", "cast_id", "depth", "date_time_utc")]
+  has_twin <- vctrs::vec_in(d_misdir[c("cruise_key", "cast_id", "depth", "date_time_utc")], ok_dir)
+  d_misdir |>
+    mutate(twin = has_twin) |>
+    group_by(cruise_key, file = basename(`_source_file`), cast_id) |>
+    summarize(n_rows = n(), n_dropped_twin = sum(twin), n_retagged = sum(!twin),
+              .groups = "drop") |>
+    dt(caption = paste(
+      "Casts filed under the wrong direction: a row whose twin is in the file of its",
+      "Cast_ID's direction is dropped, one without a twin takes that direction"),
+      fname = "ctd_casts_wrong_direction_file")
+  say(glue("casts filed under the wrong direction: {n_distinct(d_misdir$cast_id)} casts, ",
+           "{sum(has_twin)} rows dropped as twins, {sum(!has_twin)} re-tagged"))
+  d_bind$cast_dir[i_misdir[!has_twin]] <- id_dir[i_misdir[!has_twin]]
+  if (any(has_twin)) d_bind <- d_bind[-i_misdir[has_twin], ]
+  rm(d_misdir, ok_dir, has_twin, i_same)
+}
+rm(id_dir, i_misdir)
+
 # normalize raw coordinate column names (CalCOFI CTD CSV ships Lon_Dec/Lat_Dec ->
 # clean_names lon_dec/lat_dec) to the canonical dictionary names used downstream
 d_bind <- d_bind |>
@@ -1485,6 +1596,59 @@ if (nrow(d_trunc_fix) > 0) {
 } else say("no truncated station numbers found")
 rm(sta_num, line_num, i_cand)
 
+# --- a line number the provider wrote wrong: an explicit override per cast ------
+# 2204SH casts 094 and 095 (both directions) write `Sta_ID` 066.3 070.0 / 066.3 060.0,
+# but the ship sat 0.6 km and 0.2 km from 063.3 070.0 / 063.3 060.0 and 66 km from the
+# stations as written, between casts 093 (063.3 080.0) and 096 (063.3 055.0) of the same
+# line. The distance filter dropped both casts whole (199 bottle values; CalCOFI/
+# workflows#131 item 2). Unlike the truncation above this is not a pattern to detect, so
+# it is keyed on cruise + cast and still confirmed by the cast's own median position: an
+# override whose position no longer agrees stops the render, and one that matches no
+# scan (the provider re-issued the file) is reported and does nothing. The question to
+# the provider stays open (questions.csv Q43).
+CTD_STATION_OVERRIDE <- tibble::tribble(
+  ~cruise_key, ~cast_base,  ~line_as_written, ~line_repaired, ~question,
+  "2204SH",    "2204_094",  66.3,             63.3,           "calcofi_ctd-cast_43",
+  "2204SH",    "2204_095",  66.3,             63.3,           "calcofi_ctd-cast_43")
+cast_base_all <- str_remove(d_bind$cast_id, "[dDuU]$")
+d_sta_fix <- purrr::pmap_dfr(CTD_STATION_OVERRIDE, function(cruise_key, cast_base, line_as_written,
+                                                            line_repaired, question) {
+  i <- which(d_bind$cruise_key == cruise_key & cast_base_all == cast_base &
+               abs(suppressWarnings(as.numeric(d_bind$line)) - line_as_written) < 1e-6)
+  if (!length(i)) return(tibble(cruise_key, cast_base, n_scans = 0L))
+  sta <- unique(suppressWarnings(as.numeric(d_bind$sta[i])))
+  ok  <- d_bind$longitude[i] > -180 & d_bind$latitude[i] > -90
+  lon <- median(d_bind$longitude[i][ok]); lat <- median(d_bind$latitude[i][ok])
+  xy_w <- sf_project(from = "+proj=calcofi", to = "+proj=longlat +datum=WGS84",
+                     pts = cbind(line_as_written, sta))
+  xy_r <- sf_project(from = "+proj=calcofi", to = "+proj=longlat +datum=WGS84",
+                     pts = cbind(line_repaired, sta))
+  r <- pi / 180
+  km <- function(x, y) 2 * 6371.0088 * asin(sqrt(sin((y - lat) * r / 2)^2 +
+    cos(lat * r) * cos(y * r) * sin((x - lon) * r / 2)^2))
+  km_written <- km(xy_w[, 1], xy_w[, 2]); km_repaired <- km(xy_r[, 1], xy_r[, 2])
+  if (length(sta) != 1 || !(km_repaired <= CTD_TRUNC_KM && km_written > CTD_TRUNC_KM))
+    stop(glue("station override {cruise_key} {cast_base}: the cast's median position does ",
+              "not confirm line {line_repaired} (km as written {round(km_written, 1)}, ",
+              "repaired {round(km_repaired, 1)}). Re-check the source before overriding."))
+  d_bind$line[i]   <<- if (is.character(d_bind$line)) sprintf("%05.1f", line_repaired) else line_repaired
+  d_bind$sta_id[i] <<- sprintf("%05.1f %05.1f", line_repaired, sta)
+  tibble(cruise_key, cast_base, line_as_written, line_repaired, sta, n_scans = length(i),
+         km_as_written = km_written, km_repaired = km_repaired, question)
+})
+rm(cast_base_all)
+if (sum(d_sta_fix$n_scans) > 0) {
+  say(glue("line numbers repaired by override: {sum(d_sta_fix$n_scans > 0)} cast(s), ",
+           "{format(sum(d_sta_fix$n_scans), big.mark = ',')} scans"))
+  dt(d_sta_fix, caption = paste(
+    "Line numbers the source wrote wrong, repaired per cast where the cast's median",
+    "position confirms the repair (CTD_STATION_OVERRIDE; CalCOFI/workflows#131)"),
+    fname = "ctd_station_override_repaired")
+}
+if (any(d_sta_fix$n_scans == 0))
+  say(glue("station override matched no scan (source re-issued?): ",
+           "{paste(d_sta_fix$cast_base[d_sta_fix$n_scans == 0], collapse = ', ')}"))
+
 d_bind <- d_bind |>
   mutate(
     is_lnsta_pseudoNA = ifelse(
@@ -1558,6 +1722,92 @@ d_bind <- d_bind |>
 
 stopifnot(sum(is.na(d_bind$longitude)) == 0)
 stopifnot(sum(is.na(d_bind$latitude)) == 0)
+
+# --- a cast is on station as a whole: its MEDIAN position decides --------------
+# Until #131 the distance filter tested every scan, so a scan whose GPS fix glitched
+# (2404SH: 674 scans on 143 casts, lat 226 or lon -245 in the middle of an otherwise
+# steady cast; 626 of them beyond 10 km) was dropped with its measurements, 11 bottles
+# among them, and a cast was kept piecewise; the 48 within 10 km were published at
+# the glitched position. Now the cast's median position is tested: a cast
+# within CTD_TRUNC_KM (the filter's 10 km) of its station keeps EVERY scan, and a
+# scan more than CTD_GLITCH_DEG from that median keeps its measurements and takes
+# the cast's median position. A cast whose median fails (truly off station, or a GPS
+# feed corrupt on most scans, as on several 0310NH / 0711NH casts) falls back to the
+# per-scan test in [filter_pts], so it keeps exactly what it kept before.
+#
+# CTD_OFF_STATION_KEEP: a real occupation off its station is not a position error.
+# 2504SH cast 045 (both directions) sits 11.0 km from nominal 083.3 039.4 on a steady
+# GPS track (scans within 0.05 km of each other); GEBCO gives 45 m at the recorded
+# position and 24 m at the nominal one, and the cast reached 32 m, so it cannot have
+# been at the nominal position. It keeps its true position and its nominal station
+# (site_key 083.3 039.4); the distance is listed in the table below.
+CTD_GLITCH_DEG <- 0.05
+CTD_OFF_STATION_KEEP <- tibble::tribble(
+  ~cruise_key, ~cast_base, ~max_km, ~reason,
+  "2504SH",    "2504_045", 12,      paste(
+    "11.0 km off 083.3 039.4 on a steady GPS track; 32 m cast where GEBCO is 24 m at",
+    "the nominal position and 45 m at the recorded one (CalCOFI/workflows#131)"))
+
+cast_gid <- as.integer(vctrs::vec_group_id(d_bind[c("_source_file", "cast_id", "line", "sta")]))
+d_cast_pos <- tibble(gid = cast_gid, lon = d_bind$longitude, lat = d_bind$latitude,
+                     lon_lnst = d_bind$lon_lnst, lat_lnst = d_bind$lat_lnst) |>
+  group_by(gid) |>
+  summarize(lon_med = median(lon), lat_med = median(lat),
+            lon_lnst = first(lon_lnst), lat_lnst = first(lat_lnst), n_scans = n(),
+            .groups = "drop") |>
+  arrange(gid)
+stopifnot("cast groups numbered 1..n" = all(d_cast_pos$gid == seq_len(nrow(d_cast_pos))))
+d_cast_pos$cruise_key <- d_bind$cruise_key[match(d_cast_pos$gid, cast_gid)]
+d_cast_pos$cast_id    <- d_bind$cast_id[match(d_cast_pos$gid, cast_gid)]
+d_cast_pos <- d_cast_pos |>
+  mutate(
+    cast_base = str_remove(cast_id, "[dDuU]$"),
+    km_cast = {
+      r <- pi / 180
+      2 * 6371.0088 * asin(sqrt(sin((lat_lnst - lat_med) * r / 2)^2 +
+        cos(lat_med * r) * cos(lat_lnst * r) * sin((lon_lnst - lon_med) * r / 2)^2))
+    }) |>
+  left_join(CTD_OFF_STATION_KEEP |> select(cruise_key, cast_base, max_km),
+            by = c("cruise_key", "cast_base")) |>
+  mutate(
+    is_off_station_kept = !is.na(km_cast) & km_cast > CTD_TRUNC_KM &
+      !is.na(max_km) & km_cast <= max_km,
+    is_on_station = !is.na(km_cast) & (km_cast <= CTD_TRUNC_KM | is_off_station_kept))
+
+# an off-station allowance that no longer applies is a stale key, not a no-op
+off_unused <- anti_join(CTD_OFF_STATION_KEEP,
+                        d_cast_pos |> filter(is_off_station_kept), by = c("cruise_key", "cast_base"))
+if (nrow(off_unused) > 0)
+  stop(glue("CTD_OFF_STATION_KEEP matches no off-station cast: ",
+            "{paste(off_unused$cruise_key, off_unused$cast_base, collapse = '; ')}"))
+d_cast_pos |>
+  filter(is_off_station_kept) |>
+  transmute(cruise_key, cast_id, lon_med, lat_med, km_from_station = round(km_cast, 2), n_scans) |>
+  dt(caption = "Casts kept off their nominal station (CTD_OFF_STATION_KEEP)",
+     fname = "ctd_casts_off_station_kept")
+
+d_bind$is_cast_on_station <- d_cast_pos$is_on_station[cast_gid]
+i_glitch <- which(
+  d_bind$is_cast_on_station &
+    pmax(abs(d_bind$longitude - d_cast_pos$lon_med[cast_gid]),
+         abs(d_bind$latitude  - d_cast_pos$lat_med[cast_gid])) > CTD_GLITCH_DEG)
+if (length(i_glitch) > 0) {
+  tibble(cruise_key = d_bind$cruise_key[i_glitch], cast_id = d_bind$cast_id[i_glitch],
+         depth = d_bind$depth[i_glitch]) |>
+    group_by(cruise_key) |>
+    summarize(n_casts = n_distinct(cast_id), n_scans = n(), .groups = "drop") |>
+    dt(caption = glue(
+      "GPS glitches: scans more than {CTD_GLITCH_DEG} deg from their on-station cast's ",
+      "median position, kept with the cast's median position"),
+      fname = "ctd_scans_gps_glitch")
+  say(glue("GPS-glitch scans given their cast's median position: ",
+           "{format(length(i_glitch), big.mark = ',')} on ",
+           "{n_distinct(cast_gid[i_glitch])} cast(s)"))
+  d_bind$longitude[i_glitch] <- d_cast_pos$lon_med[cast_gid[i_glitch]]
+  d_bind$latitude[i_glitch]  <- d_cast_pos$lat_med[cast_gid[i_glitch]]
+}
+write_rds(d_cast_pos, glue("{dir_tmp}/d_cast_position.rds"))
+rm(cast_gid, i_glitch)
 
 d_bind |>
   filter(is_lon_pseudoNA | is_lat_pseudoNA) |>
@@ -1740,6 +1990,12 @@ mapView(bb_badcr) +
 
 ```{r}
 #| label: filter_pts
+
+# a scan stays when its CAST is on station ([fill_lonlat]: median position, glitches
+# repositioned) or, for a cast whose median fails, when the scan itself is within the
+# cutoff (the pre-#131 rule, so a cast with a GPS feed corrupt on most scans keeps what
+# it kept). is_dist_dec_lnst_within_max is folded into that verdict here.
+pts$is_dist_dec_lnst_within_max <- pts$is_cast_on_station | pts$is_dist_dec_lnst_within_max
 
 d_pts_cruise_filt_smry <- pts |>
   group_by(cruise_key) |>
@@ -1926,6 +2182,7 @@ d_filt <- d_filt |>
       "lat_lnst",
       "dist_dec_lnst_km",
       "is_dist_dec_lnst_within_max",
+      "is_cast_on_station",
       "grid_site"
     ))
   )
@@ -1980,6 +2237,32 @@ cat(glue(
   "duplicate-position rows ",
   "({round(100 * (n_before - n_after) / max(n_before, 1), 1)}%); ",
   "{format(n_after, big.mark = ',')} rows remain"), "\n")
+
+# --- no (cast, depth) twice after reading -------------------------------------
+# A scan is one (cast, depth): two rows there become two values of every type under
+# one obs key. dedup above only collapses rows that agree on cast_dir AND time, so
+# a second copy that writes either differently survives it (2204SH's two exports,
+# the mis-filed upcasts of 1604SH/2105SH: CalCOFI/workflows#131). Those are fixed in
+# [d_csv] and [d_bind]; these cruises still hold a cast twice for reasons not yet
+# resolved, each a separate defect counted in [emit_core]'s ratchet
+# (CTD_DUP_SCAN_MAX). Any other cruise with a twice-read scan stops the render.
+CTD_DUP_SCAN_CRUISES <- c(
+  "1501NH",  # db_csv/dualTCO/ re-processes casts 001-064 beside the 001-100 file
+  "9510NH",  # db_csvs/GoerickeExtraCasts/ reuses cast numbers 005-061 for other casts
+  "9504NH",  # db_csvs/RalfCasts/ reuses cast numbers 010-032 for other casts
+  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH")
+d_dup_scan <- dbGetQuery(con, "
+  SELECT cruise_key, COUNT(*) AS n_dup_scans, COUNT(DISTINCT cast_key) AS n_casts
+  FROM (SELECT cruise_key, cast_key, depth_m FROM ctd_raw GROUP BY ALL HAVING COUNT(*) > 1)
+  GROUP BY 1 ORDER BY 2 DESC")
+if (nrow(d_dup_scan) > 0)
+  dt(d_dup_scan, caption = "Scans read twice: (cruise, cast, depth) on more than one row",
+     fname = "ctd_dup_scans")
+dup_new <- setdiff(d_dup_scan$cruise_key, CTD_DUP_SCAN_CRUISES)
+if (length(dup_new) > 0)
+  stop(glue(
+    "(cast, depth) read twice in {paste(dup_new, collapse = ', ')}: a second copy of ",
+    "these casts reached ctd_raw. Resolve it in [d_csv] (CTD_COPY_PREFER) or [d_bind]."))
 ```
 
 ```{r}
@@ -2487,6 +2770,22 @@ ctd_bounds <- tibble::tribble(
   "spar",                  -100,       5000)
 d_meas_type <- calcofi4db::declare_measurement_bounds(
   ctd_bounds, here("metadata/measurement_type.csv"))
+
+# --- the bottle pigments take the bottle database's floors ---------------------
+# btl_chlorophyll_a and btl_phaeopigment carried valid_min = 0, which removed 261
+# small negative provider values over 2021-07 to 2025-04 (CalCOFI/workflows#131
+# item 4): mostly -0.001 to -1.5, a fluorometric reading near zero, which is real,
+# not impossible. A bound is a sentinel guard, not the test of "valid". The same
+# quantities in calcofi_bottle (chlorophyll_a, phaeopigment) are declared with
+# floors of -1 and -5, so these take those floors (decided for #131, 2026-10-04); -99 is still
+# removed as the sentinel above and anything below a floor still falls.
+# overwrite = TRUE: this deliberately replaces the declared 0.
+d_meas_type <- calcofi4db::declare_measurement_bounds(
+  tibble::tribble(
+    ~measurement_type,   ~valid_min, ~valid_max,
+    "btl_chlorophyll_a",         -1,        100,
+    "btl_phaeopigment",          -5,        100),
+  here("metadata/measurement_type.csv"), overwrite = TRUE)
 
 bounds_pre <- check_measurement_bounds(
   con, "ctd_measurement", mt = d_meas_type)
@@ -4363,6 +4662,34 @@ if (build_obs_ctd_full) {
   stopifnot(
     "obs_ctd_full must inherit the bounds guard applied to ctd_measurement" =
       sum(b_full$status == "out_of_range") == 0)
+
+  # --- duplicated keys: a ratchet that only goes down (CalCOFI/workflows#131) ---
+  # A (sample, depth) holding more rows than measurement types is a scan read twice,
+  # which a consumer sees as two values under one key. v2026.10.01 had 78,344 such
+  # scans in 2022-04 (two exports), 1,756 in 2016-04 / 2021-05 (mis-filed upcasts),
+  # all fixed upstream, and the cruises below for reasons still open (see
+  # CTD_DUP_SCAN_CRUISES in [dedup_ctd_raw]). Counts measured on v2026.10.01's
+  # obs_ctd_full; lower them as each is resolved, never raise them.
+  CTD_DUP_SCAN_MAX <- c(
+    "2015-01-32NM" = 43253, "1995-10-32NM" = 2189, "1995-04-32NM" = 807,
+    "2020-07-33P4" =   177, "2003-02-31JD" =   11, "2002-04-31JD" =   4,
+    "1995-07-31JD" =     2, "2023-07-33P4" =    1, "2005-01-32NM" =   1,
+    "2006-04-32NM" =     1)
+  d_dup_full <- dbGetQuery(con, "
+    SELECT cruise_key, COUNT(*) AS n_dup_scans
+    FROM (SELECT cruise_key, sample_key, depth_min_m FROM obs_ctd_full GROUP BY ALL
+          HAVING COUNT(*) > COUNT(DISTINCT measurement_type))
+    GROUP BY 1 ORDER BY 2 DESC") |>
+    mutate(n_max = coalesce(unname(CTD_DUP_SCAN_MAX[cruise_key]), 0))
+  cat(glue("obs_ctd_full scans held twice: ",
+           "{format(sum(d_dup_full$n_dup_scans), big.mark = ',')} in ",
+           "{nrow(d_dup_full)} cruise(s)"), "\n")
+  d_dup_over <- d_dup_full |> filter(n_dup_scans > n_max)
+  if (nrow(d_dup_over) > 0)
+    stop(glue(
+      "obs_ctd_full holds a scan twice beyond CTD_DUP_SCAN_MAX: ",
+      paste(glue("{d_dup_over$cruise_key} {d_dup_over$n_dup_scans} > {d_dup_over$n_max}"),
+            collapse = "; ")))
 } else {
   cat("obs_ctd_full skipped (BUILD_OBS_CTD_FULL=FALSE)\n")
 }

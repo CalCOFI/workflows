@@ -149,6 +149,14 @@ Rscript scripts/build_workflows_index.R
 - Every `sample_key` is `dataset_key:sample_type:id`; `grid_key` / `cruise_key`
   stay denormalized on `obs`; `hex_id` is H3 res 10 on `obs`, aggregate with
   `h3_cell_to_parent()`; `geom` lives on `sample`, never on `obs`.
+- **A `grid_key` is the cell a position falls in, never a name carried over.**
+  The grid is one cell per official station beside the previous cells kept as
+  they were (`calcofi4r::cc_grid`, built by `cc_grid_build()`);
+  `assign_grid_key()` and `cc_grid_key()` are the one rule
+  (planar intersects; on a shared edge the key that sorts first);
+  `check_grid_key_assignment()` stops a release whose keys were staged against
+  another grid, and a key from a release through v2026.10.01 maps through
+  `grid_crosswalk`, never by name.
 - `*_id` = integer key, `*_key` = string natural key, `*_seq` = sequence; a
   character identifier is `_key`. Measurements are tidy long
   (`measurement_type` / `measurement_value` / `measurement_qual`); records lacking
@@ -169,9 +177,10 @@ Rscript scripts/build_workflows_index.R
   every series the fix can touch — a dry run that leaves a series out of its
   breakdown is not a dry run (`measurement-bounds` skill).
 - **One `climatology` table for every anomaly** (`build_climatology()`:
-  1993–2013, dataset × `grid_key` × calendar month × 10 m bin × type, ≥ 3
-  cruises). Month-matched always; pass an explicit color ramp, Plotly's `"RdBu"`
-  runs blue → red.
+  1993–2013, dataset × station (`site_key`, with `grid_key` as the station's
+  modal cell) × calendar month × 10 m bin × type, ≥ 5 cruises in the release).
+  Month-matched always; pass an explicit color ramp, Plotly's `"RdBu"` runs
+  blue → red.
 
 ## Cruise keys and provider ids — `cruise-key` skill
 
