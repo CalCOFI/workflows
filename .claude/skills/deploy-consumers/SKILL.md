@@ -54,8 +54,51 @@ or unauthorized on the machine cutting the release:
 ```bash
 gh workflow run refresh.yml     --ref main -R CalCOFI/db-viz-station   # coverage JSON
 gh workflow run refresh.yml     --ref main -R CalCOFI/ctd-transects    # section shards
+gh workflow run refresh.yml     --ref main -R CalCOFI/CalCOFI.github.io # calcofi.io: datasets, measurements, species
 gh workflow run render_book.yml --ref main -R CalCOFI/docs             # the docs book
 ```
+
+**calcofi.io is a release consumer too** (`CalCOFI/CalCOFI.github.io`, Jekyll). Its
+`scripts/fetch_release.sh` pulls the promoted release's `datasets.json`, `measurements.json`
+and `taxa.json`, and `_plugins/{datasets,measurements,species}.rb` draw `/datasets/`,
+`/measurements/` and `/species/` from those and nothing else. It followed a promotion only
+through `test_release.qmd`'s `gh_dispatch` table and a Monday cron until the dispatch was
+added to step 6; a dispatch that only fires says "dispatched" even when the run goes red.
+
+**Step 6b verifies it.** The script polls the live `/data.json`, `/measurements/` and
+`/species/` (cache-busted, up to ~12 min each) and requires the promoted version string on
+every one; a page that never shows it makes the script **exit 1** after printing step 7.
+The check reads the live site, so it needs no secret. If it fails: `gh run list -R
+CalCOFI/CalCOFI.github.io -L 3`, then `gh run view <id> --log-failed`.
+
+### Step 7: the media (manual, printed by the script, never run by it)
+
+The species faces (`taxa_media.json`) and the measurement faces
+(`measurements_media.json` + the ChEBI structures) are **not release content**: they are
+fetched from public services into `gs://calcofi-files-public/{species,measurement}-media/`,
+one copy for every release. Both GitHub workflows (`species-media.yml`,
+`measurement-media.yml`) are `if: false` for want of a `GCP_SA_KEY` secret, so after a
+release that adds taxa or measurement keys a person runs, from `../CalCOFI.github.io`, on a
+machine whose `gcloud` is the calcofi-admin account:
+
+```bash
+scripts/fetch_release.sh                      # taxa.json + measurements.json of the promoted release
+scripts/fetch_species_media.py                # warm cache: only the new taxa (cold: ~1.2 h)
+scripts/check_species_media.py                # the gate, before the bucket
+scripts/fetch_species_media.py --upload
+.venv-media/bin/python scripts/fetch_measurement_faces.py   # venv: requirements-media.txt
+python3 scripts/check_measurement_faces.py
+.venv-media/bin/python scripts/fetch_measurement_faces.py --upload
+gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io   # Jekyll reads both sidecars at build
+```
+
+Skipping step 7 is silent: the site builds, a new species draws no face and a new
+measurement key no structure, exactly as the page did before. Release-side registry rows
+(`metadata/measurement_{face,why,method,chem,scale}.csv`) reach the site through
+`measurements.json`, so author them **before** the release is cut; the pages only draw keys
+whose values sit in `obs_env` (`build_measurements_catalog()` reads nothing else), so the
+per-cast, `obs_bio` and attribute types appear on `/datasets/` pages but have no
+`/measurements/` page.
 
 **The docs book is a release consumer, and the least obvious one.** `CalCOFI/docs`
 renders through `libs/pre-render.R`, which snapshots the **promoted** release's

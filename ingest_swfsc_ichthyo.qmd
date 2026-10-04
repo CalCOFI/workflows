@@ -270,6 +270,36 @@ species rows) is order-independent — it only appends to `species`.
 apply_data_corrections(con, verbose = TRUE)
 ```
 
+### Cruises SWFSC moved back to staging (Q09)
+
+SWFSC's Ed Weber (2026-09-25, `swfsc_ichthyo_09`): cruises **198202JD** and **198212JD**
+(`1982-02-31JD`, `1982-12-31JD`) are partially sorted and "have been moved back to the staging
+schema", so they are **not part of the source**; every other tow without a row is a true zero and
+stays in the denominator. The 2026-09-26 export (`Cruise.csv` 694 rows) no longer contains them. The
+v2026.10.01 release was built from the earlier export and still carried them (1,128 sites, 1,112
+tows, 1,145 nets, 1,100 `obs` rows, all `abundance`, of which 1,055 on 1982-02 and 45 on
+1982-12). This chunk is the explicit exclusion: it stops the render if an export that still holds
+either cruise is read, rather than letting a partially sorted cruise be counted as zero catch.
+
+```{r}
+#| label: exclude_staging_cruises
+
+# Q09: no row of these cruises may survive into the ingest. They are removed at
+# the source (SWFSC), so the check is on what was LOADED, before any key is minted.
+q09_cruises <- tibble::tribble(
+  ~ship_key, ~date_ym,        ~cruise,
+  "JD",      "1982-02-01",    "198202JD",
+  "JD",      "1982-12-01",    "198212JD")
+q09_in <- paste0("('", q09_cruises$ship_key, "', '", q09_cruises$date_ym, "')", collapse = ", ")
+n_q09  <- dbGetQuery(con, glue("
+  SELECT COUNT(*) FROM cruise
+  WHERE (ship_key, CAST(date_ym AS VARCHAR)) IN ({q09_in})"))[[1]]
+stopifnot(
+  "cruises 198202JD / 198212JD are in the source export: SWFSC moved them back to staging (swfsc_ichthyo_09, 2026-09-25); re-sync the 2026-09-26 or later export" =
+    n_q09 == 0)
+cat(glue("Q09: {nrow(q09_cruises)} staging cruises ({paste(q09_cruises$cruise, collapse = ', ')}) absent from the source export"), "\n")
+```
+
 ### Create cruise_key (natural key)
 
 The cruise_key is a natural key in format YYYY-MM-NODC (4-digit year + 2-digit month + NODC ship code).

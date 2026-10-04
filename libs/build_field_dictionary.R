@@ -258,6 +258,26 @@ fd <- tribble(
          "compare with depth_max_m, allowing for the ~460 m GEBCO cell and minute-rounded historical positions."),
   "", "", FALSE, "release-derived; not an ingest field",
 
+  # H3 cells (hex7 on sample / sample_root: Ben, 2026-10-02; hex_id had no row until then)
+  "hex_id", "UBIGINT", "", "spatial",
+  paste0("H3 cell of the row's position at resolution 10 (calcofi4db CC_H3_RES_MAX), as an unsigned ",
+         "64-bit integer; NULL where the position is missing or not finite. Coarser hexagons are ",
+         "h3_cell_to_parent(hex_id, res), or calcofi4db::h3_parent_sql() without the h3 extension."),
+  "", "", FALSE,
+  "on obs, obs_bio, obs_env, obs_ctd_full, obs_mets_full; computed by calcofi4db::append_obs() at ingest.",
+
+  "hex7", "UBIGINT", "", "spatial",
+  paste0("H3 cell at resolution 7 that is the PARENT of the resolution-10 cell (hex_id) of the row's ",
+         "own position; NULL where the position is missing or not finite. Not the resolution-7 cell ",
+         "the position falls in: H3 cells do not nest exactly, and the two differ near every cell ",
+         "edge. One definition on every table that carries it, so an observation and a sampling ",
+         "event at the same position share a hexagon."),
+  "", "", FALSE,
+  paste0("release-derived; not an ingest field. On obs_bio and obs_env (the observation's position, ",
+         "calcofi4db::build_obs_slim()) and on sample and sample_root (the event's position, ",
+         "calcofi4db::add_sample_hex7() carried by build_sample_root()); gated by check_sample_hex7(). ",
+         "A CTD scan or DIC draw can sit in another cell than its cast: join on the key, not the cell."),
+
   "date_min", "DATE", "", "temporal",
   paste0("First event date observed for a cruise (from its own tows); with date_max the span ",
          "calcofi4db::resolve_cruise_key() matches events against."),

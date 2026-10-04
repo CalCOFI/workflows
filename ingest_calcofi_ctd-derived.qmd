@@ -10,8 +10,9 @@ calcofi:
   dataset: ctd-derived
   workflow_url: https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html
   questions_file: metadata/calcofi/ctd-derived/questions.csv
-  # in the release: Ben (2026-09-23) decided to build with the current defaults and
-  # tweak them once Rasmus answers Q01-Q05, so nothing here is a blocker
+  # in the release: Ben (2026-09-23) decided to build with the current defaults;
+  # Q01, Q02 and Q05 are answered and applied (2026-10-01), Q03/Q04 (geostrophic,
+  # not released) are still proposed, so nothing here is a blocker
   in_release: true
   dataset_meta:
     dataset_name: CalCOFI CTD Derived Hydrographic Products
@@ -21,10 +22,13 @@ calcofi:
   # publishes no `sample`: every row hangs off the calcofi_ctd-cast cast it was
   # computed from, so the cast keeps ONE sample row (sample_key is globally unique
   # across shards and a second copy would fail assemble_core())
+  # the tables the RELEASE carries (datasets.json `tables`). ctd_geostrophic is
+  # computed and staged here but release_database.qmd does not publish it while its
+  # shelf-pair speeds are under review (questions Q03, Q04; CalCOFI/workflows#103),
+  # so it is not listed: a listed table is a promise to a reader
   tables_owned:
     - {table: obs, shared: true, note: "per-bin spiciness0 + sigma_theta_ave at the depths calcofi_ctd-cast publishes in obs"}
-    - {table: sample_measurement, shared: true, note: "per-cast mixed-layer depth (3 criteria), chlorophyll-a maximum, integrated chlorophyll-a"}
-    - {table: ctd_geostrophic, note: "relative geostrophic velocity between adjacent stations, per cruise and line, 10 dbar bins"}
+    - {table: sample_measurement, shared: true, note: "per-cast mixed-layer depth (the provider's sigma-theta 0.02 kg/m3 from 10 m, plus the 0.125 and temperature 0.2 alternatives), depth of the chlorophyll-a maximum (3 m running mean), integrated chlorophyll-a (sum of the 1 m bins, 0-200 m)"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#cfe8dc"
@@ -46,12 +50,19 @@ product (#99–#103); the prototype on one cruise was
 - **Source**: the `calcofi_ctd-cast` ingest's full-resolution 1 m bins
   (`obs_ctd_full`), read from its staged output when that is current, otherwise
   from the release — see [Input](#input).
-- **Every rule is a tested calcofi4db function** (≥ 4.16.0): `ctd_spice()`,
+- **Every rule is a tested calcofi4db function** (the first version after 4.17.2,
+  which carries the provider's definitions): `ctd_spice()`,
   `ctd_sigma_theta_ave()`, `ctd_mld()`, `ctd_chl_max()`, `ctd_integrate()`,
   `ctd_geostrophic()`. This notebook only applies them.
-- **Defaults are provisional**: Ben (2026-09-23) decided to build with the current
-  defaults and tweak once Rasmus answers — the five open choices are
-  [Questions](#questions-for-data-providers) Q01–Q05.
+- **The headline definitions are the provider's** (Rasmus Swalethorp, 2026-09-23;
+  adopted 2026-10-01, [Questions](#questions-for-data-providers) Q01, Q02): the
+  mixed-layer depth is where sigma-theta is 0.02 kg m⁻³ greater than at 10 m
+  (`mld_sigma_theta_002`), the depth of the chlorophyll-a maximum is the highest
+  value of a 3 m running mean, and integrated chlorophyll-a is the sum of the 1 m
+  bins over the top 200 m. The interim headline MLD of v2026.10.01
+  (`mld_sigma_theta_003`, Δσθ 0.03) is retired; the 0.125 and temperature 0.2 °C
+  criteria are kept beside the headline. The geostrophic choices (Q03, Q04) are
+  still open, so `ctd_geostrophic` is staged but not released.
 
 ```{mermaid}
 graph LR
@@ -61,7 +72,7 @@ graph LR
   B --> E[per station pair:<br/>geostrophic velocity]
   C --> F[(obs, at the depths<br/>ctd-cast publishes)]
   D --> G[(sample_measurement<br/>on the ctd-cast cast)]
-  E --> H[(ctd_geostrophic)]
+  E --> H[(ctd_geostrophic<br/>staged, not released)]
 ```
 
 **The tier rule.** `final` and `preliminary_with_bottle` casts get every product.
@@ -82,7 +93,9 @@ options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 stopifnot(
   "calcofi4db >= 4.16.0 carries the ctd_* derived-product rules" =
-    exists("ctd_geostrophic", mode = "function"))
+    exists("ctd_geostrophic", mode = "function"),
+  "calcofi4db with the provider's definitions (ctd_integrate(method =), the 3 m mean) is needed" =
+    "method" %in% names(formals(ctd_integrate)) && formals(ctd_chl_max)$window_m == 3)
 
 source(here("libs/ingest.R"))
 cc <- read_calcofi_meta(here("ingest_calcofi_ctd-derived.qmd"))
@@ -99,17 +112,20 @@ dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 meas_type_csv <- here("metadata/measurement_type.csv")
 
-# the defaults awaiting Rasmus (questions Q01-Q05), in one place
+# the criteria, in one place. Q01 and Q02 are the provider's answers (Rasmus
+# Swalethorp 2026-09-23, adopted 2026-10-01); Q03 and Q04 are still proposed
 p <- list(
-  mld_ref_m   = 10,       # Q01
-  mld_sigma   = c(0.03, 0.125),
-  mld_temp    = 0.2,
-  chl_window  = 5,        # Q02
-  chl_z_max   = 200,
-  chl_top_max = 5,
-  geo_p_ref   = 500,      # Q03
-  geo_min_dx  = 10,       # Q04
-  geo_bin     = 10)
+  mld_ref_m    = 10,      # Q01: "0.02 kg/m3 greater [than at] a reference depth of 10 m"
+  mld_sigma    = 0.02,    # Q01: the headline, mld_sigma_theta_002
+  mld_sigma_alt = 0.125,  # kept beside it (Levitus 1982), mld_sigma_theta_0125
+  mld_temp     = 0.2,     # the only MLD a preliminary_without_bottle cast can have
+  chl_window   = 3,       # Q02: "a 3 m running mean"
+  chl_z_max    = 200,     # Q02: "the top 200m or as deep as the station was"
+  chl_top_max  = 5,
+  chl_method   = "sum",   # Q02: "sum up all the 1m bins" (trapezoid is for bottles)
+  geo_p_ref    = 500,     # Q03
+  geo_min_dx   = 10,      # Q04
+  geo_bin      = 10)
 tier_full <- c("final", "preliminary_with_bottle")
 
 # a DuckDB memory ceiling sized to the machine (40 % of RAM, at most 8 GB) unless
@@ -314,19 +330,22 @@ for (ck in cruises) {
                 threshold = p$mld_temp, ref_depth = p$mld_ref_m) |>
           transmute(measurement_type = "mld_temperature_02", value = mld_m))
       if (is_full) {
+        # sigma_theta_ave is already flag-filtered: ctd_sigma_theta_ave() dropped an
+        # 8/9 sensor above, and a bin with both sensors flagged is NA (no qual to pass)
         out <- c(out, list(
           ctd_mld(x$depth_m, x$sigma_theta_ave, criterion = "sigma_theta",
-                  threshold = p$mld_sigma[1], ref_depth = p$mld_ref_m) |>
-            transmute(measurement_type = "mld_sigma_theta_003", value = mld_m),
+                  threshold = p$mld_sigma, ref_depth = p$mld_ref_m) |>
+            transmute(measurement_type = "mld_sigma_theta_002", value = mld_m),
           ctd_mld(x$depth_m, x$sigma_theta_ave, criterion = "sigma_theta",
-                  threshold = p$mld_sigma[2], ref_depth = p$mld_ref_m) |>
+                  threshold = p$mld_sigma_alt, ref_depth = p$mld_ref_m) |>
             transmute(measurement_type = "mld_sigma_theta_0125", value = mld_m)))
         if (any(!is.na(x$est_chlorophyll_a_sta_corr))) {
           cm <- ctd_chl_max(x$depth_m, x$est_chlorophyll_a_sta_corr,
                             x$q_est_chlorophyll_a_sta_corr, window_m = p$chl_window)
           ci <- ctd_integrate(x$depth_m, x$est_chlorophyll_a_sta_corr,
                               x$q_est_chlorophyll_a_sta_corr,
-                              z_max = p$chl_z_max, z_top_max = p$chl_top_max)
+                              z_max = p$chl_z_max, z_top_max = p$chl_top_max,
+                              method = p$chl_method)
           out <- c(out, list(tibble(
             measurement_type = c("chl_max_depth", "chl_max", "chl_integrated", "chl_integrated_depth"),
             value = c(cm$chl_max_depth_m, cm$chl_max_value, ci$integrated, ci$depth_reached_m))))
@@ -391,10 +410,23 @@ stopifnot(
 
 ## Register Measurement Types
 
-Nine types, registered with `register_measurement_types()` (append-only) and then
-bounded with `declare_measurement_bounds()`. **No bound is invented or taken from the
-data**: each is derived from a bound the registry already declares, or from a
+Nine published types plus one retired, written with `upsert_measurement_types()` (this
+ingest owns these rows: a re-render rewrites their description, units and
+`_source_datasets` from the literal below, and carries every bound and vocabulary id
+forward), then `declare_measurement_fields()` for the registry-owned `derivation` /
+`is_canonical`, then `declare_measurement_bounds()`. `_source_datasets` is the dataset
+that **publishes** the rows, `calcofi_ctd-derived`; the source series and table they are
+computed from are `_source_column` / `_source_table`. **No bound is invented or taken
+from the data**: each is derived from a bound the registry already declares, or from a
 constant the pipeline already enforces, and says which.
+
+**Definitions (questions Q01, Q02).** The headline MLD, `mld_sigma_theta_002`, is the
+provider's (Rasmus Swalethorp, 2026-09-23; adopted 2026-10-01). It is a new key, not the
+old one re-pointed: the v2026.10.01 headline `mld_sigma_theta_003` names its 0.03
+threshold, and a key that names a criterion it no longer holds would mislead every
+reader who has used it. That key is **retired**: its registry row stays, marked so, with
+`is_canonical = FALSE`, and nothing emits it. The chlorophyll keys name a quantity, not a
+criterion, so they keep their names and change their definition.
 
 ```{r}
 #| label: register-types
@@ -406,37 +438,52 @@ stopifnot(nrow(st1) == 1, nrow(chl) == 1, nrow(t_ave) == 1, nrow(s_ave) == 1)
 p06 <- function(tp) src_mt(tp)$units_nerc_p06
 
 new_types <- tribble(
-  ~measurement_type,      ~description, ~units, ~grain, ~category, ~units_nerc_p06, ~`_source_column`, ~derivation,
+  ~measurement_type,      ~description, ~units, ~grain, ~category, ~units_nerc_p06, ~`_source_column`, ~is_canonical, ~derivation,
   "spiciness0", "Spice (spiciness at 0 dbar, TEOS-10); positive spicy (warm, salty), negative minty", "kg/m3", "obs",
-    "Physical Oceanography", p06("sigma_theta_1"), "temperature_ave; salinity_ave_corr; pressure",
+    "Physical Oceanography", p06("sigma_theta_1"), "temperature_ave; salinity_ave_corr; pressure", TRUE,
     "calcofi4db::ctd_spice(): gsw_SA_from_SP, gsw_CT_from_t, gsw_spiciness0 (McDougall & Krzysik 2015) on the sensor-pair averaged corrected temperature and salinity; final and preliminary_with_bottle casts only",
   "sigma_theta_ave", "Potential density anomaly (sigma-theta), sensor-pair average by the provider's flags", "kg/m3", "obs",
-    "Physical Oceanography", p06("sigma_theta_1"), "sigma_theta_1; sigma_theta_2",
+    "Physical Oceanography", p06("sigma_theta_1"), "sigma_theta_1; sigma_theta_2", TRUE,
     "calcofi4db::ctd_sigma_theta_ave() = combine_sensor_pair() on sigma_theta_1/2: an 8/9-flagged sensor dropped, 1/2 select a sensor, else the mean; final and preliminary_with_bottle casts only",
-  "mld_sigma_theta_003", "Mixed-layer depth, sigma-theta increase of 0.03 kg/m3 from 10 m (de Boyer Montegut et al. 2004)", "m", "sample",
-    "Physical Oceanography", p06("bottom_depth"), "sigma_theta_ave",
-    "calcofi4db::ctd_mld(criterion = 'sigma_theta', threshold = 0.03, ref_depth = 10) on the 1 m bins; absent where the cast never crosses or does not reach 10 m (questions Q01)",
+  "mld_sigma_theta_002", "Mixed-layer depth: where sigma-theta is 0.02 kg/m3 greater than at 10 m (CalCOFI legacy definition)", "m", "sample",
+    "Physical Oceanography", p06("bottom_depth"), "sigma_theta_ave", TRUE,
+    "calcofi4db::ctd_mld(criterion = 'sigma_theta', threshold = 0.02, ref_depth = 10) on the 1 m bins, interpolated linearly between the bracketing bins; the provider's definition (Rasmus Swalethorp 2026-09-23, questions Q01): 'the depth at which sigma-theta is 0.02 kg/m3 greater [than at] a reference depth of 10 m'; absent where the cast never crosses or does not reach 10 m",
+  "mld_sigma_theta_003", "RETIRED: mixed-layer depth, sigma-theta increase of 0.03 kg/m3 from 10 m (de Boyer Montegut et al. 2004)", "m", "sample",
+    "Physical Oceanography", p06("bottom_depth"), "sigma_theta_ave", FALSE,
+    "RETIRED after v2026.10.01, no longer emitted: the interim headline MLD, superseded by mld_sigma_theta_002, the provider's definition (questions Q01). Was calcofi4db::ctd_mld(criterion = 'sigma_theta', threshold = 0.03, ref_depth = 10); still reproducible with that call",
   "mld_sigma_theta_0125", "Mixed-layer depth, sigma-theta increase of 0.125 kg/m3 from 10 m (Levitus 1982)", "m", "sample",
-    "Physical Oceanography", p06("bottom_depth"), "sigma_theta_ave",
-    "calcofi4db::ctd_mld(criterion = 'sigma_theta', threshold = 0.125, ref_depth = 10) on the 1 m bins (questions Q01)",
+    "Physical Oceanography", p06("bottom_depth"), "sigma_theta_ave", TRUE,
+    "calcofi4db::ctd_mld(criterion = 'sigma_theta', threshold = 0.125, ref_depth = 10) on the 1 m bins; an alternative criterion published beside the headline mld_sigma_theta_002 (questions Q01)",
   "mld_temperature_02", "Mixed-layer depth, temperature departure of 0.2 degC from 10 m (de Boyer Montegut et al. 2004)", "m", "sample",
-    "Physical Oceanography", p06("bottom_depth"), "temperature_ave",
-    "calcofi4db::ctd_mld(criterion = 'temperature', threshold = 0.2, ref_depth = 10) on the 1 m bins; the only MLD on preliminary_without_bottle casts (questions Q01)",
-  "chl_max_depth", "Depth of the chlorophyll-a maximum (5 m running median)", "m", "sample",
-    "Productivity & Pigments", p06("bottom_depth"), "est_chlorophyll_a_sta_corr",
-    "calcofi4db::ctd_chl_max(window_m = 5) on est_chlorophyll_a_sta_corr (questions Q02)",
-  "chl_max", "Chlorophyll-a at its maximum (5 m running median)", chl$units, "sample",
-    "Productivity & Pigments", chl$units_nerc_p06, "est_chlorophyll_a_sta_corr",
-    "calcofi4db::ctd_chl_max(window_m = 5): the smoothed value at chl_max_depth (questions Q02)",
-  "chl_integrated", "Chlorophyll-a integrated from the surface to 200 m (or the cast bottom)", "mg/m2", "sample",
-    "Productivity & Pigments", NA_character_, "est_chlorophyll_a_sta_corr",
-    "calcofi4db::ctd_integrate(z_max = 200, z_top_max = 5): trapezoid of est_chlorophyll_a_sta_corr (ug/L = mg/m3) over depth; chl_integrated_depth says how deep it reached (questions Q02)",
+    "Physical Oceanography", p06("bottom_depth"), "temperature_ave", TRUE,
+    "calcofi4db::ctd_mld(criterion = 'temperature', threshold = 0.2, ref_depth = 10) on the 1 m bins; needs no salinity, so the only MLD on preliminary_without_bottle casts; an alternative to the headline mld_sigma_theta_002 (questions Q01)",
+  "chl_max_depth", "Depth of the chlorophyll-a maximum (DCM): the highest value of a 3 m running mean", "m", "sample",
+    "Productivity & Pigments", p06("bottom_depth"), "est_chlorophyll_a_sta_corr", TRUE,
+    "calcofi4db::ctd_chl_max(window_m = 3) on est_chlorophyll_a_sta_corr: the depth of the highest value of a 3 m running mean (each 1 m bin with its neighbours, truncated at the ends of the profile); the provider's definition (Rasmus Swalethorp 2026-09-23, questions Q02)",
+  "chl_max", "Chlorophyll-a at its maximum: the 3 m running mean at chl_max_depth", chl$units, "sample",
+    "Productivity & Pigments", chl$units_nerc_p06, "est_chlorophyll_a_sta_corr", TRUE,
+    "calcofi4db::ctd_chl_max(window_m = 3): the 3 m running mean of est_chlorophyll_a_sta_corr at chl_max_depth (questions Q02)",
+  "chl_integrated", "Chlorophyll-a integrated over the top 200 m (or the cast bottom): the sum of the 1 m bins", "mg/m2", "sample",
+    "Productivity & Pigments", NA_character_, "est_chlorophyll_a_sta_corr", TRUE,
+    "calcofi4db::ctd_integrate(z_max = 200, z_top_max = 5, method = 'sum'): the sum of the 1 m bins of est_chlorophyll_a_sta_corr (ug/L = mg/m3) from the surface to 200 m or the deepest good bin; the provider's CTD rule (Rasmus Swalethorp 2026-09-23, questions Q02); a bin missing inside the profile is interpolated, the shallowest bin is carried to the surface when it is no deeper than 5 m, else absent; chl_integrated_depth says how deep it reached",
   "chl_integrated_depth", "Depth reached by chl_integrated (200 m unless the cast is shallower)", "m", "sample",
-    "Productivity & Pigments", p06("bottom_depth"), "est_chlorophyll_a_sta_corr",
+    "Productivity & Pigments", p06("bottom_depth"), "est_chlorophyll_a_sta_corr", TRUE,
     "calcofi4db::ctd_integrate(): min(200, deepest good bin) (questions Q02)") |>
-  mutate(is_canonical = TRUE, `_source_table` = "obs_ctd_full", `_source_datasets` = src_key,
+  mutate(`_source_table` = "obs_ctd_full", `_source_datasets` = ds_key,
          `_qual_column` = NA_character_, `_prec_column` = NA_character_)
-d_meas_type <- register_measurement_types(new_types, meas_type_csv)
+d_meas_type <- read_measurement_type(meas_type_csv) |>
+  upsert_measurement_types(select(new_types, -is_canonical, -derivation))
+# na = "" is load-bearing: the default writes the literal string "NA" into every empty cell
+write_csv(d_meas_type, meas_type_csv, na = "")
+# derivation and is_canonical are registry-owned: this ingest owns these rows, so it
+# declares them deliberately (overwrite = TRUE), never as a side effect of the upsert
+d_meas_type <- declare_measurement_fields(
+  mutate(select(new_types, measurement_type, derivation, is_canonical),
+         is_canonical = as.character(is_canonical)),
+  meas_type_csv, overwrite = TRUE, quiet = TRUE)
+stopifnot(
+  "a ctd-derived type is registered under another dataset" = all(
+    filter(d_meas_type, measurement_type %in% new_types$measurement_type)$`_source_datasets` == ds_key))
 
 # spiciness0 over the registered temperature x salinity bounds at 0 dbar, rounded
 # outward: what the registry already calls physically possible (questions Q07)
@@ -449,12 +496,13 @@ bounds <- tribble(
   ~measurement_type,       ~valid_min,                   ~valid_max,                              ~why,
   "spiciness0",            floor(min(sp_g)),             ceiling(max(sp_g)),                      "gsw_spiciness0 over the registered temperature_ave x salinity_ave_corr bounds (Q07)",
   "sigma_theta_ave",       st1$valid_min,                st1$valid_max,                           "the bounds sigma_theta_1/2 declare",
-  "mld_sigma_theta_003",   0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to the pipeline's CC_DEPTH_MAX_M",
+  "mld_sigma_theta_002",   0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to the pipeline's CC_DEPTH_MAX_M",
+  "mld_sigma_theta_003",   0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M (retired; kept so the row stays bounded)",
   "mld_sigma_theta_0125",  0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M",
   "mld_temperature_02",    0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M",
   "chl_max_depth",         chl$valid_depth_min_m,        chl$valid_depth_max_m,                   "est_chlorophyll_a_sta_corr is defined over this depth window only",
-  "chl_max",               chl$valid_min,                chl$valid_max,                           "the bounds est_chlorophyll_a_sta_corr declares",
-  "chl_integrated",        0,                            chl$valid_max * p$chl_z_max,             "the chl ceiling times the 200 m integration depth",
+  "chl_max",               chl$valid_min,                chl$valid_max,                           "the bounds est_chlorophyll_a_sta_corr declares (a mean of in-bound values stays in them)",
+  "chl_integrated",        0,                            chl$valid_max * p$chl_z_max,             "the chl ceiling times the 200 one-metre bins summed",
   "chl_integrated_depth",  0,                            p$chl_z_max,                             "the integration floor")
 d_meas_type <- declare_measurement_bounds(select(bounds, -why), meas_type_csv)
 bounds |> datatable(caption = "Declared bounds and where each comes from", rownames = FALSE)
@@ -484,7 +532,9 @@ is recomputable from `obs_ctd_full` with the same functions.
 
 **Per cast → `sample_measurement`** on the ctd-cast cast `sample_key`.
 **Per station pair → `ctd_geostrophic`**, its own table: its grain is between
-stations, so it has no `sample`, no `obs` row and no anomaly.
+stations, so it has no `sample`, no `obs` row and no anomaly. It is staged with
+this dataset's parquet but `release_database.qmd` does not publish it while Q03
+and Q04 are open (CalCOFI/workflows#103), and `tables_owned` does not list it.
 
 This dataset emits **no `sample`**: the cast is `calcofi_ctd-cast`'s, and a second
 row with the same key would break the global uniqueness `assemble_core()` asserts.
@@ -670,11 +720,11 @@ cc_erd(con, tables = c("obs", "sample_measurement", "ctd_geostrophic", "measurem
 |---|---|---|
 | `temperature_ave`, `salinity_ave_corr`, `pressure` (1 m) | `obs.measurement_type = spiciness0` | `ctd_spice()`; emitted at ctd-cast's thinned depths |
 | `sigma_theta_1`, `sigma_theta_2` + flags (1 m) | `obs.measurement_type = sigma_theta_ave` | `ctd_sigma_theta_ave()`; thinned depths |
-| `sigma_theta_ave` (1 m) | `sample_measurement`: `mld_sigma_theta_003`, `mld_sigma_theta_0125` | `ctd_mld()` |
+| `sigma_theta_ave` (1 m) | `sample_measurement`: `mld_sigma_theta_002` (headline), `mld_sigma_theta_0125` | `ctd_mld()` (0.02 is the default) |
 | `temperature_ave` (1 m) | `sample_measurement`: `mld_temperature_02` | `ctd_mld(criterion = "temperature")` |
-| `est_chlorophyll_a_sta_corr` (1 m) | `sample_measurement`: `chl_max_depth`, `chl_max`, `chl_integrated`, `chl_integrated_depth` | `ctd_chl_max()`, `ctd_integrate()` |
-| `temperature_ave`, `salinity_ave_corr`, `pressure` per station | `ctd_geostrophic` | `ctd_geostrophic()`, 10 dbar bin means |
-| **not published** | the full 1 m derived per-bin series; the up cast where a down cast exists; per-cast statuses (`mixed_to_bottom`, `no_reference`) — an absent row | |
+| `est_chlorophyll_a_sta_corr` (1 m) | `sample_measurement`: `chl_max_depth`, `chl_max`, `chl_integrated`, `chl_integrated_depth` | `ctd_chl_max()` (3 m running mean), `ctd_integrate()` (sum of the 1 m bins) |
+| `temperature_ave`, `salinity_ave_corr`, `pressure` per station | `ctd_geostrophic` (staged, not released) | `ctd_geostrophic()`, 10 dbar bin means |
+| **not published** | the full 1 m derived per-bin series; the up cast where a down cast exists; per-cast statuses (`mixed_to_bottom`, `no_reference`) — an absent row; `ctd_geostrophic`; the retired `mld_sigma_theta_003` | |
 
 : Source → core mapping {#tbl-mapping}
 
@@ -793,9 +843,11 @@ if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
 
 ## Questions for Data Providers
 
-The five choices awaiting Rasmus Swalethorp (Q01–Q05), each carrying the default
-this build uses as its proposed answer, plus the inherited licence/PI gap (Q06), the
-derived spice bound (Q07) and the implausible values for the CTD team to flag (Q08).
+Rasmus Swalethorp's answers to Q01 (mixed-layer depth), Q02 (chlorophyll maximum
+and integral) and Q05 (down cast) are applied above. Still open: the geostrophic
+reference and spacing (Q03, Q04; the table is not released until they are settled),
+the inherited licence/PI gap (Q06), the derived spice bound (Q07) and the
+implausible values for the CTD team to flag (Q08).
 
 ```{r}
 #| label: provider-questions

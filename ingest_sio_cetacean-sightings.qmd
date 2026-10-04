@@ -8,8 +8,6 @@ calcofi:
   output: data/parquet/sio_cetacean-sightings/manifest.json
   provider: sio
   dataset: cetacean-sightings
-  # staged, not released, until the licence (Q01) and citation (Q02) are settled
-  in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_sio_cetacean-sightings.html
   questions_file: metadata/sio/cetacean-sightings/questions.csv
   dataset_meta:
@@ -23,7 +21,7 @@ calcofi:
   tables_owned:
     - {table: sample, shared: true, note: "core event dimension (transect segment + sighting)"}
     - {table: obs, shared: true, note: "core occurrence headline (group_size per counted sighting)"}
-    - {table: obs_attribute, shared: true, note: "effort status, group size min/max, calves, behaviour per counted sighting"}
+    - {table: obs_attribute, shared: true, note: "effort status, group size min/max, calves per counted sighting (behaviour held, Q03)"}
     - {table: sample_measurement, shared: true, note: "transect_length per effort segment"}
     - {table: taxon, shared: true, note: "shared taxa reference (cetaceans, worms:)"}
     - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
@@ -55,7 +53,15 @@ and rename cruises for display. The raw CountCOFI event log for 2023-11
 
 This is the dataset the catalog held as the `sio_cetacean-sightings` holding
 (EDI `knb-lter-cce.262`, 2005–2015); the marmam-app files are the lab's wider,
-curated 2004–2022 version of it (Q02).
+curated 2004–2022 version of it (Q02). It ships under the EDI package's
+`custom` terms as recorded (Q01 and Q02 stay open with the lab).
+
+**Behaviour is held back.** The three behaviour columns are bare numeric codes
+(`1`, `34`, `31`) with no codebook, and the same `behavior` measurement type
+carries words (Flying, Feeding) for `farallon_bird-mammal`, so a consumer
+grouping by `behavior` would get codes beside labels. The code path stays below,
+gated by `publish_behavior <- FALSE`; it is switched on when the lab supplies
+the codebook (Q03; Ben, 2026-10-04). The columns remain in the archived source.
 
 - **Provider**: `sio` (Scripps Whale Acoustics Lab, Hildebrand / Baumann-Pickering)
 - **Grain**: a sighting, optionally inside an effort segment (`segment_id`, NULL
@@ -353,13 +359,6 @@ no occupation at all during a survey's dates, never to overrule a track match.
 ```{r}
 #| label: spatial-cruise
 
-load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
-                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
-for (tbl in c("cetacean_segment", "cetacean_sighting")) {
-  add_point_geom(con, tbl, lon_col = "longitude", lat_col = "latitude")
-  assign_grid_key(con, tbl)
-}
-
 dbExecute(con, glue(
   "CREATE OR REPLACE VIEW cruise_track AS
    SELECT DISTINCT cruise_key, datetime, latitude, longitude
@@ -423,6 +422,14 @@ for (tbl in c("cetacean_sighting", "cetacean_segment"))
     UPDATE {tbl} t SET cruise_key = l.cruise_key FROM _label_ck l
     WHERE t.cruise_key IS NULL AND l.cruise_key IS NOT NULL AND l.cruise_label = t.cruise_label"))
 dbExecute(con, "DROP TABLE _label_ck")
+
+# spatial last: nothing above has to UPDATE a table that carries geometry
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+for (tbl in c("cetacean_segment", "cetacean_sighting")) {
+  add_point_geom(con, tbl, lon_col = "longitude", lat_col = "latitude")
+  assign_grid_key(con, tbl)
+}
 
 n_sight_ck <- dbGetQuery(con, "SELECT COUNT(cruise_key) FROM cetacean_sighting")[[1]]
 cat(glue("cruise_key resolved on {n_sight_ck}/{cruise_match$total} sightings ",
@@ -534,10 +541,10 @@ What the source becomes, and what it does not:
 | `effort_status` | `obs_attribute` `effort_status` | `bin_label` ON / OFF, `bin_value` 1 / 0; none where the flag is blank |
 | `group_size_min` / `_max` | `obs_attribute` `group_size_min` / `_max` | value in `count` |
 | `calf_count` | `obs_attribute` `calf_count`, `life_stage = calf` | plain integers only (Q09) |
-| `behavior_primary` / `_other1` / `_other2` | `obs_attribute` `behavior` | one row per code token, `bin_label` = the code (codebook Q03), `bin_value` = 1 / 2 / 3 for primary / other1 / other2 |
+| `behavior_primary` / `_other1` / `_other2` | `obs_attribute` `behavior` | **held** (Q03): no rows until the lab supplies the codebook (`publish_behavior <- FALSE`); when enabled, one row per code token, `bin_label` = the code, `bin_value` = 1 / 2 / 3 for primary / other1 / other2 |
 | `species_code` | `obs.taxon_key` via `dataset_taxon` | `Oth` keeps a NULL taxon |
 
-**Not published** (kept in the archived source): observer initials, original
+**Not published** (kept in the archived source): the behaviour codes (Q03), observer initials, original
 effort/transect flags and their off-codes, comments, speed over ground,
 `species2_raw`, `calf_raw`, segment start/end coordinates and times, from/to
 stations, transect and line lengths.
@@ -668,28 +675,35 @@ append_obs_attribute(con, attr_sel("group_size_max", "NULL::VARCHAR", "NULL::DOU
 append_obs_attribute(con, attr_sel("calf_count", "'calf'", "NULL::DOUBLE", "NULL::VARCHAR",
                                    "s.calf_count", "s.calf_count IS NOT NULL"))
 
-# behaviour: the three columns hold one code or a list ("1, 34", "2 8"); each
-# token is its own row, labelled with the code as recorded (codebook Q03)
-d_behavior <- d_sighting |>
-  select(sighting_id, behavior_primary, behavior_other1, behavior_other2) |>
-  pivot_longer(-sighting_id, names_to = "slot", values_to = "code") |>
-  filter(!is.na(code)) |>
-  mutate(slot = match(slot, c("behavior_primary", "behavior_other1", "behavior_other2")),
-         # split lists of numeric codes; free text ("Slow Travel") stays whole
-         code = map(code, \(x) if (str_detect(x, "^[0-9?,/&\\s]+$"))
-                                   str_split_1(x, "[,/&\\s]+") else x)) |>
-  unnest(code) |>
-  mutate(code = str_trim(code)) |>
-  filter(code != "")
-dbWriteTable(con, "_behavior", d_behavior, overwrite = TRUE)
-append_obs_attribute(con, glue("
-  SELECT '{ds_key}', {si_key('b.sighting_id')}, dt.taxon_key, NULL::VARCHAR, 'behavior',
-         CAST(b.slot AS DOUBLE), b.code, NULL::INTEGER, NULL::VARCHAR
-  FROM _behavior b JOIN cetacean_sighting s USING (sighting_id)
-  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                            AND dt.ds_taxa_code = s.species_code
-  WHERE {counted}"))
-dbExecute(con, "DROP TABLE _behavior")
+# behaviour: HELD (Q03, Ben 2026-10-04). The three columns hold bare numeric codes
+# ("1", "1, 34", "2 8") with no codebook, in the same `behavior` type that
+# farallon_bird-mammal fills with words, so no rows are emitted until the lab
+# supplies the codebook. Flip `publish_behavior` then, map code -> label here (or
+# emit under a dataset-specific type), and add the behavior assertions back.
+# When on, each token is its own row, labelled with the code as recorded.
+publish_behavior <- FALSE
+if (publish_behavior) {
+  d_behavior <- d_sighting |>
+    select(sighting_id, behavior_primary, behavior_other1, behavior_other2) |>
+    pivot_longer(-sighting_id, names_to = "slot", values_to = "code") |>
+    filter(!is.na(code)) |>
+    mutate(slot = match(slot, c("behavior_primary", "behavior_other1", "behavior_other2")),
+           # split lists of numeric codes; free text ("Slow Travel") stays whole
+           code = map(code, \(x) if (str_detect(x, "^[0-9?,/&\\s]+$"))
+                                     str_split_1(x, "[,/&\\s]+") else x)) |>
+    unnest(code) |>
+    mutate(code = str_trim(code)) |>
+    filter(code != "")
+  dbWriteTable(con, "_behavior", d_behavior, overwrite = TRUE)
+  append_obs_attribute(con, glue("
+    SELECT '{ds_key}', {si_key('b.sighting_id')}, dt.taxon_key, NULL::VARCHAR, 'behavior',
+           CAST(b.slot AS DOUBLE), b.code, NULL::INTEGER, NULL::VARCHAR
+    FROM _behavior b JOIN cetacean_sighting s USING (sighting_id)
+    LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                              AND dt.ds_taxa_code = s.species_code
+    WHERE {counted}"))
+  dbExecute(con, "DROP TABLE _behavior")
+}
 
 q1 <- function(sql) dbGetQuery(con, sql)[[1]]
 d_counted  <- d_sighting |> filter(group_size_best > 0)
@@ -729,6 +743,8 @@ stopifnot(
   "calf_count total = source total on counted sightings" =
     q1("SELECT COALESCE(SUM(count), 0) FROM obs_attribute WHERE measurement_type = 'calf_count'") ==
     sum(d_counted$calf_count, na.rm = TRUE),
+  "no behavior rows while the codes are held (Q03)" =
+    publish_behavior || q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'behavior'") == 0,
   "every obs_attribute row sits on a sighting that has an obs" =
     q1("SELECT COUNT(*) FROM obs_attribute a WHERE a.sample_key NOT IN (SELECT sample_key FROM obs)") == 0,
   "transect_length total = source total" =
