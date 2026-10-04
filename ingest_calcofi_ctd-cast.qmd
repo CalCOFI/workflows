@@ -3095,6 +3095,9 @@ vertical stripes). Most of those values are exactly 0 (an unfilled column), the 
 per-cast offset: a constant written where a profile belongs. A declared bound cannot see it (the value is in range) and the provider
 set no flag, so the test is on the **shape**: `calcofi4db::check_depth_constant_series()` finds
 each (cast, derived series) with at least 6 finite values over at least 50 m that do not move
+(the cast is `cruise_key` + `cast_key` + `cast_dir`, never the per-scan `ctd_cast_uuid`, which
+judged a minute of a cast at most and withheld 32 cells on the 2026-10-04 render; per cast, the
+same data hold 1,555 constant (cast, series) cells, predicted until the next render)
 (range below 1e-9), and this chunk **drops** those values. Dropped, not flagged: a flagged value
 still reaches the table and a consumer that forgets `cc_qual_ok_sql()` would plot it, which is
 how the stripes reached the screenshot. It runs after the provider's flags, the accepted-flag
@@ -3114,34 +3117,50 @@ per-cast offset in these files and whether to withhold or recompute it is
 dc_types <- d_meas_ctd$measurement_type |>
   str_subset("^est_|_(cruise|sta)_corr$|^salinity_[12]_corr$")
 
+# --- judge the CAST, not the scan --------------------------------------------
+# ctd_cast_uuid hashes (cruise, cast_key, cast_dir, datetime) and the datetime is the
+# SCAN's, so in a file with times to the second every depth has its own uuid: grouped
+# by it, a "cast" held one value and was never judged. The 2026-10-04 render withheld
+# 32 (uuid, series) cells, all in minute-resolution files (2204SH, 2504SH, 1810SR,
+# 1501NH), against 441 constant EstNO3_CruiseCorr casts in the census. The cast is
+# (cruise_key, cast_key, cast_dir): one direction of one occupation, the grain of
+# `sample` (whose key is the cast_key), each direction judged on its own.
+dc_cast_cols <- c("cruise_key", "cast_key", "cast_dir")
+dbExecute(con, "
+  CREATE OR REPLACE TEMP VIEW _m_by_cast AS
+  SELECT c.cruise_key, c.cast_key, c.cast_dir, m.measurement_type, m.measurement_value, m.depth_m
+  FROM ctd_measurement m JOIN ctd_cast c USING (ctd_cast_uuid)")
 d_const <- calcofi4db::check_depth_constant_series(
-  con, tbl = "ctd_measurement", cast_col = "ctd_cast_uuid", types = dc_types)
+  con, tbl = "_m_by_cast", cast_col = dc_cast_cols, types = dc_types)
 d_const_judged <- attr(d_const, "judged")
 
 if (nrow(d_const) == 0) {
   cat("no derived series is constant over depth\n")
 } else {
-  dbWriteTable(con, "_depth_constant", d_const |> select(ctd_cast_uuid, measurement_type),
+  dbWriteTable(con, "_depth_constant",
+               d_const |> select(all_of(dc_cast_cols), measurement_type, n, value),
                overwrite = TRUE)
   d_const_by_cruise <- dbGetQuery(con, "
-    SELECT c.cruise_key, k.measurement_type,
-           COUNT(DISTINCT c.ctd_cast_uuid) AS n_casts_dropped
-    FROM _depth_constant k JOIN ctd_cast c USING (ctd_cast_uuid)
-    GROUP BY ALL ORDER BY n_casts_dropped DESC, cruise_key, measurement_type") |>
-    left_join(d_const |> group_by(measurement_type) |>
-                summarize(n_values_dropped = sum(n), value_min = min(value), value_max = max(value),
-                          .groups = "drop"), by = "measurement_type")
-  n_dc_rows <- dbGetQuery(con, "
-    SELECT COUNT(*) AS n FROM ctd_measurement m
-    JOIN _depth_constant k USING (ctd_cast_uuid, measurement_type)")$n
-  dbExecute(con, "
+    SELECT cruise_key, measurement_type,
+           COUNT(*) AS n_casts_dropped, SUM(n) AS n_values_dropped,
+           MIN(value) AS value_min, MAX(value) AS value_max
+    FROM _depth_constant
+    GROUP BY ALL ORDER BY n_casts_dropped DESC, cruise_key, measurement_type")
+  dc_join <- "m.ctd_cast_uuid = c.ctd_cast_uuid AND c.cruise_key = k.cruise_key AND
+              c.cast_key = k.cast_key AND c.cast_dir = k.cast_dir AND
+              m.measurement_type = k.measurement_type"
+  n_dc_rows <- dbGetQuery(con, glue("
+    SELECT COUNT(*) AS n FROM ctd_measurement m, ctd_cast c, _depth_constant k
+    WHERE {dc_join}"))$n
+  stopifnot("every withheld value is counted once" = n_dc_rows == sum(d_const$n))
+  dbExecute(con, glue("
     DELETE FROM ctd_measurement m
-    USING _depth_constant k
-    WHERE m.ctd_cast_uuid = k.ctd_cast_uuid AND m.measurement_type = k.measurement_type")
+    USING ctd_cast c, _depth_constant k
+    WHERE {dc_join}"))
   dbExecute(con, "DROP TABLE _depth_constant")
   stopifnot("depth-constant values were not all removed" =
     nrow(calcofi4db::check_depth_constant_series(
-      con, tbl = "ctd_measurement", cast_col = "ctd_cast_uuid", types = dc_types)) == 0)
+      con, tbl = "_m_by_cast", cast_col = dc_cast_cols, types = dc_types)) == 0)
 
   cat(glue("{nrow(d_const)} (cast, series) pair(s) constant over depth, ",
            "{format(n_dc_rows, big.mark = ',')} value(s) dropped:"), "\n")
@@ -3155,6 +3174,7 @@ if (nrow(d_const) == 0) {
             caption = paste("Derived series withheld because they hold one value at every depth,",
                             "per cruise and series (data/qc/ctd_depth_constant_dropped.csv)"))
 }
+dbExecute(con, "DROP VIEW IF EXISTS _m_by_cast")
 ```
 
 ## Combine the Sensor Pairs by Their Flags

@@ -267,6 +267,31 @@ change, `oxygen_umol_kg_ave_sta_corr` on 2022-04-3322 rebuilt from the other sen
 above counted 441 casts of `EstNO3_CruiseCorr` alone, across 20 cruises; the cells in the table
 are the ones the render withheld.
 
+**Why only 32: the guard judged scans, not casts; now judged per cast (predicted, not yet
+rendered).** The chunk grouped by `ctd_cast_uuid`, which hashes each scan's time, so a "cast" held
+one value except in minute-resolution files, and the 32 cells were stretches of a cast inside one
+minute. It now groups by `(cruise_key, cast_key, cast_dir)` (calcofi4db
+`check_depth_constant_series()` takes a composite `cast_col`). Predicted from the 2026-10-04
+wrangling database, against the staged shard:
+
+| series | casts (D + U) | cruises | `obs_ctd_full` rows removed | `obs` rows removed |
+|---|---:|---:|---:|---:|
+| `est_nitrate_cruise_corr` | 864 | 21 | 365,573 | 28,917 |
+| `oxygen_umol_kg_1_cruise_corr` | 391 | 3 | 180,561 | — (not canonical) |
+| `oxygen_umol_kg_ave_sta_corr` | 247 | 4 | 114,002 | 9,794 |
+| `oxygen_umol_kg_1_sta_corr` / `_2_sta_corr` | 16 / 10 | 3 / 5 | 5,399 / 2,792 | — |
+| `est_chlorophyll_a_sta_corr` | 8 | 3 | 1,596 | 144 |
+| `oxygen_ml_l_1` / `_2` / `_ave_sta_corr` | 6 / 7 / 6 | 2-3 | 1,990 / 2,511 / 1,994 | 160 each |
+
+1,555 (cast, series) cells, 676,418 values. Downcasts of `est_nitrate_cruise_corr`: 435 against
+the census's 441 (the census counts 2105SH's two upcasts filed in the downcast file and the
+duplicate copies of 0707, 1701 as extra casts). Every withheld value outside
+`est_nitrate_cruise_corr` is an exact 0 (oxygen of 0 from 1 to 517 m beside a sensor reading
+5.4 mL/L), so no real near-constant profile is caught. Knock-on: seven casts lose one sensor of a
+pair, so 1,490 `obs_ctd_full` (72 `obs`) oxygen averages become the other sensor instead of its
+mean with 0. 1,051 values the 2026-10-04 render withheld return (2204SH, 1501NH: zero-filled
+stretches of casts that otherwise vary).
+
 ## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
 
 `calcofi_ctd-derived` now computes its per-cast products by the definitions Rasmus Swalethorp gave on
