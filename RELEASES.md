@@ -17,19 +17,26 @@ Two `proposed` questions go to the provider (`metadata/calcofi/ctd-cast/question
 whether `btl_*` values are equivalent to the bottle database for 2021 onward, and whether a bottle
 database later than 2021-05 is available or scheduled. No data changes.
 
-## Registry: eDNA measurement types for `calcofi_2022-edna` (staged, not released)
+## A new dataset: `calcofi_2022-edna`, vertebrate eDNA from the October 2022 cruise (detections only)
 
 `ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
-Vertebrate eDNA" (doi:10.15468/n52j6r, CC BY 4.0; Patin et al. 2026) but is **held out of the
-release** (`in_release: false`) until the provider says whether filters and assay runs with no
-detection were omitted and how reads were filtered. Its headline is `edna_presence` (1 = detected),
-shared with `sio_cetacean-edna`. What does ship is the shared `measurement_type` registry,
-which gains:
-- `edna_reads_dloop` and `edna_reads_12s` (reads per assay, summed over ASVs and PCR replicates: a
-  semi-quantitative signal, not abundance, never summed across assays);
-- the per-sample normalisers `edna_reads_raw_dloop` / `edna_reads_raw_12s` and
-  `edna_reads_filtered_dloop` / `edna_reads_filtered_12s`, and `oxygen_mg_l`, `dna_concentration`;
-- `chl_fluor`, shared with `calcofi_mets`, now declares `valid_min = 0`.
+Vertebrate eDNA" (Patin and O'Donnell, version 1.2, doi:10.15468/n52j6r, CC BY 4.0; linked to Patin
+et al. 2026): 47 water filters (`sample_type = 'filter'`, one per `parentEventID`) from CalCOFI/GEMCAP
+stations on cruise 2022-10-33UD, 2022-10-13 to 2022-10-18, each run through a mitochondrial D-loop
+assay (cetaceans) and/or a 12S rRNA MiFish assay (fish). Staged shard: 47 `sample`, 148 `obs`
+(74 `edna_presence`, 51 `edna_reads_dloop`, 23 `edna_reads_12s`; 19 taxa) and 482
+`sample_measurement` (co-collected nutrients, chlorophyll fluorescence, oxygen in mg/L, DNA
+concentration, and the per-assay raw and filtered read totals).
+
+**Detections only.** The source archive holds positive detections only, so the dataset publishes
+`edna_presence = 1` and the read counts, and **the absence of a row is not a non-detection** here
+(unlike `sio_cetacean-edna`, where 0 means not detected in a sequenced sample). Whether filters or
+assay runs with no detection were omitted is asked of the provider (Q08, `high`, no longer a
+blocker). Reads are a semi-quantitative signal of PCR-amplified DNA, not abundance, and are not
+comparable between assays. Not yet linked: `site_key` and `parent_sample_key` are NULL on every
+filter (CalCOFI/workflows#125). The shared `measurement_type` registry gains `edna_reads_dloop`,
+`edna_reads_12s`, `edna_reads_raw_*`, `edna_reads_filtered_*`, `oxygen_mg_l` and
+`dna_concentration`; `chl_fluor` (shared with `calcofi_mets`) now declares `valid_min = 0`.
 
 ## Phytoplankton: named codes stop falling into "not identified further"; one rule for unknown species
 
@@ -131,26 +138,49 @@ rights statement (`custom`), not a CC grant. Open provider questions: Q01, Q04 (
 limit, whether the 0.05 nmol/L floor is one), Q07 (operational definition of "dissolved",
 contamination control).
 
-## Three cetacean datasets staged, not released; the registry rows they add do ship
+## Three cetacean datasets: sightings, sonobuoy and eDNA (licence pending; provider asked)
 
-`sio_cetacean-sightings` (visual line-transect sightings and effort, 2004-2022), `sio_cetacean-sonobuoy`
-(hourly acoustic presence, 2004-2012) and `sio_cetacean-edna` (NCOG eDNA screens, 2014-2016) are staged
-from CalCOFI/marmam-app with `in_release: false`: no rows of theirs are in this release, pending their
-licences and citations (CalCOFI/workflows#117). Three things they touch **are** release content:
+`sio_cetacean-sightings`, `sio_cetacean-sonobuoy` and `sio_cetacean-edna` ship for the first time,
+staged from CalCOFI/marmam-app at commit `7bc0e18` (CalCOFI/workflows#117). They ship **without a
+settled licence or citation**: nothing is invented, the gap is recorded and the provider is asked
+(`questions.csv` Q01/Q02 of each; sightings carries the EDI knb-lter-cce.262.2 terms and citation as
+`custom`, sonobuoy and eDNA say `license: unknown` with an empty citation). `funding` is blank on all
+three: the ONR award marmam-app names (N00014-22-1-2719, FY22) cannot have funded 2004-2012 data, and
+the provider is asked what did.
 
-- **`measurement_type` gains 10 types with no data behind them yet**: `acoustic_presence`, `calf_count`,
-  `call_type`, `edna_presence`, `effort_status`, `group_size`, `group_size_max`, `group_size_min`,
-  `transect_length`. The release publishes the whole registry (`metadata/measurement_type.csv`), not only
-  the types its shards use. `behavior`'s `_source_datasets` also names `sio_cetacean-sightings` now.
-- **The sightings holding stays in the catalog.** `sio_cetacean-sightings` remains a `status: external`
-  holding in `datasets.json` (now titled from the ingest, linked to the marmam-app source, DOI unchanged)
-  until it ships, at which point the holding keys leave its sidecar.
-- **`farallon_bird-mammal`'s description** now says the Scripps Whale Acoustics Lab's independent observers
-  survey cetaceans on the same cruises, so summing the two datasets counts some animals twice.
+- **`sio_cetacean-sightings`**: visual line-transect sightings and effort, quarterly cruises 2004-2022
+  (effort through 2021, so 2022 sightings have no effort to normalise against, Q07). Staged shard: 8,087
+  `sample` (1,980 `transect` effort segments + 6,107 `sighting`), 6,097 `obs` (`group_size`, one per
+  counted sighting; the 10 sightings with a Best of 0 or blank keep their sample and publish no obs),
+  1,980 `sample_measurement` (`transect_length`) and 19,086 `obs_attribute` rows (effort status, group
+  size min/max, calf count). **Behaviour is held back**: the codes are bare numbers with no codebook, in
+  the same `behavior` type that `farallon_bird-mammal` fills with words, so the 10,108 behaviour rows
+  the staged shard carried are not published until the lab supplies the codebook (Q03). 67 cruises,
+  all with a `cruise_key`. It leaves the catalog's holdings and enters as a released dataset.
+- **`sio_cetacean-sonobuoy`**: hourly presence of blue, fin and humpback whale calls in sonobuoy
+  recordings, 2004-2012. Staged shard: 4,206 `sample` (962 `deployment` + 3,244 `scan`, one analysed
+  hour), 9,270 `obs` (`acoustic_presence`, 1,978 of them 1) and 2,229 `obs_attribute` (`call_type`);
+  35 cruises, every hour with a `cruise_key`. The hydrophone depth is not recorded, so depth is NULL
+  on every sample and obs, **not 0 m**. The 154 hours scanned only "adhoc" keep their sample and publish
+  no presence value.
+- **`sio_cetacean-edna`**: NCOG seawater eDNA screened for seven cetaceans, 2014-2016. Staged shard: 133
+  `sample` (`water`, one per sample, each timed by its CalCOFI bottle cast) and 497 `obs`
+  (`edna_presence`, 71 sequenced samples x 7 species, 15 detections). The 62 samples listed as "not
+  sequenced, PCR negative" did not amplify: they stay as samples with **no** `edna_presence` rows, not
+  zeros, until the provider says what a PCR negative means (Q04). `parent_sample_key` is NULL (every
+  sample is a root).
 
-The release gate `check_taxon_registries()` now skips `taxon_override.csv` rows for held-out datasets
-(`exclude = ds_excluded`, calcofi4db 4.17.2); the 13 rows these three ingests add would otherwise have
-stopped the release.
+What else changes for consumers:
+
+- **`sample_type` gains `sighting`, `deployment`, `scan` (and `water`, `filter` with the eDNA datasets).**
+- **`measurement_type` gains `acoustic_presence`, `calf_count`, `call_type`, `edna_presence`,
+  `effort_status`, `group_size`, `group_size_max`, `group_size_min` and `transect_length`.**
+  `behavior`'s `_source_datasets` names `sio_cetacean-sightings`, but no behaviour row of it ships.
+- **Counts pool across observer teams**: `sio_cetacean-sightings` and `farallon_bird-mammal` count
+  cetaceans on the same cruises with independent observers, so summing the two counts some animals
+  twice (both descriptions say so).
+- `check_taxon_registries()` skips `taxon_override.csv` rows only for datasets held out of a release
+  (`exclude = ds_excluded`, calcofi4db 4.17.2); these datasets are no longer among them.
 
 # v2026.10.01
 

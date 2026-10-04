@@ -8,8 +8,6 @@ calcofi:
   output: data/parquet/sio_cetacean-sonobuoy/manifest.json
   provider: sio
   dataset: cetacean-sonobuoy
-  # staged, not released, until the licence (Q01) and citation (Q02) are settled
-  in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_sio_cetacean-sonobuoy.html
   questions_file: metadata/sio/cetacean-sonobuoy/questions.csv
   dataset_meta:
@@ -51,6 +49,9 @@ read: they are per-station summaries derived from this sheet.
   heard in the hour, 0 when none was; the call types heard go to `obs_attribute`
 - **Position**: the sheet records the CalCOFI line/station, not the sonobuoy's
   position, so the nominal station position is used (`cc_calcofi_to_lonlat()`)
+- **Depth**: not recorded (the hydrophone's depth and whether the buoy was DIFAR
+  or omnidirectional are not given), so `depth_min_m` / `depth_max_m` are NULL on
+  every sample and obs, not 0 m (#120)
 
 ```{mermaid}
 graph LR
@@ -263,13 +264,6 @@ per label; the vote reaches the hours without a station too.
 ```{r}
 #| label: spatial-cruise
 
-load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
-                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
-for (tbl in c("sonobuoy_deployment", "sonobuoy_scan")) {
-  add_point_geom(con, tbl, lon_col = "longitude", lat_col = "latitude")
-  assign_grid_key(con, tbl)
-}
-
 dbExecute(con, glue(
   "CREATE OR REPLACE VIEW cruise_track AS
    SELECT DISTINCT cruise_key, datetime, latitude, longitude
@@ -290,12 +284,23 @@ dbExecute(con, "
 grp  <- cruise_match$groups
 dupe <- grp$cruise_key[!is.na(grp$cruise_key)]
 dupe <- dupe[duplicated(dupe)]
+# a ratchet at 100%: every hour resolved at the staged run (3,244 of 3,244, 35
+# cruises), so a label that stops matching must be looked at, not absorbed
 stopifnot(
-  "cruise_key must resolve on >90% of hours" = cruise_match$pct > 90,
+  "cruise_key must resolve on every hour" = cruise_match$matched == cruise_match$total,
   "every cruise label must resolve to a distinct cruise_key" = length(dupe) == 0)
 cat(glue("cruise_key resolved on {cruise_match$matched}/{cruise_match$total} hours ",
          "({cruise_match$pct}%); unresolved labels: ",
          "{paste(grp$cruise_label[is.na(grp$cruise_key)], collapse = ', ')}"), "\n")
+
+# spatial last: nothing above has to UPDATE a table that carries geometry
+load_prior_tables(con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+                  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+for (tbl in c("sonobuoy_deployment", "sonobuoy_scan")) {
+  add_point_geom(con, tbl, lon_col = "longitude", lat_col = "latitude")
+  assign_grid_key(con, tbl)
+}
+
 grp |>
   datatable(caption = "Cruise label -> cruise_key (vote share; NULL = unresolved)",
             rownames = FALSE, filter = "top") |>
@@ -397,8 +402,11 @@ cat(glue("vocabulary: {n_staged} codes; taxon {n_taxon}, dataset_taxon {n_ds_tax
 dp_key <- function(col) ns_key(ds_key, "deployment", col)
 sc_key <- function(col) ns_key(ds_key, "scan", col)
 
+# the hydrophone depth is not recorded (the DIFAR / omnidirectional setting is not
+# given, #120), so depth is NULL, not 0 m: a 0 would claim a surface recording
 append_sample(con, sample_arm_self(
-  ds_key, "sonobuoy_deployment", "deployment_key", "deployment", site_expr = "site_key"))
+  ds_key, "sonobuoy_deployment", "deployment_key", "deployment", site_expr = "site_key",
+  depth_min = "NULL::DOUBLE", depth_max = "NULL::DOUBLE"))
 
 append_sample(con, glue("
   SELECT {sc_key('s.scan_id')} AS sample_key, 'scan' AS sample_type,
@@ -407,14 +415,14 @@ append_sample(con, glue("
          '{ds_key}' AS dataset_key, s.grid_key, s.site_key, s.cruise_key,
          NULL::INTEGER AS order_occ, s.latitude, s.longitude,
          CAST(s.datetime_start_utc AS TIMESTAMP) AS datetime,
-         0::DOUBLE AS depth_min_m, 0::DOUBLE AS depth_max_m, NULL::VARCHAR AS tow_type
+         NULL::DOUBLE AS depth_min_m, NULL::DOUBLE AS depth_max_m, NULL::VARCHAR AS tow_type
   FROM sonobuoy_scan s"))
 
 # obs -- one row per systematically scanned hour x species: heard (1) or not (0)
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {sc_key('s.scan_id')},
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
-         CAST(s.datetime_start_utc AS TIMESTAMP), 0::DOUBLE, 0::DOUBLE,
+         CAST(s.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
          dt.taxon_key, NULL::VARCHAR, 'acoustic_presence',
          CAST(MAX(c.heard) AS DOUBLE), s.recording_quality, NULL::DOUBLE
   FROM _scan_call c JOIN sonobuoy_scan s USING (scan_id)
@@ -446,6 +454,9 @@ cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", coll
 stopifnot(
   "one deployment sample per deployment" = core$sample_deployment == nrow(d_deployment),
   "one scan sample per hour"             = core$sample_scan == nrow(d_scan),
+  "no depth is published: the hydrophone depth is unknown, never 0 m (#120)" =
+    q1("SELECT COUNT(*) FROM sample WHERE depth_min_m IS NOT NULL OR depth_max_m IS NOT NULL") == 0 &&
+    q1("SELECT COUNT(*) FROM obs WHERE depth_min_m IS NOT NULL OR depth_max_m IS NOT NULL") == 0,
   "three obs per systematic hour"        = core$obs == 3L * n_sys,
   "presence rows = hour x species with a call heard" =
     core$obs_present == nrow(distinct(filter(n_heard, heard == 1L), scan_id, species_code)),

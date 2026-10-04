@@ -5,18 +5,12 @@
 # next_step) and the structural keys (dataset_name, dataset_name_short,
 # category) left this file then; the structural ones now live in the notebook.
 #
-# Holding keys, restored 2026-10-01 while the ingest is held out of the release
-# (`in_release: false`): without `status`, the dataset drops out of the public
-# catalog (datasets.json holdings[], metadata/holdings.csv) until it ships. The
-# structural values repeat the notebook's exactly, so the merge changes nothing.
-# Delete this block in the change that sets `in_release: true`; a dataset_key
-# is a holding or a released dataset, never both.
-  status: external
-  provider: sio
-  dataset: cetacean-sightings
-  dataset_name: CalCOFI Cetacean Visual Line-Transect Sightings
-  dataset_name_short: "Cetacean sightings"
-  category: Seabirds & Marine Mammals
+# Released dataset since 2026-10-04 (Ben): the holding keys (status: external and
+# the repeated structural keys) are gone, so the dataset_key is a released dataset
+# and no longer a holding in metadata/holdings.csv. A dataset_key is a holding or
+# a released dataset, never both. The licence (Q01) and citation (Q02) stay
+# `proposed` questions: the dataset ships under the EDI knb-lter-cce.262.2 terms
+# as recorded, and the lab is asked to confirm they cover 2004 and 2016-2022.
   visibility: public
   description: >
     Cetacean (whale, dolphin, porpoise) sightings and on-effort visual
@@ -27,8 +21,12 @@
     Farallon Institute's seabird and marine mammal survey
     (farallon_bird-mammal), run by an independent observer team: both datasets
     are kept, so a cetacean group seen by both teams appears once in each, and
-    summing the two counts the same animals twice.
-  # source: caloos-sheet row 23, 2026-09-05
+    summing the two counts the same animals twice. The behaviour codes
+    (primary and other behaviour) are held back: they are bare numeric codes
+    with no codebook yet (Q03), so no behaviour rows are published until the
+    lab supplies one; they remain in the archived source.
+  # source: caloos-sheet row 23, 2026-09-05; the span reads 2004 to 2022 here
+  # (2026-10-04), the years the ingest publishes, where the sheet said 2004 to 2015
   abstract: >
     CalCOFI Underway Marine Mammal Sighting Surveys contains visual sighting
     records of cetaceans (whales and dolphins) collected during California
@@ -36,7 +34,8 @@
     Scripps Institution of Oceanography (SIO), to understand cetacean ecology
     and habitat use. The dataset covers the CalCOFI station grid off Southern
     and Central California, recorded while the ship transits between stations,
-    and spans 2004 to 2015, with cruises conducted quarterly. Trained observers
+    and spans 2004 to 2022 (the EDI package it was first published as covers
+    2005 to 2015), with cruises conducted quarterly. Trained observers
     watch for cetaceans during daylight hours using standard line-transect
     distance-sampling methods (Burnham et al. 1980; Buckland et al. 1993;
     Barlow 1995), recording each sighting's location and distance from the
@@ -50,8 +49,8 @@
   # 2004-2022 marmam-app copy, so a revision covering it is still asked in Q02.
   citation_main: "CalCOFI - Scripps Institution of Oceanography and J. Hildebrand. 2017. Index of visual monitoring, location, species behavior, and identification of cetaceans from CalCOFI cruises in the California Current System, 2005-2015 (ongoing). ver 2. Environmental Data Initiative. https://doi.org/10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb"
   link_calcofi_org: ""
-  # the ingest's actual source; the notebook pins the commit it reads
-  link_data_source: "https://github.com/CalCOFI/marmam-app/tree/main/data/whale_visual_data"
+  # the ingest's actual source, at the commit the notebook reads (src_sha)
+  link_data_source: "https://github.com/CalCOFI/marmam-app/tree/7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80/data/whale_visual_data"
   link_others:
     - https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/284
     - https://doi.org/10.1016/j.dsr2.2014.10.008
@@ -85,7 +84,8 @@
     - "Marine Turtles, Birds, and Mammals"
   quality_control_md: 'QC flags present: No. Each counted sighting carries the analyst-adjusted on-effort/on-transect flag as obs_attribute effort_status (ON/OFF); line-transect density uses ON only. A sighting with a Best group size of 0 or blank (animals seen but not counted) keeps its sample row and publishes no obs.'
   maintenance: ongoing
-  # source: CalCOFI/marmam-app data/more_info_page.Rmd, 2026-09-27
-  funding: "Office of Naval Research, Award N00014-22-1-2719"
+  # blank 2026-10-04: marmam-app's info page names ONR award N00014-22-1-2719,
+  # an FY22 award that cannot have funded the 2004-2012 data; asked in Q02
+  funding: ""
   keywords_gcmd:
     - "EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > MAMMALS"
