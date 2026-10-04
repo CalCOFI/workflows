@@ -455,6 +455,81 @@ tbl(con, "lookup") |>
   datatable(caption = "Lookup table with vocabularies")
 ```
 
+## Larval size and stage from `LarvaeMeasured`
+
+The provider's 2026-09-26 export replaced `larvaesize` and `larvaestage` with one table,
+`LarvaeMeasured` (`larva_measured` here): a row per group of measured larvae with a length, a
+stage or both, keyed to its `Larvae` count row by `CountId`, which carries the net and the species
+(Ed Weber, 2026-09-25, `swfsc_ichthyo_04`: "you might have to aggregate, for example, if there are
+fish with multiple lengths but the same stage"). This chunk rebuilds the two distributions the
+rest of the notebook consumes at their old grain: `larva_size` sums `tally` by
+(net, species, length), `larva_stage` by (net, species, stage). The joint length x stage the new
+table carries is not used (it was never in the source before).
+
+A measured row whose `CountId` names no `Larvae` row has no net and no species, so it cannot be
+placed; it is written to `data/flagged/orphan_larva_measured.csv` and left out.
+
+```{r}
+#| label: larva_measured
+
+# every larva count row is one (net, species): the join below must not fan out
+stopifnot(
+  "Larvae.CountId must be unique" =
+    dbGetQuery(con, "SELECT COUNT(*) - COUNT(DISTINCT count_uuid) FROM larva")[[1]] == 0,
+  "Larvae (net, species) must be unique: one count row per taxon per net" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT net_uuid, species_id FROM larva
+                     GROUP BY ALL HAVING COUNT(*) > 1)")[[1]] == 0)
+
+# measured rows that reach no count row: no net, no species
+d_lm_orphan <- dbGetQuery(con, "
+  SELECT m.larva_measured_uuid, m.count_uuid, m.length_mm, m.stage, m.tally
+  FROM larva_measured m ANTI JOIN larva l USING (count_uuid)")
+dir_create(here("data/flagged"))
+write_csv(d_lm_orphan, here("data/flagged/orphan_larva_measured.csv"), na = "")
+
+for (sql in c(
+  "CREATE OR REPLACE TABLE larva_size AS
+   SELECT l.net_uuid, l.species_id, m.length_mm, CAST(SUM(m.tally) AS INTEGER) AS tally
+   FROM larva_measured m JOIN larva l USING (count_uuid)
+   WHERE m.length_mm IS NOT NULL
+   GROUP BY ALL",
+  "CREATE OR REPLACE TABLE larva_stage AS
+   SELECT l.net_uuid, l.species_id, m.stage, CAST(SUM(m.tally) AS INTEGER) AS tally
+   FROM larva_measured m JOIN larva l USING (count_uuid)
+   WHERE m.stage IS NOT NULL
+   GROUP BY ALL"))
+  invisible(dbExecute(con, sql))
+
+# the two distributions account for every placeable measured row: nothing is
+# dropped by the aggregation except rows with neither a length nor a stage
+n_lm <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n,
+         COUNT(*) FILTER (WHERE length_mm IS NOT NULL) AS n_len,
+         COUNT(*) FILTER (WHERE stage     IS NOT NULL) AS n_stage,
+         COUNT(*) FILTER (WHERE length_mm IS NULL AND stage IS NULL) AS n_neither,
+         SUM(tally) FILTER (WHERE length_mm IS NOT NULL) AS tally_len,
+         SUM(tally) FILTER (WHERE stage     IS NOT NULL) AS tally_stage
+  FROM larva_measured m SEMI JOIN larva l USING (count_uuid)")
+stopifnot(
+  "larva_size must carry every placeable measured tally with a length" =
+    dbGetQuery(con, "SELECT SUM(tally) FROM larva_size")[[1]] == n_lm$tally_len,
+  "larva_stage must carry every placeable measured tally with a stage" =
+    dbGetQuery(con, "SELECT SUM(tally) FROM larva_stage")[[1]] == n_lm$tally_stage,
+  "every larval stage must be in the YOLK/PREF/FLEX/POST/TRNS vocabulary" =
+    all(dbGetQuery(con, "SELECT DISTINCT stage FROM larva_stage")$stage %in%
+          larva_stage_vocab$stage_txt))
+
+cat(glue(
+  "larva_measured: {format(nrow(d_lm_orphan) + n_lm$n, big.mark = ',')} rows; ",
+  "{format(nrow(d_lm_orphan), big.mark = ',')} orphan (CountId in no Larvae row, ",
+  "tally {format(sum(d_lm_orphan$tally), big.mark = ',')}, flagged); ",
+  "{format(n_lm$n_neither, big.mark = ',')} with neither length nor stage\n",
+  "larva_size:  {format(dbGetQuery(con, 'SELECT COUNT(*) FROM larva_size')[[1]], big.mark = ',')} ",
+  "(net, species, length) rows\n",
+  "larva_stage: {format(dbGetQuery(con, 'SELECT COUNT(*) FROM larva_stage')[[1]], big.mark = ',')} ",
+  "(net, species, stage) rows\n"))
+```
+
 ## Consolidate to Tidy Ichthyo Table
 
 Consolidate 5 ichthyoplankton tables (egg, eggstage, larva, larvastage, larvasize) into
@@ -527,6 +602,16 @@ consolidate_ichthyo_tables(
   output_tbl = "ichthyo",
   larva_stage_vocab = larva_stage_vocab
 )
+
+# consolidate_ichthyo_tables() skips a source table that does not exist; after the
+# 2026-09-26 export dropped larvaesize/larvaestage, that would have shipped no
+# size or stage rows without an error. Every one of the six parts must be present.
+d_parts <- dbGetQuery(con, "
+  SELECT DISTINCT life_stage || '/' || COALESCE(measurement_type, '') AS part FROM ichthyo")
+stopifnot(
+  "ichthyo must hold all six parts (egg, egg stage, larva, larva stage, larva size, invert)" =
+    setequal(d_parts$part,
+             c("egg/", "egg/stage", "larva/", "larva/stage", "larva/size", "invert/")))
 
 # assign ichthyo_uuid — deterministic UUID v5 from composite natural key
 assign_deterministic_uuids(
@@ -685,14 +770,31 @@ deprecated_ichthyo <- c(
   "egg_stage",
   "larva",
   "larva_stage",
-  "larva_size"
+  "larva_size",
+  "larva_measured"
 )
 
 # tables consolidated into lookup
 deprecated_lookup <- c("tow_type")
 
+# tables of the 2026-09-26 export that are loaded (so the integrity check sees
+# every source column) but NOT ingested; each needs a design decision first:
+# - cufes: CUFES is its own ingest (ingest_swfsc_cufes.qmd, from ERDDAP); switching
+#   its source to this export is a change to that notebook
+# - fish: juvenile/adult fish counts per net; no answered question says what they are
+# - species_itis / species_worms: the provider's ITIS/WoRMS names and lineage
+#   (swfsc_ichthyo_05/13); aggregating by AphiaID is a change to the taxon model
+# - preservative: a lookup nothing references in this export
+not_ingested <- c("cufes", "fish", "species_itis", "species_worms", "preservative")
+
 # all deprecated tables
-deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup)
+deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup, not_ingested)
+
+# ShipLookup.ShipIces (new in the 2026-09 exports): the release's `ship` table is
+# shared with the bottle and CTD ingests (ship_key, ship_name, ship_nodc); adding a
+# column is a cross-dataset change, so it is dropped here, not ingested
+if ("ship_ices" %in% dbListFields(con, "ship"))
+  invisible(dbExecute(con, "ALTER TABLE ship DROP COLUMN ship_ices"))
 
 # drop each deprecated table
 for (tbl in deprecated_tables) {
@@ -1476,6 +1578,34 @@ append_sample(con, glue("
   FROM site s
   LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
          ON td.site_uuid = s.site_uuid"))
+# Net.NetDepth (new in the 2026-09-26 export): the tow's maximum depth in m, true
+# depth not wire-out (Ed Weber, 2026-09-25, swfsc_ichthyo_08). It is loaded into
+# `net` and checked here, but NOT yet projected to sample.depth_max_m: on this
+# export 210 of 59,976 ichthyo sites would put a tow more than 10 m below the
+# deepest GEBCO cell around the position, and the release's seafloor ratchet
+# (DEPTH_SEAFLOOR_OVER_MAX = 694, 686 at v2026.10.01) would fail. The projection is
+# a decision for the release, not this ingest; tow/net depth_max_m stay NULL.
+d_netdepth <- dbGetQuery(con, "
+  SELECT t.tow_type_key,
+         COUNT(*)                                        AS n_tow,
+         COUNT(*) FILTER (WHERE nd.n_depth = 1)          AS n_tow_depth,
+         COUNT(*) FILTER (WHERE nd.n_depth > 1)          AS n_tow_disagree,
+         MIN(nd.depth_max_m)                             AS depth_min,
+         MAX(nd.depth_max_m)                             AS depth_max
+  FROM tow t
+  LEFT JOIN (SELECT tow_uuid, COUNT(DISTINCT net_depth_m) AS n_depth,
+                    MAX(net_depth_m) AS depth_max_m
+             FROM net GROUP BY 1) nd USING (tow_uuid)
+  GROUP BY 1 ORDER BY 2 DESC")
+stopifnot(
+  "every net of a tow must report one NetDepth (swfsc_ichthyo_08)" =
+    sum(d_netdepth$n_tow_disagree) == 0,
+  "NetDepth must be a positive depth in m (never NaN, never <= 0)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM net WHERE net_depth_m IS NOT NULL
+                     AND (isnan(net_depth_m) OR net_depth_m <= 0)")[[1]] == 0)
+d_netdepth |>
+  datatable(caption = "Net.NetDepth per tow, by tow type (not projected to sample.depth_max_m yet)")
+
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'tow', 't.tow_uuid')} AS sample_key, 'tow' AS sample_type,
          {ns_key(ds_key, 'site', 't.site_uuid')} AS parent_sample_key,

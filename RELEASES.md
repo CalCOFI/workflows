@@ -435,6 +435,45 @@ in the denominator (the provider: "the others are true zeros and have valid posi
 volumes"). `1982-02-31JD` stays in `cruise` as a derived row because 40 `cce-lter_euphausiids` samples
 carry that key (derived-cruise count 151 → 152, the ratchet's ceiling); `1982-12-31JD` leaves it.
 
+## Ichthyoplankton: the source is SWFSC's 2026-09-26 export; v2026.09.11 to v2026.10.01 carried the 2026-09-04 ingest
+
+From v2026.09.11 to v2026.10.01 every release shipped the `swfsc_ichthyo` shard staged on
+2026-09-04, and its `grid` from 2026-06-07. Each provider export after that changed the source's
+shape (first `ShipLookup.ShipIces`, then the 2026-09-26 export's TitleCase tables), the ingest's
+integrity check stopped the notebook, and the halt was silent: the render exited 0 and the
+pipeline recorded the ingest as built. The check now fails the render (calcofi4db, development
+version), and the ingest reads the 2026-09-26 export. What changes for a user, measured against
+v2026.10.01:
+
+- **The two 1982 staging cruises leave**, exactly as in the section above (1,128 sites, 1,112
+  tows, 1,145 nets; 1,100 `obs`; 1,054 egg `stage` and 1,308 `body_length` rows).
+- **2,521 nets are added** to existing tows (2,470 port-side nets of bongo tows, 48 starboard, 3
+  unsided; on 47 cruises 1977-12 to 2013-04, 1,229 of them in 1977-12 to 1978-08), with their effort (2,521 each of
+  `volume_sampled`, `std_haul_factor`, `prop_sorted`; 23 more of each plankton biomass) and their
+  catch: 6,491 `obs` rows (297 egg, 5,789 larva, 405 invertebrate), 765 `body_length` and 10 larva
+  `stage` rows. No site or tow is added.
+- **32 larval counts are corrected** by the provider (e.g. one net's northern anchovy 178 → 225),
+  2 `body_length` and 8 larva `stage` counts change, and 1 larva `stage` row is added on an existing
+  net.
+- **629 larval `stage` rows leave** (tally 29,498, on 69 cruises 1984-01 to 2019-04): the export
+  replaced `larvaesize` + `larvaestage` with one `LarvaeMeasured` table, and these (net, species)
+  pairs have measured larvae but none with a stage. Asked: `swfsc_ichthyo_18`. 974 measured rows
+  (tally 2,320, lengths only) name no larva count row and cannot be placed: flagged, not released
+  (`swfsc_ichthyo_17`).
+- `swfsc_ichthyo` `obs` goes 482,250 → 487,641; `obs_attribute` `body_length` 241,871 → 241,328,
+  `stage` 128,107 → 126,435; `sample` 213,122 → 212,258; `cruise` 691 → 694 rows (the two 1982
+  cruises leave; 1998-03, 1998-05 and 1998-06 JD and 2017-07 and 2018-07 Lasker arrive without
+  stations). `dataset_taxon` (1,167 codes) and every `taxon_key` are unchanged.
+- **`grid` is the rebuilt 225-cell grid** (identical to `calcofi4r::cc_grid` 1.25.0, see the grid
+  section above): with it 8,693 ichthyo sites (11,563 tows, 11,778 nets) change `grid_key`; none
+  gains or loses one.
+- **Not ingested yet**, each needing a decision: `Net.NetDepth` as the tow's `depth_max_m`
+  (`swfsc_ichthyo_08`; it puts 210 of 59,976 stations more than 10 m below the seafloor, past the
+  release's seafloor ratchet: `swfsc_ichthyo_19`); the new `Cufes`, `Fish`, `SpeciesItisLookup`,
+  `SpeciesWormsLookup` and `PreservativeLookup` tables; `Station` arrival/departure times, bottom
+  depth and bucket temperature; `ShipLookup.ShipIces`; aggregation by AphiaID
+  (`swfsc_ichthyo_05`/`_13`); egg stages 12-15 stay as published (669 rows, `swfsc_ichthyo_02`).
+
 ## Bottle: salinity quality codes above 9 become blank (calcofi_bottle_01)
 
 The provider (Rasmus Swalethorp, 2026-09-18) answered that a quality code above 9 is impossible
