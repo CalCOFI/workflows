@@ -8,6 +8,50 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
+
+`calcofi_ctd-derived` now computes its per-cast products by the definitions Rasmus Swalethorp gave on
+2026-09-23 (questions.csv Q01, Q02; adopted 2026-10-01; CalCOFI/workflows#101, #102). v2026.10.01
+shipped interim choices, so **the value changes on every cast** that has one.
+
+- **Mixed-layer depth: a new headline key, `mld_sigma_theta_002`.** It is the depth at which
+  sigma-theta is 0.02 kg m⁻³ greater than at 10 m, the CalCOFI legacy definition. The interim
+  headline **`mld_sigma_theta_003` (Δσθ 0.03) is retired**: its registry row stays, marked
+  `RETIRED` with `is_canonical = FALSE`, and no row carries it. The key is new rather than reused
+  because the old name states its 0.03 threshold. A consumer that asked for
+  `mld_sigma_theta_003` by name must switch; the Explorer reads its per-cast list from the registry
+  and needs no change. `mld_sigma_theta_0125` and `mld_temperature_02` are unchanged, now described
+  as alternatives to the headline. A cast that starts below 10 m, or never crosses the threshold,
+  still has no value.
+- **`chl_max_depth` / `chl_max`** (same keys) are the depth and value of the highest **3 m running
+  mean** of `est_chlorophyll_a_sta_corr`. v2026.10.01 used a 5 m running median. `chl_max` is now
+  the mean at that depth.
+- **`chl_integrated`** (same key) is the **sum of the 1 m bins** over the top 200 m, or to the
+  bottom on shallower casts. v2026.10.01 integrated with trapezoids, so values move slightly.
+  `chl_integrated_depth` is unchanged.
+- **Registry fix:** the nine `calcofi_ctd-derived` types (`spiciness0`, `sigma_theta_ave`, the MLD
+  and chlorophyll types) listed `calcofi_ctd-cast` as their `_source_datasets`. They now name the
+  dataset that publishes them, `calcofi_ctd-derived`.
+- **`measurements.json` lists the per-cast types.** The mixed-layer depths, `chl_max_depth`,
+  `chl_max`, `chl_integrated` and `chl_integrated_depth` each get an entry with `grain: "sample"`,
+  so calcofi.io can give them a page. `counts.sample_measurement_rows` counts their rows.
+- **Correction to v2026.10.01's notes:** that section listed `ctd_geostrophic` as a new table, but
+  `release_database.qmd` did not publish it, and it is not in this release either. It is still
+  computed and staged, pending questions Q03/Q04 (CalCOFI/workflows#103). `datasets.json` no longer
+  lists it among the dataset's tables.
+
+**Per-type change against v2026.10.01** (filled after the re-stage; rows changed, filled and removed,
+and the largest change per `measurement_type`):
+
+<!-- COORDINATOR: fill from the stage-vs-release diff after ingest_calcofi_ctd-derived is re-staged -->
+| measurement_type | casts v2026.10.01 | casts now | changed | largest change |
+|---|---|---|---|---|
+| `mld_sigma_theta_002` (new; vs `mld_sigma_theta_003`) | TBD | TBD | TBD | TBD |
+| `mld_sigma_theta_003` (retired) | TBD | 0 | — | — |
+| `chl_max_depth` | TBD | TBD | TBD | TBD |
+| `chl_max` | TBD | TBD | TBD | TBD |
+| `chl_integrated` | TBD | TBD | TBD | TBD |
+
 ## CTD: derived series that hold one value at every depth are withheld (not yet rendered)
 
 A series can be in bounds, unflagged and still not a profile. A census of every ctd-cast downcast
@@ -29,6 +73,142 @@ casts lose `est_nitrate_cruise_corr` / `oxygen_*_cruise_corr` / `oxygen_*_sta_co
 `ctd_measurement` and downstream (`obs_ctd_full`, `ctd_summary`); a sensor-pair average that rested
 on a withheld sensor is rebuilt from the other. `questions.csv` Q42 asks the CTD team whether
 `EstNO3_CruiseCorr` is a per-cast offset in these files and whether to withhold or recompute it.
+
+## CTD casts: two provider questions on bottle values after 2021-05
+
+`calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
+reach the release only as the `btl_*` types on `calcofi_ctd-cast`, from preliminary CTD + bottle
+files and with no quality code (the source files carry no flag column for any bottle value).
+Two `proposed` questions go to the provider (`metadata/calcofi/ctd-cast/questions.csv` Q40, Q41):
+whether `btl_*` values are equivalent to the bottle database for 2021 onward, and whether a bottle
+database later than 2021-05 is available or scheduled. No data changes.
+
+## `sample` and `sample_root` carry `hex7`, so a per-sample value can be drawn in hexagons
+
+A value held per sampling event in `sample_measurement` (a cast's mixed-layer depth, a net's volume
+filtered) had no H3 cell: the cell lived only on observations (`obs_bio.hex7`, `obs_env.hex7`), and a
+per-sample value has no observation row to borrow one from. The Explorer's Hexagons lens could not
+draw the seven per-cast `calcofi_ctd-derived` types for that reason.
+
+- **`sample.hex7` and `sample_root.hex7` (new column, `UBIGINT`, last on each table).** The H3 cell
+  at resolution 7 of the event's own position, `NULL` where the position is missing or not finite.
+  `sample_root.hex7` is its root's `sample.hex7`, copied. The change touches no other column: on a
+  dry run over v2026.10.01 every other value of both tables is unchanged, row for row.
+- **One definition with the observations.** `hex7` is the resolution-7 **parent of the
+  resolution-10 cell** of the position, built from the same SQL as `obs.hex_id` and
+  `obs_bio.hex7` / `obs_env.hex7`. It is not the resolution-7 cell the position falls in: H3 cells
+  do not nest exactly, and the two differ for 101,770 of 1,463,329 positioned samples (7.0 %).
+- **By how much** (dry run on v2026.10.01): 1,463,329 of 1,469,239 `sample` rows and 415,628 of
+  421,538 `sample_root` rows get a cell. The rest have no place: 5,761 samples with no position
+  (`calcofi_mets` 4,039, `swfsc_cufes` 1,563, `cce-lter_zoodb` 155, `cdfw_dungeness-crab` 4) and 149
+  `calcofi_mets` samples holding one coordinate without the other. Of the 652,879
+  `sample_measurement` values, 652,871 now reach a hexagon through `sample`; through `sample_root`
+  alone 332,152 do, because 320,719 values sit on non-root samples (ichthyoplankton nets, crab
+  subsamples). `sample` grows 25.9 → 27.7 MB (+6.7 %), `sample_root` 10.5 → 11.5 MB (+9.0 %).
+- **A sample's cell is not always its observations' cell, and that is correct.** `sample` holds one
+  position per event; a CTD observation holds its own scan's position, and a DIC draw its own. Where
+  the ship drifts across a cell edge during a cast, some scans are in the neighbouring hexagon:
+  1,012,956 of 33,139,449 observations (3.1 %), on 925 of 9,674 `calcofi_ctd-cast` casts, 893 of the
+  9,275 casts with `calcofi_ctd-derived` profiles and 235 of 789 `calcofi_dic` samples. None of the
+  other 13 datasets differs, and no observation that sits at exactly its sample's position
+  (17,341,531 of them) is in another cell.
+- **Gate.** `check_sample_hex7()` (`release_database.qmd`, chunk `browser_objects`) fails the
+  release unless a cell is present exactly where the position is finite, is at resolution 7, is
+  equal on `sample` and `sample_root` for every root, and equals the cell of every observation at
+  the same position. Observations in another cell than their sample are reported. Four
+  `test_release.qmd` contract rows assert the same on the published objects.
+
+**Consumers:** additive, nothing to change. To place a per-sample value, join `sample_measurement`
+to `sample` on `sample_key` and read `hex7` (`sample_root` reaches root samples only). Coarser
+hexagons are `calcofi4db::h3_parent_sql(hex7, res)`, plain bit arithmetic that needs no extension.
+Join an observation to its sample on `sample_key`, never on the cell.
+
+## A new dataset: `calcofi_2022-edna`, vertebrate eDNA from the October 2022 cruise (detections only)
+
+`ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
+Vertebrate eDNA" (Patin and O'Donnell, version 1.2, doi:10.15468/n52j6r, CC BY 4.0; linked to Patin
+et al. 2026): 47 water filters (`sample_type = 'filter'`, one per `parentEventID`) from CalCOFI/GEMCAP
+stations on cruise 2022-10-33UD, 2022-10-13 to 2022-10-18, each run through a mitochondrial D-loop
+assay (cetaceans) and/or a 12S rRNA MiFish assay (fish). Staged shard: 47 `sample`, 148 `obs`
+(74 `edna_presence`, 51 `edna_reads_dloop`, 23 `edna_reads_12s`; 19 taxa) and 482
+`sample_measurement` (co-collected nutrients, chlorophyll fluorescence, oxygen in mg/L, DNA
+concentration, and the per-assay raw and filtered read totals).
+
+**Detections only.** The source archive holds positive detections only, so the dataset publishes
+`edna_presence = 1` and the read counts, and **the absence of a row is not a non-detection** here
+(unlike `sio_cetacean-edna`, where 0 means not detected in a sequenced sample). Whether filters or
+assay runs with no detection were omitted is asked of the provider (Q08, `high`, no longer a
+blocker). Reads are a semi-quantitative signal of PCR-amplified DNA, not abundance, and are not
+comparable between assays. Not yet linked: `site_key` and `parent_sample_key` are NULL on every
+filter (CalCOFI/workflows#125). The shared `measurement_type` registry gains `edna_reads_dloop`,
+`edna_reads_12s`, `edna_reads_raw_*`, `edna_reads_filtered_*`, `oxygen_mg_l` and
+`dna_concentration`; `chl_fluor` (shared with `calcofi_mets`) now declares `valid_min = 0`.
+
+## A new dataset: `cce-lter_iron`, dissolved iron on CalCOFI cruises, 2002–2004
+
+`ingest_cce-lter_iron.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.21.3` (Barbeau,
+doi:10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1), fetched and md5-pinned by
+`libs/download_iron.R` (CalCOFI/workflows#82). With no cast or bottle number in the source, it
+mints its own `sample` arm (170 surface pole samples, Nov 2002 – Jul 2004, keyed
+`cce-lter_iron:bottle:{study_name}-{index_number}` from the source's own unique pair, not row
+position) and publishes 170 `obs` rows in the env realm of one new measurement type,
+`dissolved_iron` (nmol/L; the file header says "nM/L", confirmation pending, Q04).
+
+**Held out, on purpose.** `chl_response_to_fe` (the iron-addition bioassay response) is **not**
+released until the provider answers Q01 (is it a unitless treatment:control ratio, a concentration
+or a code? its EML scale is `nominal`); Q01 stays `open` with priority `blocker`. `total_iron` is
+not registered because the revision has no real value (170 of 170 rows are the `-999` sentinel).
+Neither has a row in `measurement_type`, so neither appears in the measurements catalog.
+
+The source's undocumented `-999` sentinel becomes NULL (Q06), and `Datetime PST` is read as a fixed
+UTC−8 offset pending the provider's answer to Q02. The license is the package's own free-text
+rights statement (`custom`), not a CC grant. Open provider questions: Q01, Q04 (units, detection
+limit, whether the 0.05 nmol/L floor is one), Q07 (operational definition of "dissolved",
+contamination control).
+
+## Three cetacean datasets: sightings, sonobuoy and eDNA (licence pending; provider asked)
+
+`sio_cetacean-sightings`, `sio_cetacean-sonobuoy` and `sio_cetacean-edna` ship for the first time,
+staged from CalCOFI/marmam-app at commit `7bc0e18` (CalCOFI/workflows#117). They ship **without a
+settled licence or citation**: nothing is invented, the gap is recorded and the provider is asked
+(`questions.csv` Q01/Q02 of each; sightings carries the EDI knb-lter-cce.262.2 terms and citation as
+`custom`, sonobuoy and eDNA say `license: unknown` with an empty citation). `funding` is blank on all
+three: the ONR award marmam-app names (N00014-22-1-2719, FY22) cannot have funded 2004-2012 data, and
+the provider is asked what did.
+
+- **`sio_cetacean-sightings`**: visual line-transect sightings and effort, quarterly cruises 2004-2022
+  (effort through 2021, so 2022 sightings have no effort to normalise against, Q07). Staged shard: 8,087
+  `sample` (1,980 `transect` effort segments + 6,107 `sighting`), 6,097 `obs` (`group_size`, one per
+  counted sighting; the 10 sightings with a Best of 0 or blank keep their sample and publish no obs),
+  1,980 `sample_measurement` (`transect_length`) and 19,086 `obs_attribute` rows (effort status, group
+  size min/max, calf count). **Behaviour is held back**: the codes are bare numbers with no codebook, in
+  the same `behavior` type that `farallon_bird-mammal` fills with words, so the 10,108 behaviour rows
+  the staged shard carried are not published until the lab supplies the codebook (Q03). 67 cruises,
+  all with a `cruise_key`. It leaves the catalog's holdings and enters as a released dataset.
+- **`sio_cetacean-sonobuoy`**: hourly presence of blue, fin and humpback whale calls in sonobuoy
+  recordings, 2004-2012. Staged shard: 4,206 `sample` (962 `deployment` + 3,244 `scan`, one analysed
+  hour), 9,270 `obs` (`acoustic_presence`, 1,978 of them 1) and 2,229 `obs_attribute` (`call_type`);
+  35 cruises, every hour with a `cruise_key`. The hydrophone depth is not recorded, so depth is NULL
+  on every sample and obs, **not 0 m**. The 154 hours scanned only "adhoc" keep their sample and publish
+  no presence value.
+- **`sio_cetacean-edna`**: NCOG seawater eDNA screened for seven cetaceans, 2014-2016. Staged shard: 133
+  `sample` (`water`, one per sample, each timed by its CalCOFI bottle cast) and 497 `obs`
+  (`edna_presence`, 71 sequenced samples x 7 species, 15 detections). The 62 samples listed as "not
+  sequenced, PCR negative" did not amplify: they stay as samples with **no** `edna_presence` rows, not
+  zeros, until the provider says what a PCR negative means (Q04). `parent_sample_key` is NULL (every
+  sample is a root).
+
+What else changes for consumers:
+
+- **`sample_type` gains `sighting`, `deployment`, `scan` (and `water`, `filter` with the eDNA datasets).**
+- **`measurement_type` gains `acoustic_presence`, `calf_count`, `call_type`, `edna_presence`,
+  `effort_status`, `group_size`, `group_size_max`, `group_size_min` and `transect_length`.**
+  `behavior`'s `_source_datasets` names `sio_cetacean-sightings`, but no behaviour row of it ships.
+- **Counts pool across observer teams**: `sio_cetacean-sightings` and `farallon_bird-mammal` count
+  cetaceans on the same cruises with independent observers, so summing the two counts some animals
+  twice (both descriptions say so).
+- `check_taxon_registries()` skips `taxon_override.csv` rows only for datasets held out of a release
+  (`exclude = ds_excluded`, calcofi4db 4.17.2); these datasets are no longer among them.
 
 ## Correction: the `obs` objects still ship; #92 tracks their removal
 
@@ -94,36 +274,6 @@ the two hold **the same value**: 4,251 `phytoplankton_abundance` rows leave `obs
   `metadata/calcofi/phytoplankton/duplicate_pairs_differing.csv`; the ingest asserts that
   `(phyto_sample_id, species_code)` is unique outside that list. A consumer summing abundance still
   double-counts those 290 (code, sample) cells.
-
-## CTD casts: two provider questions on bottle values after 2021-05
-
-`calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
-reach the release only as the `btl_*` types on `calcofi_ctd-cast`, from preliminary CTD + bottle
-files and with no quality code (the source files carry no flag column for any bottle value).
-Two `proposed` questions go to the provider (`metadata/calcofi/ctd-cast/questions.csv` Q40, Q41):
-whether `btl_*` values are equivalent to the bottle database for 2021 onward, and whether a bottle
-database later than 2021-05 is available or scheduled. No data changes.
-
-## A new dataset: `calcofi_2022-edna`, vertebrate eDNA from the October 2022 cruise (detections only)
-
-`ingest_calcofi_2022-edna.qmd` ingests the GBIF/OBIS Darwin Core Archive "CalCOFI October 2022
-Vertebrate eDNA" (Patin and O'Donnell, version 1.2, doi:10.15468/n52j6r, CC BY 4.0; linked to Patin
-et al. 2026): 47 water filters (`sample_type = 'filter'`, one per `parentEventID`) from CalCOFI/GEMCAP
-stations on cruise 2022-10-33UD, 2022-10-13 to 2022-10-18, each run through a mitochondrial D-loop
-assay (cetaceans) and/or a 12S rRNA MiFish assay (fish). Staged shard: 47 `sample`, 148 `obs`
-(74 `edna_presence`, 51 `edna_reads_dloop`, 23 `edna_reads_12s`; 19 taxa) and 482
-`sample_measurement` (co-collected nutrients, chlorophyll fluorescence, oxygen in mg/L, DNA
-concentration, and the per-assay raw and filtered read totals).
-
-**Detections only.** The source archive holds positive detections only, so the dataset publishes
-`edna_presence = 1` and the read counts, and **the absence of a row is not a non-detection** here
-(unlike `sio_cetacean-edna`, where 0 means not detected in a sequenced sample). Whether filters or
-assay runs with no detection were omitted is asked of the provider (Q08, `high`, no longer a
-blocker). Reads are a semi-quantitative signal of PCR-amplified DNA, not abundance, and are not
-comparable between assays. Not yet linked: `site_key` and `parent_sample_key` are NULL on every
-filter (CalCOFI/workflows#125). The shared `measurement_type` registry gains `edna_reads_dloop`,
-`edna_reads_12s`, `edna_reads_raw_*`, `edna_reads_filtered_*`, `oxygen_mg_l` and
-`dna_concentration`; `chl_fluor` (shared with `calcofi_mets`) now declares `valid_min = 0`.
 
 ## Phytoplankton: named codes stop falling into "not identified further"; one rule for unknown species
 
@@ -203,111 +353,22 @@ phytoplankton taxon. Beyond the classes, only two species have an English name, 
 single English vernacular: *Noctiluca scintillans* "sea sparkle" (worms:109921) and *Pyrocystis
 fusiformis* "ocean night light" (worms:110328). They are added to `metadata/taxon_common.csv`.
 
-## A new dataset: `cce-lter_iron`, dissolved iron on CalCOFI cruises, 2002–2004
+## calcofi.io measurement pages: face, why and method rows for the keys that had none
 
-`ingest_cce-lter_iron.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.21.3` (Barbeau,
-doi:10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1), fetched and md5-pinned by
-`libs/download_iron.R` (CalCOFI/workflows#82). With no cast or bottle number in the source, it
-mints its own `sample` arm (170 surface pole samples, Nov 2002 – Jul 2004, keyed
-`cce-lter_iron:bottle:{study_name}-{index_number}` from the source's own unique pair, not row
-position) and publishes 170 `obs` rows in the env realm of one new measurement type,
-`dissolved_iron` (nmol/L; the file header says "nM/L", confirmation pending, Q04).
-
-**Held out, on purpose.** `chl_response_to_fe` (the iron-addition bioassay response) is **not**
-released until the provider answers Q01 (is it a unitless treatment:control ratio, a concentration
-or a code? its EML scale is `nominal`); Q01 stays `open` with priority `blocker`. `total_iron` is
-not registered because the revision has no real value (170 of 170 rows are the `-999` sentinel).
-Neither has a row in `measurement_type`, so neither appears in the measurements catalog.
-
-The source's undocumented `-999` sentinel becomes NULL (Q06), and `Datetime PST` is read as a fixed
-UTC−8 offset pending the provider's answer to Q02. The license is the package's own free-text
-rights statement (`custom`), not a CC grant. Open provider questions: Q01, Q04 (units, detection
-limit, whether the 0.05 nmol/L floor is one), Q07 (operational definition of "dissolved",
-contamination control).
-
-## Three cetacean datasets: sightings, sonobuoy and eDNA (licence pending; provider asked)
-
-`sio_cetacean-sightings`, `sio_cetacean-sonobuoy` and `sio_cetacean-edna` ship for the first time,
-staged from CalCOFI/marmam-app at commit `7bc0e18` (CalCOFI/workflows#117). They ship **without a
-settled licence or citation**: nothing is invented, the gap is recorded and the provider is asked
-(`questions.csv` Q01/Q02 of each; sightings carries the EDI knb-lter-cce.262.2 terms and citation as
-`custom`, sonobuoy and eDNA say `license: unknown` with an empty citation). `funding` is blank on all
-three: the ONR award marmam-app names (N00014-22-1-2719, FY22) cannot have funded 2004-2012 data, and
-the provider is asked what did.
-
-- **`sio_cetacean-sightings`**: visual line-transect sightings and effort, quarterly cruises 2004-2022
-  (effort through 2021, so 2022 sightings have no effort to normalise against, Q07). Staged shard: 8,087
-  `sample` (1,980 `transect` effort segments + 6,107 `sighting`), 6,097 `obs` (`group_size`, one per
-  counted sighting; the 10 sightings with a Best of 0 or blank keep their sample and publish no obs),
-  1,980 `sample_measurement` (`transect_length`) and 19,086 `obs_attribute` rows (effort status, group
-  size min/max, calf count). **Behaviour is held back**: the codes are bare numbers with no codebook, in
-  the same `behavior` type that `farallon_bird-mammal` fills with words, so the 10,108 behaviour rows
-  the staged shard carried are not published until the lab supplies the codebook (Q03). 67 cruises,
-  all with a `cruise_key`. It leaves the catalog's holdings and enters as a released dataset.
-- **`sio_cetacean-sonobuoy`**: hourly presence of blue, fin and humpback whale calls in sonobuoy
-  recordings, 2004-2012. Staged shard: 4,206 `sample` (962 `deployment` + 3,244 `scan`, one analysed
-  hour), 9,270 `obs` (`acoustic_presence`, 1,978 of them 1) and 2,229 `obs_attribute` (`call_type`);
-  35 cruises, every hour with a `cruise_key`. The hydrophone depth is not recorded, so depth is NULL
-  on every sample and obs, **not 0 m**. The 154 hours scanned only "adhoc" keep their sample and publish
-  no presence value.
-- **`sio_cetacean-edna`**: NCOG seawater eDNA screened for seven cetaceans, 2014-2016. Staged shard: 133
-  `sample` (`water`, one per sample, each timed by its CalCOFI bottle cast) and 497 `obs`
-  (`edna_presence`, 71 sequenced samples x 7 species, 15 detections). The 62 samples listed as "not
-  sequenced, PCR negative" did not amplify: they stay as samples with **no** `edna_presence` rows, not
-  zeros, until the provider says what a PCR negative means (Q04). `parent_sample_key` is NULL (every
-  sample is a root).
-
-What else changes for consumers:
-
-- **`sample_type` gains `sighting`, `deployment`, `scan` (and `water`, `filter` with the eDNA datasets).**
-- **`measurement_type` gains `acoustic_presence`, `calf_count`, `call_type`, `edna_presence`,
-  `effort_status`, `group_size`, `group_size_max`, `group_size_min` and `transect_length`.**
-  `behavior`'s `_source_datasets` names `sio_cetacean-sightings`, but no behaviour row of it ships.
-- **Counts pool across observer teams**: `sio_cetacean-sightings` and `farallon_bird-mammal` count
-  cetaceans on the same cruises with independent observers, so summing the two counts some animals
-  twice (both descriptions say so).
-- `check_taxon_registries()` skips `taxon_override.csv` rows only for datasets held out of a release
-  (`exclude = ds_excluded`, calcofi4db 4.17.2); these datasets are no longer among them.
-
-## `sample` and `sample_root` carry `hex7`, so a per-sample value can be drawn in hexagons
-
-A value held per sampling event in `sample_measurement` (a cast's mixed-layer depth, a net's volume
-filtered) had no H3 cell: the cell lived only on observations (`obs_bio.hex7`, `obs_env.hex7`), and a
-per-sample value has no observation row to borrow one from. The Explorer's Hexagons lens could not
-draw the seven per-cast `calcofi_ctd-derived` types for that reason.
-
-- **`sample.hex7` and `sample_root.hex7` (new column, `UBIGINT`, last on each table).** The H3 cell
-  at resolution 7 of the event's own position, `NULL` where the position is missing or not finite.
-  `sample_root.hex7` is its root's `sample.hex7`, copied. The change touches no other column: on a
-  dry run over v2026.10.01 every other value of both tables is unchanged, row for row.
-- **One definition with the observations.** `hex7` is the resolution-7 **parent of the
-  resolution-10 cell** of the position, built from the same SQL as `obs.hex_id` and
-  `obs_bio.hex7` / `obs_env.hex7`. It is not the resolution-7 cell the position falls in: H3 cells
-  do not nest exactly, and the two differ for 101,770 of 1,463,329 positioned samples (7.0 %).
-- **By how much** (dry run on v2026.10.01): 1,463,329 of 1,469,239 `sample` rows and 415,628 of
-  421,538 `sample_root` rows get a cell. The rest have no place: 5,761 samples with no position
-  (`calcofi_mets` 4,039, `swfsc_cufes` 1,563, `cce-lter_zoodb` 155, `cdfw_dungeness-crab` 4) and 149
-  `calcofi_mets` samples holding one coordinate without the other. Of the 652,879
-  `sample_measurement` values, 652,871 now reach a hexagon through `sample`; through `sample_root`
-  alone 332,152 do, because 320,719 values sit on non-root samples (ichthyoplankton nets, crab
-  subsamples). `sample` grows 25.9 → 27.7 MB (+6.7 %), `sample_root` 10.5 → 11.5 MB (+9.0 %).
-- **A sample's cell is not always its observations' cell, and that is correct.** `sample` holds one
-  position per event; a CTD observation holds its own scan's position, and a DIC draw its own. Where
-  the ship drifts across a cell edge during a cast, some scans are in the neighbouring hexagon:
-  1,012,956 of 33,139,449 observations (3.1 %), on 925 of 9,674 `calcofi_ctd-cast` casts, 893 of the
-  9,275 casts with `calcofi_ctd-derived` profiles and 235 of 789 `calcofi_dic` samples. None of the
-  other 13 datasets differs, and no observation that sits at exactly its sample's position
-  (17,341,531 of them) is in another cell.
-- **Gate.** `check_sample_hex7()` (`release_database.qmd`, chunk `browser_objects`) fails the
-  release unless a cell is present exactly where the position is finite, is at resolution 7, is
-  equal on `sample` and `sample_root` for every root, and equals the cell of every observation at
-  the same position. Observations in another cell than their sample are reported. Four
-  `test_release.qmd` contract rows assert the same on the published objects.
-
-**Consumers:** additive, nothing to change. To place a per-sample value, join `sample_measurement`
-to `sample` on `sample_key` and read `hex7` (`sample_root` reaches root samples only). Coarser
-hexagons are `calcofi4db::h3_parent_sql(hex7, res)`, plain bit arithmetic that needs no extension.
-Join an observation to its sample on `sample_key`, never on the cell.
+The landing site draws each `/measurements/` page from `measurements.json`, which carries the five
+face registries (`metadata/measurement_{face,why,method,chem,scale}.csv`). In v2026.10.01 three
+published keys had no face (`oxygen_ml_l_ave_cruise_corr`, `sigma_theta_ave`, `spiciness0`), four no
+why (those and `uws_flow`) and three no method. They now have rows, so their pages publish all three
+sections: `oxygen_ml_l_ave_cruise_corr` reuses the dissolved-oxygen rows (face, chemistry, why),
+`sigma_theta_ave` stands in for `sigma_theta`, and `spiciness0` and `uws_flow` get their own why rows.
+Rows are also written for the per-cast mixed-layer-depth and chlorophyll types of
+`calcofi_ctd-derived` (`mld_sigma_theta_002`, `mld_sigma_theta_0125`, `mld_temperature_02`, `chl_max`,
+`chl_max_depth`, `chl_integrated`, `chl_integrated_depth`; the headline mixed-layer depth states the
+provider's 0.02 kg m⁻³ from 10 m criterion, and the retired `mld_sigma_theta_003` has none). Because the
+catalog now lists per-cast types (the CTD derived products section above), these keys get a `/measurements/` page that says each is
+one value per cast. Rows for the eDNA types (`edna_presence`, `edna_reads_*`) and `group_size` /
+`acoustic_presence` are written too, but those are `obs_bio` keys, which the catalog does not list, so
+they render nowhere yet. No data changes.
 
 # v2026.10.01
 
