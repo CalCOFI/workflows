@@ -8,6 +8,17 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Bottle: salinity quality codes above 9 become blank (calcofi_bottle_01)
+
+The provider (Rasmus Swalethorp, 2026-09-18) answered that a quality code above 9 is impossible
+(codes were dragged down a spreadsheet by accident) and to turn every such code into a blank. In
+the source `194903-202105_Bottle.csv` that is **880 rows, all `salinity`, all cruise 2021-05-3322**
+(44 stations; codes 10–17 and 254–344); no other quality column holds a code above 9. In
+`obs_env` those 880 `measurement_qual` values go from the code to NULL; the salinity values and the
+row count are unchanged. A blank is not a verdict on the value: `calcofi_bottle_13` (that cruise reads
+24.2–27.1 PSU where its neighbours read 32.8–34.5) is still open, and `cc_qual_ok_sql()` excludes only
+codes 8 and 9, so a filtered query returns the same 880 rows before and after.
+
 ## Phytoplankton: repeated rows dropped (workflows#124)
 
 Two sets of source rows carried the same species code twice in one sample, so a summed abundance
