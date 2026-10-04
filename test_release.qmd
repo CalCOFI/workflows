@@ -885,6 +885,8 @@ meas_res <- if (is.null(meas_txt)) {
   meas_rec  <- jsonlite::fromJSON(meas_txt, simplifyVector = FALSE)
   schema_ok <- tryCatch(validate_measurements_catalog(meas_txt), error = function(e) conditionMessage(e))
   dbExecute(con_test, glue("CREATE OR REPLACE VIEW obs_env AS SELECT * FROM {rp('obs_env')}"))
+  # the per-cast series (grain "sample") are counted against sample_measurement
+  dbExecute(con_test, glue("CREATE OR REPLACE VIEW sample_measurement AS SELECT * FROM {rp('sample_measurement')}"))
   mm_reg <- read_measurement_type(here("metadata/measurement_type.csv"))
   mm_chk <- check_measurements_catalog(
     meas_rec, con_test, if (exists("ds_rec")) ds_rec else NULL, mm_reg)
