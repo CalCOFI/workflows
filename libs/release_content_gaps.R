@@ -51,17 +51,22 @@ release_content_gaps <- function(release = NULL, measurements = NULL, datasets =
 
   # measurement keys the release carries -------------------------------------------------------
   m <- read_json(measurements, "measurements.json")
+  # a per-cast key (grain "sample", read from sample_measurement by the ws-1004d catalog) has a page
+  # like any other key, so a missing face / why / method is the same gap; the detail says which grain
+  # it is, so a reader knows the registry rows to write are for a per-cast type.
   for (k in m$measurements) {
     key <- k$key
+    per_cast <- identical(k$grain, "sample")
+    tag <- if (per_cast) " (per-cast key, grain sample)" else ""
     if (is.null(k$face))
       out[[length(out) + 1]] <- row("measurement", key, "no_face",
-                                    "no row in metadata/measurement_face.csv: the What section is empty")
+                                    paste0("no row in metadata/measurement_face.csv: the What section is empty", tag))
     if (is.null(k$why) || !length(k$why))
       out[[length(out) + 1]] <- row("measurement", key, "no_why",
-                                    "no row in metadata/measurement_why.csv: the Why section is empty")
+                                    paste0("no row in metadata/measurement_why.csv: the Why section is empty", tag))
     if (is.null(k$method) || !length(k$method))
       out[[length(out) + 1]] <- row("measurement", key, "no_method",
-                                    "no row in metadata/measurement_method.csv for any of its series: the How section is empty")
+                                    paste0("no row in metadata/measurement_method.csv for any of its series: the How section is empty", tag))
   }
 
   # datasets the release carries ---------------------------------------------------------------
@@ -75,9 +80,11 @@ release_content_gaps <- function(release = NULL, measurements = NULL, datasets =
   }
 
   # before a release carries its record: the registries against measurement_type.csv ------------
-  # canonical keys only (a non-canonical per-sensor twin has no page of its own). A `registry` row
-  # also names whether the key can have a page at all: the catalog reads obs_env and nothing else, so
-  # a per-cast (sample), obs_bio or attribute key is described here and drawn nowhere.
+  # canonical keys only (a non-canonical per-sensor twin has no page of its own; a RETIRED key such as
+  # mld_sigma_theta_003 is is_canonical FALSE, so it needs no face). A `registry` row also names whether
+  # the key can have a page at all: the catalog reads obs_env and, for the datasets it is told
+  # (calcofi_ctd-derived), the per-cast types of sample_measurement (grain "sample"); an obs_bio or
+  # attribute key is described here and drawn nowhere.
   if (!is.null(registry_dir)) {
     rd <- function(f) {
       p <- file.path(registry_dir, f)
@@ -90,7 +97,7 @@ release_content_gaps <- function(release = NULL, measurements = NULL, datasets =
     why  <- rd("measurement_why.csv")$key
     for (i in seq_len(nrow(mt))) {
       key <- mt$measurement_type[i]
-      pageless <- if (!is.na(mt$grain[i]) && mt$grain[i] != "obs")
+      pageless <- if (!is.na(mt$grain[i]) && !mt$grain[i] %in% c("obs", "sample"))
         paste0("grain ", mt$grain[i], ": no /measurements/ page") else ""
       if (!key %in% face) out[[length(out) + 1]] <- row("registry", key, "no_face", pageless)
       if (!key %in% why)  out[[length(out) + 1]] <- row("registry", key, "no_why",  pageless)

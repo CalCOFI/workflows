@@ -17,10 +17,13 @@ why (those and `uws_flow`) and three no method. They now have rows, so their pag
 sections: `oxygen_ml_l_ave_cruise_corr` reuses the dissolved-oxygen rows (face, chemistry, why),
 `sigma_theta_ave` stands in for `sigma_theta`, and `spiciness0` and `uws_flow` get their own why rows.
 Rows are also written for the per-cast mixed-layer-depth and chlorophyll types of
-`calcofi_ctd-derived`, the eDNA types (`edna_presence`, `edna_reads_*`) and `group_size` /
-`acoustic_presence`; these keys have no `/measurements/` page, because `build_measurements_catalog()`
-reads `obs_env` only, so they render nowhere until the catalog carries per-cast and `obs_bio` keys.
-No data changes.
+`calcofi_ctd-derived` (`mld_sigma_theta_002`, `mld_sigma_theta_0125`, `mld_temperature_02`, `chl_max`,
+`chl_max_depth`, `chl_integrated`, `chl_integrated_depth`; the headline mixed-layer depth states the
+provider's 0.02 kg m⁻³ from 10 m criterion, and the retired `mld_sigma_theta_003` has none). Because the
+catalog now lists per-cast types (next section), these keys get a `/measurements/` page that says each is
+one value per cast. Rows for the eDNA types (`edna_presence`, `edna_reads_*`) and `group_size` /
+`acoustic_presence` are written too, but those are `obs_bio` keys, which the catalog does not list, so
+they render nowhere yet. No data changes.
 
 ## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
 
