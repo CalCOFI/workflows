@@ -390,11 +390,17 @@ published, **wherever the source gives the sample a depth**, on the sample's own
 `calcofi_dic:bottle:<md5>` key with the source's own depth, the `grid_key` of its position, and a
 `cruise_key` where the SWFSC reference resolves one (below). **These values are not linked to a bottle
 cast**: the source names no cast (`calcofi_dic_01`, open), so `parent_sample_key` is NULL and the
-sample is its own root. Nothing a matched cast carries changes: the 3,708 cast-matched `obs` rows
-(and the 6 minted samples on a matched cast) are identical, column for column, to v2026.10.01's.
+sample is its own root. The 3,708 values of a matched cast are all still published (937 / 835 / 1,028
+/ 908), with one change of key: **13 of them, on one Niskin, move from `calcofi_bottle:bottle:555915`
+to a minted DIC key** (and one more DIC sample is minted, 3,262 in all: 7 on a matched cast, 3,255
+matching none). DIC rows at station 106.7 100.0, 1984-01-19 match two casts (22605 and 22606) that tie
+on date; `match_by_site_datetime()` has no tie-break, and the re-staged bottle shard resolved the tie
+to cast 22605, which holds no bottle within 1 m of the DIC depth, where v2026.10.01 had 22606 (bottle
+555915 at 13 m). The matching count (1,086 rows) is unchanged. Tie-break: calcofi4db issue to file.
 
 Predicted `obs` (`calcofi_dic`, measured by running the notebook's own SQL on the source file against
-the v2026.10.01 shards; 0 rows changed, 0 removed):
+the 2026-10-04 re-staged `calcofi_bottle` and `swfsc_ichthyo` shards; 0 values removed, the per-type
+totals below do not depend on how the matching resolves):
 
 | measurement_type | v2026.10.01 | added | predicted |
 |------------------|------------:|------:|----------:|
@@ -416,7 +422,7 @@ salinity 5); `qual_ok` / `cc_qual_ok_sql()` exclude them. All 12,681 are within 
 the sample's ship (EXPOCODE NODC prefix, else `Ship_Name`) and date by `resolve_cruise_key()`; the
 EXPOCODE start month is not used as the designation (`calcofi_dic_07`, open). The 335 are 8 EXPOCODEs
 for which the reference holds no cruise of that ship and month (NOAA Ship Sally Ride 240 samples,
-McArthur 51, Oceanus 41, David Starr Jordan 3). `site_key` is the source's own station on all of them.
+McArthur 51, Oceanus 41, David Starr Jordan 3), the same on the 2026-09-26 ichthyo export as before it. `site_key` is the source's own station on all of them.
 
 **Limitations.** 3,218 of the 3,254 published samples carry a date on the 1st (1,926) or the 20th
 (1,292) of a month, an apparent month-precision stand-in: use their year and month, not their day. The

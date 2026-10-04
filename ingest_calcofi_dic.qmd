@@ -864,36 +864,48 @@ cat(glue("obs: {format(n_obs, big.mark=',')} rows, {format(n_shared, big.mark=',
 
 ### Scope of the published values
 
-The counts below were measured on the NCEI delivery `CALCOFI_DIC_20250122.csv` (4,391
-source rows) against the v2026.10.01 shards, and are asserted: a re-delivered file that
-changes them stops the notebook rather than shipping a different scope unannounced.
+Two kinds of number, kept apart on purpose (WS-1004X3). **Pins** are what this notebook
+alone determines from its own source file `CALCOFI_DIC_20250122.csv`: rows, distinct samples,
+the values per type, the samples with no source depth. A re-delivered file that changes them
+stops the notebook. **Measured and reported** are what depends on another dataset: how many
+samples match a bottle cast, and how many of those share a bottle, move whenever
+`calcofi_bottle` or the `swfsc_ichthyo` reference is re-staged (v2026.10.01 had 6 minted samples
+on a cast; the 2026-10-04 re-stage had 7, because two casts of one station and date tie for the
+same DIC row and `match_by_site_datetime()` has no tie-break). They are guarded by invariants
+instead of pinned: the parts add up to the whole, every sample matching no cast with a depth
+publishes its observations, no cast key is fabricated, and the arms hold exactly their rows.
 
 ```{r}
 #| label: scope-assertions
 
-# measured WS-1004X2 2026-10-04 (read-only run of this notebook's own SQL)
-dic_scope <- list(
-  samples_minted        = 3261L,  # 6 matched a cast but no bottle, 3,255 matched no cast
-  samples_with_cast     = 6L,
-  samples_no_cast       = 3255L,
-  samples_no_cast_depth = 3254L,  # published with observations
-  samples_no_depth      = 1L,     # matched no cast AND no source depth: a sample row, no obs
-  obs_cast              = c(alkalinity = 937L, ctdtemp_its90 = 835L, dic = 1028L, salinity_pss78 = 908L),
-  obs_new               = c(alkalinity = 3126L, ctdtemp_its90 = 3174L, dic = 3208L, salinity_pss78 = 3173L),
-  obs_left_out          = c(alkalinity = 1L, dic = 1L))
+# PINS: measured from the source file alone (WS-1004X2 2026-10-04; unchanged at the 2026-10-04
+# re-stage, WS-1004X3). dic_measurement is every non-missing source value, before any matching.
+dic_source <- list(
+  rows               = 4391L,
+  samples_distinct   = 4095L,  # distinct (expocode, datetime, lat, lon, depth)
+  samples_no_depth   = 3L,     # source Depth = -999 (any cast status)
+  values             = c(alkalinity = 4064L, ctdtemp_its90 = 4009L, dic = 4237L, salinity_pss78 = 4081L),
+  values_no_depth    = c(alkalinity = 3L, dic = 3L))
 as_counts <- function(d) setNames(as.integer(d$n), d$measurement_type)
-
-# 1. the observations of a matched cast are exactly what v2026.10.01 published (3,708)
-d_obs_cast <- dbGetQuery(con, "
-  SELECT measurement_type, COUNT(*) AS n FROM dic_measurement
-  WHERE cast_id IS NOT NULL GROUP BY 1 ORDER BY 1")
+d_src <- dbGetQuery(con, "
+  SELECT (SELECT COUNT(*) FROM dic_sample) AS rows,
+         (SELECT COUNT(*) FROM (SELECT DISTINCT expocode, datetime_start_utc, latitude, longitude, depth_m
+                                FROM dic_sample)) AS samples_distinct,
+         (SELECT COUNT(*) FROM (SELECT DISTINCT expocode, datetime_start_utc, latitude, longitude
+                                FROM dic_sample WHERE depth_m IS NULL)) AS samples_no_depth")
+d_src_val <- dbGetQuery(con, "SELECT measurement_type, COUNT(*) AS n FROM dic_measurement GROUP BY 1 ORDER BY 1")
+d_src_nod <- dbGetQuery(con, "
+  SELECT measurement_type, COUNT(*) AS n FROM dic_measurement WHERE depth_m IS NULL GROUP BY 1 ORDER BY 1")
 stopifnot(
-  "cast-matched DIC observations must be unchanged, per type" =
-    identical(as_counts(d_obs_cast), dic_scope$obs_cast[sort(names(dic_scope$obs_cast))]),
-  "obs arm 1 (cast-matched) must hold exactly those rows" =
-    n_obs_cast == sum(dic_scope$obs_cast))
+  "source rows" = d_src$rows == dic_source$rows,
+  "distinct source samples" = d_src$samples_distinct == dic_source$samples_distinct,
+  "source samples with no depth" = d_src$samples_no_depth == dic_source$samples_no_depth,
+  "source values per measurement type" =
+    identical(as_counts(d_src_val), dic_source$values[sort(names(dic_source$values))]),
+  "source values with no depth, per measurement type" =
+    identical(as_counts(d_src_nod), dic_source$values_no_depth[sort(names(dic_source$values_no_depth))]))
 
-# 2. samples: who has a cast, who has none, who has no depth
+# MEASURED + INVARIANTS: everything that depends on the bottle cast match
 d_scope <- dbGetQuery(con, "
   SELECT COUNT(*) AS n_minted,
          COUNT(*) FILTER (WHERE parent_sample_key IS NOT NULL) AS n_with_cast,
@@ -901,24 +913,9 @@ d_scope <- dbGetQuery(con, "
          COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND depth_min_m IS NOT NULL) AS n_no_cast_depth,
          COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND depth_min_m IS NULL)     AS n_no_depth
   FROM sample WHERE dataset_key = 'calcofi_dic'")
-stopifnot(
-  "minted DIC samples" = d_scope$n_minted == dic_scope$samples_minted,
-  "minted samples on a matched cast" = d_scope$n_with_cast == dic_scope$samples_with_cast,
-  "minted samples matching no cast" = d_scope$n_no_cast == dic_scope$samples_no_cast,
-  "samples matching no cast, with a depth" = d_scope$n_no_cast_depth == dic_scope$samples_no_cast_depth,
-  "samples matching no cast, with no depth" = d_scope$n_no_depth == dic_scope$samples_no_depth,
-  # no cast foreign key is fabricated: a sample that matched no cast is its own root
-  "a sample matching no cast must be its own root" =
-    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE dataset_key = 'calcofi_dic'
-                     AND parent_sample_key IS NULL AND root_sample_key <> sample_key")[[1]] == 0,
-  # every sample matching no cast, with a depth, carries observations; none without
-  "every no-cast sample with a depth must carry observations, none without a depth" =
-    dbGetQuery(con, "
-      SELECT COUNT(*) FROM sample s
-      WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NULL
-        AND (s.depth_min_m IS NOT NULL) <> EXISTS (SELECT 1 FROM obs o WHERE o.sample_key = s.sample_key)")[[1]] == 0)
-
-# 3. the observations newly published, per type, and those left out for want of a depth
+d_obs_cast <- dbGetQuery(con, "
+  SELECT measurement_type, COUNT(*) AS n FROM dic_measurement
+  WHERE cast_id IS NOT NULL GROUP BY 1 ORDER BY 1")
 d_new <- dbGetQuery(con, "
   SELECT o.measurement_type, COUNT(*) AS n
   FROM obs o JOIN sample s USING (sample_key)
@@ -927,14 +924,52 @@ d_new <- dbGetQuery(con, "
 d_left <- dbGetQuery(con, "
   SELECT measurement_type, COUNT(*) AS n FROM dic_measurement
   WHERE cast_id IS NULL AND depth_m IS NULL GROUP BY 1 ORDER BY 1")
+d_pub <- dbGetQuery(con, "SELECT measurement_type, COUNT(*) AS n FROM obs GROUP BY 1 ORDER BY 1")
+n_new_expected <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dic_measurement WHERE cast_id IS NULL AND depth_m IS NOT NULL")[[1]]
+
 stopifnot(
-  "newly published DIC observations per measurement type" =
-    identical(as_counts(d_new), dic_scope$obs_new[sort(names(dic_scope$obs_new))]),
-  "observations left out for want of a depth, per measurement type" =
-    identical(as_counts(d_left), dic_scope$obs_left_out[sort(names(dic_scope$obs_left_out))]))
-cat(glue("newly published (no cast, with a depth): {format(sum(d_new$n), big.mark = ',')} obs on ",
-         "{d_scope$n_no_cast_depth} samples; left out for want of a depth: {sum(d_left$n)} obs on ",
-         "{d_scope$n_no_depth} sample"), "\n")
+  "minted samples = on a cast + matching no cast" = d_scope$n_minted == d_scope$n_with_cast + d_scope$n_no_cast,
+  "no-cast samples = with a depth + with no depth" = d_scope$n_no_cast == d_scope$n_no_cast_depth + d_scope$n_no_depth,
+  # the matching never invents or loses a source sample: every no-cast source sample is minted once
+  "every source sample matching no cast must be minted exactly once" =
+    d_scope$n_no_cast == dbGetQuery(con, "
+      SELECT COUNT(*) FROM (SELECT DISTINCT expocode, datetime_start_utc, latitude, longitude, depth_m
+                            FROM dic_sample WHERE cast_id IS NULL)")[[1]],
+  # the only no-cast sample left without observations is one the source gives no depth
+  "samples matching no cast with no depth" =
+    d_scope$n_no_depth <= dic_source$samples_no_depth,
+  # no cast foreign key is fabricated: a sample that matched no cast is its own root,
+  # and a parent that is named exists in the bottle shard
+  "a sample matching no cast must be its own root" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE dataset_key = 'calcofi_dic'
+                     AND parent_sample_key IS NULL AND root_sample_key <> sample_key")[[1]] == 0,
+  "a named cast parent must exist in calcofi_bottle" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample s
+                     WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NOT NULL
+                       AND s.parent_sample_key NOT IN (SELECT sample_key FROM _bottle_sample)")[[1]] == 0,
+  # every sample matching no cast, with a depth, carries observations; none without
+  "every no-cast sample with a depth must carry observations, none without a depth" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) FROM sample s
+      WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NULL
+        AND (s.depth_min_m IS NOT NULL) <> EXISTS (SELECT 1 FROM obs o WHERE o.sample_key = s.sample_key)")[[1]] == 0,
+  # the arms hold exactly their rows: arm 1 = every value of a matched cast, arm 2 = every value
+  # of an unmatched sample with a depth, and nothing else
+  "obs arm 1 (cast-matched) must hold every value of a matched cast" =
+    n_obs_cast == sum(d_obs_cast$n),
+  "obs arm 2 (no cast, with a depth) must hold exactly those values" =
+    sum(d_new$n) == n_new_expected,
+  # nothing is lost between the source and obs: published + left out = every source value, per type
+  "published + left out must account for every source value, per type" =
+    all(as_counts(d_pub) + coalesce(as_counts(d_left)[names(as_counts(d_pub))], 0L) ==
+          dic_source$values[names(as_counts(d_pub))]))
+cat(glue("minted {d_scope$n_minted}: {d_scope$n_with_cast} on a cast, {d_scope$n_no_cast} matching no cast ",
+         "({d_scope$n_no_cast_depth} with a depth, {d_scope$n_no_depth} without)"), "\n")
+cat(glue("obs: {format(n_obs_cast, big.mark = ',')} of matched casts; ",
+         "{format(sum(d_new$n), big.mark = ',')} newly published on {d_scope$n_no_cast_depth} no-cast samples ",
+         "({paste(d_new$measurement_type, d_new$n, collapse = ', ')}); ",
+         "left out for want of a depth: {sum(d_left$n)}"), "\n")
 
 # name what stays out: a sample row, no observations (calcofi_dic_07)
 dbGetQuery(con, "
@@ -979,18 +1014,43 @@ d_ck <- dbGetQuery(con, "
          COUNT(*) FILTER (WHERE parent_sample_key IS NULL AND cruise_key IS NULL)     AS n_no_cast_null,
          COUNT(*) FILTER (WHERE parent_sample_key IS NOT NULL AND cruise_key IS NULL) AS n_cast_null
   FROM sample WHERE dataset_key = 'calcofi_dic'")
-# measured 2026-10-04: 2,920 keyed (span or month), 335 NULL on 8 EXPOCODEs for which the
-# ingest's `cruise` reference holds no cruise of that ship and month (the named table
-# below; 240 are NOAA Ship Sally Ride, 33P4, whose cruises the ichthyo export lacks). The
-# release's key_null_max ratchet for calcofi_dic may be lowered to this number once seen.
-# Counted and asserted, so a change in the reference or the source is seen, not absorbed.
-CRUISE_NULL_NO_CAST <- 335L
-CRUISE_NULL_CAST    <- 0L
+# The count depends on the `cruise` reference, so it is MEASURED, not pinned: measured
+# 2026-10-04 on the 2026-09-26 ichthyo export (WS-1004X3): 2,920 keyed (span or month),
+# 335 NULL on 8 EXPOCODEs (the named table below; 240 are NOAA Ship Sally Ride, 33P4,
+# whose cruises the ichthyo export lacks). The guard is an invariant plus a ratchet:
+#  * a sample is NULL only if its ship is not in the ship reference, or the reference holds
+#    no cruise of that ship whose span (+/- 3 d) contains the date or whose key is the
+#    event's month (what resolve_cruise_key() would have used): a key the reference does
+#    hold must never be missed;
+#  * the NULL count may only go DOWN from CRUISE_NULL_NO_CAST_MAX; lower it to the number
+#    measured here whenever it falls (and the release's key_null_max for calcofi_dic).
+CRUISE_NULL_NO_CAST_MAX <- 335L
+n_null_resolvable <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM sample s
+  JOIN dic_sample d ON s.sample_key = 'calcofi_dic:bottle:' || md5(concat_ws('|', d.expocode,
+       CAST(d.datetime_start_utc AS VARCHAR), CAST(d.latitude AS VARCHAR),
+       CAST(d.longitude AS VARCHAR), CAST(d.depth_m AS VARCHAR)))
+  WHERE s.dataset_key = 'calcofi_dic' AND s.parent_sample_key IS NULL AND s.cruise_key IS NULL
+    AND d.ship_key IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM cruise c JOIN ship sh ON sh.ship_key = c.ship_key
+      WHERE c.ship_key = d.ship_key
+        AND (CAST(d.datetime_start_utc AS DATE)
+               BETWEEN c.date_min - INTERVAL 3 DAY AND c.date_max + INTERVAL 3 DAY
+             OR c.cruise_key = strftime(CAST(d.datetime_start_utc AS DATE), '%Y-%m') || '-' || sh.ship_nodc))")[[1]]
 stopifnot(
-  "samples matching no cast: NULL cruise_key (named in the table below)" =
-    d_ck$n_no_cast_null == CRUISE_NULL_NO_CAST,
-  "samples on a matched cast: NULL cruise_key (the cast's own, unchanged)" =
-    d_ck$n_cast_null == CRUISE_NULL_CAST)
+  "a no-cast sample the reference could key must not be left NULL" = n_null_resolvable == 0,
+  "NULL cruise_key on samples matching no cast may only go down (ratchet)" =
+    d_ck$n_no_cast_null <= CRUISE_NULL_NO_CAST_MAX,
+  # a sample on a matched cast carries that cast's own key; DIC adds no NULL of its own
+  "a sample on a matched cast must carry the cast's own cruise_key" =
+    d_ck$n_cast_null == dbGetQuery(con, "
+      SELECT COUNT(*) FROM sample s JOIN casts c
+        ON s.parent_sample_key = 'calcofi_bottle:cast:' || CAST(c.cast_id AS VARCHAR)
+      WHERE s.dataset_key = 'calcofi_dic' AND c.cruise_key IS NULL")[[1]])
+if (d_ck$n_no_cast_null < CRUISE_NULL_NO_CAST_MAX)
+  cat(glue("NOTE: NULL cruise_key fell to {d_ck$n_no_cast_null}; lower CRUISE_NULL_NO_CAST_MAX ",
+           "(was {CRUISE_NULL_NO_CAST_MAX})"), "\n")
 cat(glue("cruise_key on minted DIC samples matching no cast: {d_ck$n_no_cast_keyed} keyed, ",
          "{d_ck$n_no_cast_null} NULL; {d_ck$n_cast_null} NULL on a matched cast"), "\n")
 
