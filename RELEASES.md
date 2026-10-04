@@ -25,11 +25,51 @@ In v2026.10.01 `sample.grid_key` was NULL on 3,255 of 3,261 `calcofi_dic` rows. 
 every one carries a latitude, longitude and datetime. The ingest now assigns `grid_key` from each
 sample's own position (`assign_grid_key()` against the `swfsc_ichthyo` grid) and keeps a matched
 cast's key where there is one: 3,261 of 3,261 resolve (0 outside the grid; of the 6 cast-matched
-samples 5 agree with the position's cell). Only `sample.grid_key` changes (NULL → key on 3,255
-rows); no `obs` row, measurement type or count changes, and `cruise_key` is untouched (still
-`calcofi_dic_07`). `calcofi_phytoplankton` stays NULL by design: it is region-pooled. **Known gap, not
-fixed here:** those 3,255 samples have no `obs` rows (the `obs` arm joins `casts`), so the DIC, TA,
-CTD temperature and salinity values on Niskins with no bottle-database match are not in the release.
+samples 5 agree with the position's cell). `sample.grid_key` changes NULL → key on 3,255 rows.
+`calcofi_phytoplankton` stays NULL by design: it is region-pooled. The `obs` and `cruise_key` changes
+that go with this are in the next section.
+
+## DIC: the values on samples that match no bottle cast are published (Ben, 2026-10-04)
+
+Until v2026.10.01 the DIC `obs` arm joined `casts`, so a DIC sample that matches no bottle cast
+published a `sample` row and no observation: 3,255 of the 3,261 minted DIC samples, about 12,700 of the
+16,391 non-missing DIC / total alkalinity / CTD temperature / salinity source values. They are now
+published, **wherever the source gives the sample a depth**, on the sample's own
+`calcofi_dic:bottle:<md5>` key with the source's own depth, the `grid_key` of its position, and a
+`cruise_key` where the SWFSC reference resolves one (below). **These values are not linked to a bottle
+cast**: the source names no cast (`calcofi_dic_01`, open), so `parent_sample_key` is NULL and the
+sample is its own root. Nothing a matched cast carries changes: the 3,708 cast-matched `obs` rows
+(and the 6 minted samples on a matched cast) are identical, column for column, to v2026.10.01's.
+
+Predicted `obs` (`calcofi_dic`, measured by running the notebook's own SQL on the source file against
+the v2026.10.01 shards; 0 rows changed, 0 removed):
+
+| measurement_type | v2026.10.01 | added | predicted |
+|------------------|------------:|------:|----------:|
+| `dic`            |       1,028 | 3,208 |     4,236 |
+| `alkalinity`     |         937 | 3,126 |     4,063 |
+| `ctdtemp_its90`  |         835 | 3,174 |     4,009 |
+| `salinity_pss78` |         908 | 3,173 |     4,081 |
+| total            |       3,708 | 12,681 |   16,389 |
+
+The 12,681 sit on 3,254 samples. One unmatched sample has no source depth (`Depth` = -999: expocode
+33RL20210116, station 080.0 090.0, 2021-01-20) and stays a `sample` row with no observations (its DIC
+2007.2 and TA 2208.4 umol/kg are the 2 source values left out). Values the provider flags WOCE 3 / 4 / 9
+are published with their flag as for the cast-matched ones (141 of the 12,681: alkalinity 65, dic 71,
+salinity 5); `qual_ok` / `cc_qual_ok_sql()` exclude them. All 12,681 are within the declared bounds
+(`dic` 0..5000, `alkalinity` 0..5000, `ctdtemp_its90` -2..40, `salinity_pss78` 0..45); depths span
+0..3,542 m (`check_depth_bounds()` clean).
+
+`cruise_key` on the 3,255 samples that match no cast: 2,920 resolved (NULL → key), 335 left NULL, from
+the sample's ship (EXPOCODE NODC prefix, else `Ship_Name`) and date by `resolve_cruise_key()`; the
+EXPOCODE start month is not used as the designation (`calcofi_dic_07`, open). The 335 are 8 EXPOCODEs
+for which the reference holds no cruise of that ship and month (NOAA Ship Sally Ride 240 samples,
+McArthur 51, Oceanus 41, David Starr Jordan 3). `site_key` is the source's own station on all of them.
+
+**Limitations.** 3,218 of the 3,254 published samples carry a date on the 1st (1,926) or the 20th
+(1,292) of a month, an apparent month-precision stand-in: use their year and month, not their day. The
+values are not deduplicated against `calcofi_bottle`'s own `dic_rep1` / `alkalinity_rep1` (separate
+measurement types, `calcofi_dic_08` / `_09`); some may be the same Niskins (not verified).
 
 ## Ichthyoplankton: cruises 198202JD and 198212JD leave (swfsc_ichthyo_09)
 
