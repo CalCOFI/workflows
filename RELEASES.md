@@ -30,6 +30,71 @@ casts lose `est_nitrate_cruise_corr` / `oxygen_*_cruise_corr` / `oxygen_*_sta_co
 on a withheld sensor is rebuilt from the other. `questions.csv` Q42 asks the CTD team whether
 `EstNO3_CruiseCorr` is a per-cast offset in these files and whether to withhold or recompute it.
 
+## Correction: the `obs` objects still ship; #92 tracks their removal
+
+The v2026.09.10 notes below say its cut was the last to ship the `obs` table's objects and that
+"the next release drops the `obs` objects and the twin". That did not happen: v2026.10.01 still
+exported the 16 `obs` partition objects and `obs.parquet`, and **this release does too**. They go
+only when every reader has moved to `obs_bio` + `obs_env` or the `obs` catalog view
+(issue [#92](https://github.com/CalCOFI/workflows/issues/92), open; seven readers break with no
+change). Until the release that drops them says so here, read `obs_bio` / `obs_env` or the view,
+not the table's objects.
+
+## DIC: every sample with a position carries a `grid_key`
+
+In v2026.10.01 `sample.grid_key` was NULL on 3,255 of 3,261 `calcofi_dic` rows. The sample arm took
+`grid_key` only from the matched `calcofi_bottle` cast, and 3,255 DIC samples match no cast, though
+every one carries a latitude, longitude and datetime. The ingest now assigns `grid_key` from each
+sample's own position (`assign_grid_key()` against the `swfsc_ichthyo` grid) and keeps a matched
+cast's key where there is one: 3,261 of 3,261 resolve (0 outside the grid; of the 6 cast-matched
+samples 5 agree with the position's cell). Only `sample.grid_key` changes (NULL → key on 3,255
+rows); no `obs` row, measurement type or count changes, and `cruise_key` is untouched (still
+`calcofi_dic_07`). `calcofi_phytoplankton` stays NULL by design: it is region-pooled. **Known gap, not
+fixed here:** those 3,255 samples have no `obs` rows (the `obs` arm joins `casts`), so the DIC, TA,
+CTD temperature and salinity values on Niskins with no bottle-database match are not in the release.
+
+## Ichthyoplankton: cruises 198202JD and 198212JD leave (swfsc_ichthyo_09)
+
+SWFSC (Ed Weber, 2026-09-25) moved cruises **198202JD** and **198212JD** (`1982-02-31JD`,
+`1982-12-31JD`) back to its staging schema: they were sorted for anchovy only, so every other taxon
+read as a zero catch. The 2026-09-26 source export no longer contains them, so the re-stage drops
+them: 1,128 `site`, 1,112 `tow` and 1,145 `net` `sample` rows; 1,100 `obs` rows (all `abundance`:
+1,055 on 1982-02, 45 on 1982-12); 1,054 `stage` and 1,308 `body_length` `obs_attribute` rows; and
+1,145 each of `std_haul_factor`, `prop_sorted` and `volume_sampled` `sample_measurement` rows.
+`swfsc_ichthyo` `obs` goes 482,250 → 481,150. The ingest now asserts both cruises are absent from
+what it loads. **Zero handling is unchanged:** a tow with no row for a taxon is a true zero and stays
+in the denominator (the provider: "the others are true zeros and have valid positive zooplankton
+volumes"). `1982-02-31JD` stays in `cruise` as a derived row because 40 `cce-lter_euphausiids` samples
+carry that key (derived-cruise count 151 → 152, the ratchet's ceiling); `1982-12-31JD` leaves it.
+
+## Bottle: salinity quality codes above 9 become blank (calcofi_bottle_01)
+
+The provider (Rasmus Swalethorp, 2026-09-18) answered that a quality code above 9 is impossible
+(codes were dragged down a spreadsheet by accident) and to turn every such code into a blank. In
+the source `194903-202105_Bottle.csv` that is **880 rows, all `salinity`, all cruise 2021-05-3322**
+(44 stations; codes 10–17 and 254–344); no other quality column holds a code above 9. In
+`obs_env` those 880 `measurement_qual` values go from the code to NULL; the salinity values and the
+row count are unchanged. A blank is not a verdict on the value: `calcofi_bottle_13` (that cruise reads
+24.2–27.1 PSU where its neighbours read 32.8–34.5) is still open, and `cc_qual_ok_sql()` excludes only
+codes 8 and 9, so a filtered query returns the same 880 rows before and after.
+
+## Phytoplankton: repeated rows dropped (workflows#124)
+
+Two sets of source rows carried the same species code twice in one sample, so a summed abundance
+(a total, a mean) doubled while a presence count did not. The ingest now drops the second row where
+the two hold **the same value**: 4,251 `phytoplankton_abundance` rows leave `obs` / `obs_bio`
+(159,804 → 155,553; the 409 `region_pool` samples are unchanged).
+- **Cruises 0704, 1202, 1203:** 1,496 codes x 4 regions each are duplicated (4,488 pairs); 4,198 pairs
+  are identical and 4,198 rows go. 1202 and 1203 sit in both the 1996–2012 and the 2012–2018 workbook,
+  and the 2007 sheet has two columns both labelled "CalCOFI 0704".
+- **Code 178:** the same row twice in 53 samples (1902–2211); 53 rows go.
+- **290 pairs stay.** Their two rows hold different values (288 on 0704, one each on 1202 SE and
+  1203 Alley) and we cannot tell which is right until the provider answers `calcofi_phytoplankton_06`
+  (Q06). They are listed, with both values and their source sheets, in
+  `metadata/calcofi/phytoplankton/duplicate_pairs_differing.csv`; the ingest asserts that
+  `(phyto_sample_id, species_code)` is unique outside that list. A consumer summing abundance still
+  double-counts those 290 (code, sample) cells.
+
 ## CTD casts: two provider questions on bottle values after 2021-05
 
 `calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values

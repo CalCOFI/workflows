@@ -617,7 +617,29 @@ cc_erd(
 ```{r}
 #| label: spatial
 
+# grid_key from the sample's OWN position (WS-1004X). Until v2026.10.01 the sample
+# arm below took grid_key only from the matched bottle cast (`c.grid_key`), so the
+# 3,255 DIC samples that match no cast (3,261 minted samples; every one carries a
+# latitude, a longitude and a datetime) all shipped with grid_key NULL. The grid is
+# the swfsc_ichthyo shard's, as every other ingest that places points uses it.
+load_prior_tables(
+  con,
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables      = "grid",
+  geom_tables = "grid",
+  as_view     = TRUE)
 add_point_geom(con, "dic_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "dic_sample") |> datatable(caption = "Grid assignment by position")
+
+# every sample with a finite position gets a key (3,261/3,261 measured against the
+# v2026.10.01 shard, 0 outside the grid)
+n_pos_nogrid <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM dic_sample
+  WHERE grid_key IS NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
+    AND isfinite(latitude) AND isfinite(longitude)")[[1]]
+stopifnot("every DIC sample with a position must resolve a grid_key" = n_pos_nogrid == 0)
+cat(glue("grid_key by position: {dbGetQuery(con, 'SELECT COUNT(grid_key) FROM dic_sample')[[1]]}/",
+         "{dbGetQuery(con, 'SELECT COUNT(*) FROM dic_sample')[[1]]} dic_sample rows"), "\n")
 ```
 
 ## Data Preview
@@ -700,7 +722,9 @@ append_sample(con, glue("
              CASE WHEN c.cast_id IS NULL THEN NULL
                   ELSE 'calcofi_bottle:cast:' || CAST(c.cast_id AS VARCHAR) END,
              'calcofi_dic:bottle:' || {dic_md5('d')}) AS root_sample_key,
-           '{ds_key}' AS dataset_key, c.grid_key, d.site_key, c.cruise_key,
+           '{ds_key}' AS dataset_key,
+           COALESCE(c.grid_key, d.grid_key) AS grid_key,  -- a matched cast's key wins; else the sample's own position
+           d.site_key, c.cruise_key,
            CAST(c.order_occ AS INTEGER) AS order_occ,
            d.latitude, d.longitude, CAST(d.datetime_start_utc AS TIMESTAMP) AS datetime,
            d.depth_m AS depth_min_m, d.depth_m AS depth_max_m,
@@ -737,6 +761,12 @@ stopifnot(
   "obs must be one row per DIC measurement" =
     n_obs == dbGetQuery(con, "SELECT COUNT(*) FROM dic_measurement dm JOIN casts c USING (cast_id)")[[1]],
   "sample_key must be unique (the md5 dedup)" = n_dup == 0,
+  # grid_key was NULL on 3,255 of 3,261 samples at v2026.10.01 (taken from the matched
+  # cast alone); a sample with a position now carries its own, a cast's wins
+  "every emitted DIC sample with a position must carry a grid_key" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM sample WHERE dataset_key = 'calcofi_dic'
+                     AND grid_key IS NULL AND latitude IS NOT NULL
+                     AND longitude IS NOT NULL")[[1]] == 0,
   "some DIC obs must dedup onto calcofi_bottle" = n_shared > 0,
   "every obs.sample_key must resolve in sample or in the bottle dataset" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)

@@ -462,11 +462,18 @@ sql_parts <- purrr::pmap_chr(
   ) {
     prec_expr <- if (is.na(prec_col)) "NULL" else prec_col
     qual_expr <- if (is.na(qual_col)) "NULL" else qual_col
+    # a code above 9 becomes blank (calcofi_bottle_01, Rasmus Swalethorp 2026-09-18:
+    # "a code above 9 is impossible ... turn everything >9 into a blank code ...
+    # this can be a general rule"). The rule is stated for every qual column; the
+    # source holds such codes only in S_qual (880 rows, all cruise 2021-05-3322),
+    # asserted below. TRY_CAST keeps a non-numeric code as it is.
     glue(
       "SELECT bottle_id, '{measurement_type}' AS measurement_type,
        CAST({value_col} AS DOUBLE) AS measurement_value,
        CAST({prec_expr} AS DOUBLE) AS measurement_prec,
-       regexp_replace(CAST({qual_expr} AS VARCHAR), '\\.0+$', '') AS measurement_qual
+       CASE WHEN TRY_CAST(CAST({qual_expr} AS VARCHAR) AS DOUBLE) > 9 THEN NULL
+            ELSE regexp_replace(CAST({qual_expr} AS VARCHAR), '\\.0+$', '') END
+         AS measurement_qual
      FROM bottle WHERE {value_col} IS NOT NULL"
     )
   }
@@ -482,7 +489,29 @@ sql_create <- glue(
 )
 dbExecute(con, sql_create)
 
-n_meas <- dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement")[[1]]
+# calcofi_bottle_01 gate: no code above 9 reaches measurement_qual; the source holds
+# 880 salinity rows with S_qual > 9 (measured on 194903-202105_Bottle.csv; every
+# one carries a salinity value) and none in any other quality column. A new
+# out-of-range code in another column fails here, to be answered by the provider
+# rather than blanked unseen.
+qual_gt9 <- dbGetQuery(con, "
+  SELECT 's_qual' AS col, COUNT(*) AS n FROM bottle
+  WHERE salnty IS NOT NULL AND TRY_CAST(CAST(s_qual AS VARCHAR) AS DOUBLE) > 9
+  UNION ALL
+  SELECT 'measurement_qual', COUNT(*) FROM bottle_measurement
+  WHERE TRY_CAST(measurement_qual AS DOUBLE) > 9")
+stopifnot(
+  "S_qual > 9 with a salinity value must stay the 880 measured at WS-1004X" =
+    qual_gt9$n[qual_gt9$col == "s_qual"] == 880,
+  "bottle_measurement.measurement_qual must hold no code above 9 (calcofi_bottle_01)" =
+    qual_gt9$n[qual_gt9$col == "measurement_qual"] == 0,
+  "salinity qual > 9 blanked, not dropped: the salinity rows stay" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement
+                     WHERE measurement_type = 'salinity'")[[1]] ==
+    dbGetQuery(con, "SELECT COUNT(*) FROM bottle WHERE salnty IS NOT NULL")[[1]])
+say(glue("S_qual > 9 -> blank (calcofi_bottle_01): {qual_gt9$n[1]} salinity rows"))
+
+n_meas <-dbGetQuery(con, "SELECT COUNT(*) FROM bottle_measurement")[[1]]
 n_types <- dbGetQuery(
   con,
   "SELECT COUNT(DISTINCT measurement_type) FROM bottle_measurement"
