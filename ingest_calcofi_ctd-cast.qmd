@@ -1047,6 +1047,82 @@ if (nrow(d_csv_nodir) > 0)
         "direction (alternate renderings beside the canonical D/U pair)"),
       fname = "ctd_files_no_cast_direction")
 
+# --- one copy of each file: an archive holding two is resolved here, once ----------
+# Eight preliminary archives carry the same db file twice, under two folders
+# (db-csvs/ + csvs-plots/ or db-csvs/ + metadata/). Seven pairs are byte-identical,
+# so reading both cost nothing but time: [dedup_ctd_raw] collapsed every row. The
+# 2204SH pair is NOT identical (CalCOFI/workflows#131): db-csvs/ is the May 2022
+# export, csvs-plots/ the February 2025 re-export, which adds nutrients (NO3, NO2,
+# NH4, PO4, SIL), BTL_Temp and 559 more OxBuM bottles, corrects Ox*uM_StaCorr (the
+# May 2022 copy holds ~57-81 µmol/kg at the surface beside ~282 from the cruise
+# correction) and re-derives Ox*_StaCorr / EstChl_StaCorr; it also writes times to
+# the minute and SPAR/PAR to three significant figures, no longer carries 7
+# shallow bottles (casts 007d, 008d, 079d, 100d) and moves one (040d, 101 -> 102 m).
+# Because the two copies write the time differently, dedup's key never matched:
+# v2026.10.01 shipped both, 2,941,303 duplicated (cast, depth, type) keys in obs +
+# obs_ctd_full. Where a May 2022 scan fell on a whole minute (hh:mm:00) its key DID
+# match the re-export's minute, and the shorter db-csvs/ path won dedup's tiebreak:
+# 14 bottles lost their nutrients, BTL_Temp and (8 of them) OxBuM, the 92 values
+# #131 found missing.
+#
+# So a cruise is read from ONE copy, chosen before any row is read: byte-identical
+# copies keep the shortest path (what dedup picked anyway, so no value changes);
+# differing copies keep the folder declared below and stop the render when none
+# is declared, because which export is current is a fact about the provider's
+# processing, not something a path length can decide.
+CTD_COPY_PREFER <- tibble::tribble(
+  ~cruise_key, ~keep_folder,  ~reason,
+  "2204SH",    "csvs-plots", paste(
+    "February 2025 re-export: nutrients, BTL_Temp, corrected Ox*uM_StaCorr;",
+    "the May 2022 db-csvs/ copy has neither (CalCOFI/workflows#131)"))
+
+d_csv_copies <- d_csv |>
+  group_by(cruise_key, dir_unzip, file_stem) |>
+  filter(n() > 1) |>
+  mutate(
+    md5        = unname(tools::md5sum(path)),
+    identical  = n_distinct(md5) == 1,
+    folder     = str_extract(path_unzip, "[^/]+(?=/[^/]+$)")) |>
+  left_join(CTD_COPY_PREFER, by = "cruise_key") |>
+  mutate(
+    keep = if_else(
+      identical,
+      row_number(paste(str_pad(nchar(path_unzip), 4, pad = "0"), path_unzip)) == 1,
+      !is.na(keep_folder) & folder == keep_folder)) |>
+  ungroup()
+
+copies_undeclared <- d_csv_copies |>
+  group_by(cruise_key, dir_unzip, file_stem) |>
+  filter(sum(keep) != 1) |>
+  ungroup()
+if (nrow(copies_undeclared) > 0)
+  stop(glue(
+    "an archive holds differing copies of the same CTD file and CTD_COPY_PREFER ",
+    "names no single one to read: ",
+    paste(unique(copies_undeclared$path_unzip), collapse = "; "),
+    ". Decide which export is current (compare the columns) and declare it."))
+
+if (nrow(d_csv_copies) > 0) {
+  say(glue(
+    "one copy per file: {sum(!d_csv_copies$keep)} duplicate file(s) not read in ",
+    "{n_distinct(d_csv_copies$cruise_key)} cruise(s) ",
+    "({sum(!d_csv_copies$keep & !d_csv_copies$identical)} differing: ",
+    "{paste(unique(d_csv_copies$cruise_key[!d_csv_copies$identical]), collapse = ', ')})"))
+  d_csv_copies |>
+    transmute(cruise_key, path_unzip, identical, read = keep,
+              reason = if_else(identical, "byte-identical copy: shortest path read", reason)) |>
+    arrange(cruise_key, path_unzip) |>
+    dt(caption = paste(
+      "Archives holding the same CTD file twice: the copy read, the copy skipped",
+      "(differing copies resolved by CTD_COPY_PREFER)"),
+      fname = "ctd_files_copies_resolved")
+  d_csv <- d_csv |>
+    filter(!path_unzip %in% d_csv_copies$path_unzip[!d_csv_copies$keep])
+}
+stopifnot(
+  "one file per (cruise, archive, file stem) after resolving copies" =
+    !any(duplicated(d_csv[c("cruise_key", "dir_unzip", "file_stem")])))
+
 # Every cruise must keep a downcast. [ctd_thin] takes one direction per physical
 # cast and prefers D, so a cruise with no D produces no thin rows and therefore
 # no `obs` — and because write_parquet_outputs() DELETES a partition that has
@@ -2015,6 +2091,32 @@ cat(glue(
   "duplicate-position rows ",
   "({round(100 * (n_before - n_after) / max(n_before, 1), 1)}%); ",
   "{format(n_after, big.mark = ',')} rows remain"), "\n")
+
+# --- no (cast, depth) twice after reading -------------------------------------
+# A scan is one (cast, depth): two rows there become two values of every type under
+# one obs key. dedup above only collapses rows that agree on cast_dir AND time, so
+# a second copy that writes either differently survives it (2204SH's two exports,
+# the mis-filed upcasts of 1604SH/2105SH: CalCOFI/workflows#131). Those are fixed in
+# [d_csv] and [d_bind]; these cruises still hold a cast twice for reasons not yet
+# resolved, each a separate defect counted in [emit_core]'s ratchet
+# (CTD_DUP_SCAN_MAX). Any other cruise with a twice-read scan stops the render.
+CTD_DUP_SCAN_CRUISES <- c(
+  "1501NH",  # db_csv/dualTCO/ re-processes casts 001-064 beside the 001-100 file
+  "9510NH",  # db_csvs/GoerickeExtraCasts/ reuses cast numbers 005-061 for other casts
+  "9504NH",  # db_csvs/RalfCasts/ reuses cast numbers 010-032 for other casts
+  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH")
+d_dup_scan <- dbGetQuery(con, "
+  SELECT cruise_key, COUNT(*) AS n_dup_scans, COUNT(DISTINCT cast_key) AS n_casts
+  FROM (SELECT cruise_key, cast_key, depth_m FROM ctd_raw GROUP BY ALL HAVING COUNT(*) > 1)
+  GROUP BY 1 ORDER BY 2 DESC")
+if (nrow(d_dup_scan) > 0)
+  dt(d_dup_scan, caption = "Scans read twice: (cruise, cast, depth) on more than one row",
+     fname = "ctd_dup_scans")
+dup_new <- setdiff(d_dup_scan$cruise_key, CTD_DUP_SCAN_CRUISES)
+if (length(dup_new) > 0)
+  stop(glue(
+    "(cast, depth) read twice in {paste(dup_new, collapse = ', ')}: a second copy of ",
+    "these casts reached ctd_raw. Resolve it in [d_csv] (CTD_COPY_PREFER) or [d_bind]."))
 ```
 
 ```{r}
@@ -4414,6 +4516,34 @@ if (build_obs_ctd_full) {
   stopifnot(
     "obs_ctd_full must inherit the bounds guard applied to ctd_measurement" =
       sum(b_full$status == "out_of_range") == 0)
+
+  # --- duplicated keys: a ratchet that only goes down (CalCOFI/workflows#131) ---
+  # A (sample, depth) holding more rows than measurement types is a scan read twice,
+  # which a consumer sees as two values under one key. v2026.10.01 had 78,344 such
+  # scans in 2022-04 (two exports), 1,756 in 2016-04 / 2021-05 (mis-filed upcasts),
+  # all fixed upstream, and the cruises below for reasons still open (see
+  # CTD_DUP_SCAN_CRUISES in [dedup_ctd_raw]). Counts measured on v2026.10.01's
+  # obs_ctd_full; lower them as each is resolved, never raise them.
+  CTD_DUP_SCAN_MAX <- c(
+    "2015-01-32NM" = 43253, "1995-10-32NM" = 2189, "1995-04-32NM" = 807,
+    "2020-07-33P4" =   177, "2003-02-31JD" =   11, "2002-04-31JD" =   4,
+    "1995-07-31JD" =     2, "2023-07-33P4" =    1, "2005-01-32NM" =   1,
+    "2006-04-32NM" =     1)
+  d_dup_full <- dbGetQuery(con, "
+    SELECT cruise_key, COUNT(*) AS n_dup_scans
+    FROM (SELECT cruise_key, sample_key, depth_min_m FROM obs_ctd_full GROUP BY ALL
+          HAVING COUNT(*) > COUNT(DISTINCT measurement_type))
+    GROUP BY 1 ORDER BY 2 DESC") |>
+    mutate(n_max = coalesce(unname(CTD_DUP_SCAN_MAX[cruise_key]), 0))
+  cat(glue("obs_ctd_full scans held twice: ",
+           "{format(sum(d_dup_full$n_dup_scans), big.mark = ',')} in ",
+           "{nrow(d_dup_full)} cruise(s)"), "\n")
+  d_dup_over <- d_dup_full |> filter(n_dup_scans > n_max)
+  if (nrow(d_dup_over) > 0)
+    stop(glue(
+      "obs_ctd_full holds a scan twice beyond CTD_DUP_SCAN_MAX: ",
+      paste(glue("{d_dup_over$cruise_key} {d_dup_over$n_dup_scans} > {d_dup_over$n_max}"),
+            collapse = "; ")))
 } else {
   cat("obs_ctd_full skipped (BUILD_OBS_CTD_FULL=FALSE)\n")
 }
