@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Ichthyoplankton: cruises 198202JD and 198212JD leave (swfsc_ichthyo_09)
+
+SWFSC (Ed Weber, 2026-09-25) moved cruises **198202JD** and **198212JD** (`1982-02-31JD`,
+`1982-12-31JD`) back to its staging schema: they were sorted for anchovy only, so every other taxon
+read as a zero catch. The 2026-09-26 source export no longer contains them, so the re-stage drops
+them: 1,128 `site`, 1,112 `tow` and 1,145 `net` `sample` rows; 1,100 `obs` rows (all `abundance`:
+1,055 on 1982-02, 45 on 1982-12); 1,054 `stage` and 1,308 `body_length` `obs_attribute` rows; and
+1,145 each of `std_haul_factor`, `prop_sorted` and `volume_sampled` `sample_measurement` rows.
+`swfsc_ichthyo` `obs` goes 482,250 → 481,150. The ingest now asserts both cruises are absent from
+what it loads. **Zero handling is unchanged:** a tow with no row for a taxon is a true zero and stays
+in the denominator (the provider: "the others are true zeros and have valid positive zooplankton
+volumes"). `1982-02-31JD` stays in `cruise` as a derived row because 40 `cce-lter_euphausiids` samples
+carry that key (derived-cruise count 151 → 152, the ratchet's ceiling); `1982-12-31JD` leaves it.
+
 ## Bottle: salinity quality codes above 9 become blank (calcofi_bottle_01)
 
 The provider (Rasmus Swalethorp, 2026-09-18) answered that a quality code above 9 is impossible
