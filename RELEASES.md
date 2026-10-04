@@ -290,7 +290,9 @@ blocker). Reads are a semi-quantitative signal of PCR-amplified DNA, not abundan
 comparable between assays. Not yet linked: `site_key` and `parent_sample_key` are NULL on every
 filter (CalCOFI/workflows#125). The shared `measurement_type` registry gains `edna_reads_dloop`,
 `edna_reads_12s`, `edna_reads_raw_*`, `edna_reads_filtered_*`, `oxygen_mg_l` and
-`dna_concentration`; `chl_fluor` (shared with `calcofi_mets`) now declares `valid_min = 0`.
+`dna_concentration`; `chl_fluor` (shared with `calcofi_mets`) now declares `valid_min = -1` µg/L, the floor
+`calcofi_bottle` declares for chlorophyll-a: a floor of 0 would have removed 102 calibrated-fluorescence
+values from `calcofi_mets` (minimum −0.112, median −0.03 µg/L), which are real near-zero readings.
 
 ## A new dataset: `cce-lter_iron`, dissolved iron on CalCOFI cruises, 2002–2004
 
