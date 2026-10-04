@@ -8,6 +8,23 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Phytoplankton: repeated rows dropped (workflows#124)
+
+Two sets of source rows carried the same species code twice in one sample, so a summed abundance
+(a total, a mean) doubled while a presence count did not. The ingest now drops the second row where
+the two hold **the same value**: 4,251 `phytoplankton_abundance` rows leave `obs` / `obs_bio`
+(159,804 → 155,553; the 409 `region_pool` samples are unchanged).
+- **Cruises 0704, 1202, 1203:** 1,496 codes x 4 regions each are duplicated (4,488 pairs); 4,198 pairs
+  are identical and 4,198 rows go. 1202 and 1203 sit in both the 1996–2012 and the 2012–2018 workbook,
+  and the 2007 sheet has two columns both labelled "CalCOFI 0704".
+- **Code 178:** the same row twice in 53 samples (1902–2211); 53 rows go.
+- **290 pairs stay.** Their two rows hold different values (288 on 0704, one each on 1202 SE and
+  1203 Alley) and we cannot tell which is right until the provider answers `calcofi_phytoplankton_06`
+  (Q06). They are listed, with both values and their source sheets, in
+  `metadata/calcofi/phytoplankton/duplicate_pairs_differing.csv`; the ingest asserts that
+  `(phyto_sample_id, species_code)` is unique outside that list. A consumer summing abundance still
+  double-counts those 290 (code, sample) cells.
+
 ## CTD casts: two provider questions on bottle values after 2021-05
 
 `calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values

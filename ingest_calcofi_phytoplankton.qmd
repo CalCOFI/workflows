@@ -267,13 +267,53 @@ if (length(missing_codes) > 0)
     rank = NA_character_, kingdom = NA_character_, phylum = NA_character_))
 dbWriteTable(con, "phyto_taxon", phyto_taxon, overwrite = TRUE)
 
-phyto_measurement <- d_taxa_long |>
+phyto_meas_src <- d_taxa_long |>
   inner_join(phyto_sample |> select(phyto_sample_id, cruise_yymm, region_key),
              by = c("cruise_yymm", "region" = "region_key")) |>
   filter(!is.na(abundance)) |>
-  transmute(phyto_sample_id, species_code,
-            measurement_type = "phytoplankton_abundance", measurement_value = abundance) |>
+  transmute(phyto_sample_id, cruise_yymm, region_key = region, species_code,
+            measurement_type = "phytoplankton_abundance", measurement_value = abundance)
+
+# Duplicate (sample, species_code) rows (workflows#124, WS-1004X) ----
+# Two row sets carry the same species code twice in one sample, so a summed
+# abundance doubles (a presence count does not):
+#  (1) cruises 0704, 1202, 1203 -- 1,496 codes x 4 regions each. 1202 and 1203 sit
+#      in both the 1996-2012 and the 2012-2018 workbook (Q06), and the 2007 sheet
+#      has two columns both labelled "CalCOFI 0704".
+#  (2) species code 178 in 53 further samples (1902-2211): the same row twice.
+# Decision (Ben, WS-1004X brief 2026-10-04): where the two rows hold the SAME value, drop the second
+# -- the repeat adds nothing. Where they DIFFER, keep both on an explicit allowlist
+# until the provider answers Q06: we cannot tell which row is right, and choosing one
+# would be inventing a value. The allowlist is keyed by cruise x region x code (a
+# phyto_sample_id is a row_number and moves when a cruise is added).
+dup_differing <- read_csv(here("metadata/calcofi/phytoplankton/duplicate_pairs_differing.csv"),
+                          col_types = cols(.default = "c")) |>
+  select(cruise_yymm, region_key, species_code)
+n_src_rows    <- nrow(phyto_meas_src)
+phyto_measurement <- phyto_meas_src |>
+  distinct(phyto_sample_id, species_code, measurement_value, .keep_all = TRUE) |>
+  select(-cruise_yymm, -region_key) |>
   mutate(phyto_measurement_id = row_number(), .before = 1)
+n_dup_dropped <- n_src_rows - nrow(phyto_measurement)
+
+# uniqueness gate: (phyto_sample_id, species_code) is unique outside the allowlist,
+# and the allowlist lists exactly the pairs still duplicated (an entry that no longer
+# duplicates must be removed; a new duplicate must fail here, not reach append_obs()).
+dup_left <- phyto_measurement |>
+  count(phyto_sample_id, species_code) |> filter(n > 1) |>
+  inner_join(phyto_sample |> select(phyto_sample_id, cruise_yymm, region_key),
+             by = "phyto_sample_id")
+stopifnot(
+  "(phyto_sample_id, species_code) is not unique outside the Q06 allowlist -- a new duplicate pair" =
+    nrow(anti_join(dup_left, dup_differing, by = c("cruise_yymm", "region_key", "species_code"))) == 0,
+  "duplicate_pairs_differing.csv lists a pair that is no longer duplicated: remove it" =
+    nrow(anti_join(dup_differing, dup_left, by = c("cruise_yymm", "region_key", "species_code"))) == 0,
+  "the differing-value pairs left in place must stay the 290 measured at WS-1004X" =
+    nrow(dup_left) == 290,
+  "identical-value duplicate rows dropped must stay the 4,251 measured at WS-1004X (4,198 pairs + 53 code-178)" =
+    n_dup_dropped == 4251)
+cat(glue("duplicates: {n_dup_dropped} identical-value repeat rows dropped; ",
+         "{nrow(dup_left)} differing pairs kept on the Q06 allowlist"), "\n")
 dbWriteTable(con, "phyto_measurement", phyto_measurement, overwrite = TRUE)
 cat(glue("phyto_taxon {nrow(phyto_taxon)} ({sum(!is.na(phyto_taxon$aphia_id))} WoRMS-matched); ",
          "phyto_measurement {nrow(phyto_measurement)}"), "\n")
@@ -436,6 +476,16 @@ cat(glue("vocabulary: {n_staged} codes staged; {nrow(local_allow)} keyed ",
 append_sample(con, sample_arm_self(
   ds_key, "phyto_sample", "phyto_sample_id", "region_pool",
   dt_col = "NULL", grid_expr = "NULL::VARCHAR"))
+
+# the staged table is what append_obs() reads: assert uniqueness on IT, outside the
+# Q06 allowlist of differing-value pairs (workflows#124; see the duplicate gate above)
+dup_db <- dbGetQuery(con, "
+  SELECT ps.cruise_yymm, ps.region_key, CAST(pm.species_code AS VARCHAR) AS species_code
+  FROM phyto_measurement pm JOIN phyto_sample ps USING (phyto_sample_id)
+  GROUP BY ALL HAVING COUNT(*) > 1")
+stopifnot(
+  "(phyto_sample_id, species_code) must be unique in phyto_measurement outside the Q06 allowlist" =
+    nrow(anti_join(dup_db, dup_differing, by = c("cruise_yymm", "region_key", "species_code"))) == 0)
 
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'region_pool', 'ps.phyto_sample_id')},
