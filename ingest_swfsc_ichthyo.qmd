@@ -1552,12 +1552,33 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 # (ichthyo + the folded invert export), so its ds_taxon_key is `calcofi:<id>`.
 # There is no ichthyo arm inside calcofi4db any more — a column renamed or
 # dropped here now fails at this call rather than becoming NA at release.
+#
+# AphiaID (swfsc_ichthyo_05/_13; Ed Weber 2026-09-25 "aggregate by AphiaID", Ben
+# Best 2026-10-01 "aggregate taxa by AphiaID ... Bill's taxonomy stands"): the ids
+# declared are the SOURCE's own Species.AphiaId / Species.Tsn, verbatim -- not the
+# species table's, which standardize_species_local() above re-points to the
+# accepted id from spp.duckdb (so ds_source_json said "source" about an id the
+# source never gave). ensure_taxon_xref() then keys each code by the ACCEPTED id
+# of its AphiaID (a key must be accepted; the source id stays in ds_source_json),
+# and the source name stays verbatim as ds_scientific_name, the display name.
+# Codes that share an AphiaID share a taxon_key; obs / obs_attribute below sum them.
+d_src_species <- d$d_csv$data$data[[which(d$d_csv$data$tbl == "Species")]] |>
+  transmute(ds_taxa_code = as.character(SppCode),
+            worms_src = as.integer(AphiaId), itis_src = as.integer(Tsn))
 d_vocab <- dbGetQuery(con, "
   SELECT CAST(species_id AS VARCHAR) AS ds_taxa_code,
          scientific_name AS ds_scientific_name,
          common_name     AS ds_common_name,
          worms_id, itis_id, gbif_id
-  FROM species ORDER BY species_id")
+  FROM species ORDER BY species_id") |>
+  left_join(d_src_species, by = "ds_taxa_code") |>
+  mutate(worms_id = coalesce(worms_src, as.integer(worms_id)),
+         itis_id  = coalesce(itis_src,  as.integer(itis_id))) |>
+  select(-worms_src, -itis_src)
+stopifnot(
+  "every source species code is in the vocabulary" =
+    all(d_src_species$ds_taxa_code %in% d_vocab$ds_taxa_code),
+  "every source species code carries its own AphiaID" = !anyNA(d_src_species$worms_src))
 n_staged <- append_dataset_taxon(con, ds_key, d_vocab, ds_prefix = "calcofi")
 
 # build_taxon_reference() reads the WoRMS lineage `taxon` table built above
@@ -1600,6 +1621,42 @@ chk_taxon <- check_dataset_taxon(con, ds_key, codes = obs_codes)
 cat(glue("vocabulary: {n_staged} CalCOFI species codes staged; ",
          "taxon {n_taxon} (pruned to {n_pruned$taxon}), ",
          "dataset_taxon {n_ds_taxon}"), "\n")
+
+# the provider's SpeciesWormsLookup ("their accepted taxon names", not updated in a
+# year) against the key each code resolved to: a code keyed to another id than its
+# source AphiaID (WoRMS has superseded it), or a lookup name WoRMS no longer uses,
+# is listed in data/flagged/species_worms_lookup_check.csv for the provider
+d_wl <- d$d_csv$data$data[[which(d$d_csv$data$tbl == "SpeciesWormsLookup")]] |>
+  transmute(worms_src = as.integer(AphiaId), lookup_name = Taxon, lookup_rank = taxon_rank)
+d_taxkey <- dbGetQuery(con, glue("
+  SELECT d.ds_taxa_code, d.ds_scientific_name, d.taxon_key,
+         t.scientific_name AS key_name, t.rank AS key_rank
+  FROM dataset_taxon d LEFT JOIN taxon t USING (taxon_key)
+  WHERE d.dataset_key = '{ds_key}'")) |>
+  left_join(d_src_species, by = "ds_taxa_code") |>
+  left_join(d_wl, by = "worms_src") |>
+  mutate(rekeyed     = taxon_key != paste0("worms:", worms_src),
+         lookup_stale = !is.na(lookup_name) & lookup_name != key_name)
+d_taxkey_flag <- d_taxkey |>
+  filter(rekeyed | lookup_stale | is.na(lookup_name)) |>
+  select(ds_taxa_code, ds_scientific_name, worms_src, lookup_name, lookup_rank,
+         taxon_key, key_name, key_rank, rekeyed, lookup_stale) |>
+  arrange(as.integer(ds_taxa_code))
+write_csv(d_taxkey_flag, here("data/flagged/species_worms_lookup_check.csv"), na = "")
+d_shared <- d_taxkey |> group_by(taxon_key, key_name) |>
+  summarize(n_codes = n(), codes = paste(sort(as.integer(ds_taxa_code)), collapse = ", "),
+            source_names = paste(unique(ds_scientific_name), collapse = "; "), .groups = "drop") |>
+  filter(n_codes > 1) |> arrange(desc(n_codes), taxon_key)
+stopifnot(
+  "every code's source AphiaID is in SpeciesWormsLookup" = all(!is.na(d_taxkey$lookup_name)))
+cat(glue("AphiaID: {nrow(d_taxkey)} codes; {sum(d_taxkey$rekeyed)} keyed to the accepted id ",
+         "of a superseded source AphiaID; {sum(d_taxkey$lookup_stale)} lookup names differ from ",
+         "WoRMS's for the key; {nrow(d_shared)} taxon_keys shared by ",
+         "{sum(d_shared$n_codes)} codes (their counts are summed below)\n"))
+d_shared |>
+  datatable(caption = "Species codes that share one taxon_key (one AphiaID): observations summed")
+d_taxkey_flag |>
+  datatable(caption = "Codes keyed to another id than their source AphiaID, or whose SpeciesWormsLookup name WoRMS no longer uses")
 
 # sample — three chained levels. `site` has no datetime of its own, so it takes
 # the earliest tow time; `tow` and `net` inherit site_key/order_occ/grid_key/
@@ -1698,35 +1755,72 @@ cat(glue("depth_max_m from NetDepth: ",
 
 # obs — the abundance headline: BASE rows only (measurement_type IS NULL in the
 # source long table). taxon_key resolves through dataset_taxon on species_id —
-# the global worms:/itis: key, not the dataset-local species_id.
+# the global worms:/itis: key, not the dataset-local species_id. Aggregated by
+# AphiaID (swfsc_ichthyo_04/_05/_13): codes that share a taxon_key in one net are
+# SUMMED into one row, so (sample_key, taxon_key, life_stage, measurement_type) is
+# unique -- e.g. 683 Sebastes + 3023 S. crocotulus (both AphiaID 126175), and 788
+# S. leptorhynchus + 792 S. californiensis (both 275218). Each code keeps its own
+# dataset_taxon row and verbatim name; only the counts merge.
 append_obs(con, glue("
   SELECT 'bio', '{ds_key}', {ns_key(ds_key, 'net', 'i.net_uuid')},
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
          CAST(t.datetime_start_utc AS TIMESTAMP), NULL::DOUBLE, NULL::DOUBLE,
          dt.taxon_key, i.life_stage,
-         'abundance', CAST(i.tally AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
+         'abundance', CAST(SUM(i.tally) AS DOUBLE), NULL::VARCHAR, NULL::DOUBLE
   FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid)
                  JOIN site s USING (site_uuid)
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
-  WHERE i.measurement_type IS NULL"))
+  WHERE i.measurement_type IS NULL
+  GROUP BY i.net_uuid, s.grid_key, s.cruise_key, s.latitude, s.longitude,
+           t.datetime_start_utc, dt.taxon_key, i.life_stage"))
 
 # obs_attribute — the size and stage distributions UNDER that headline. `size`
 # takes the canonical name `body_length`; a `stage` bin also carries the human
-# label from `lookup`.
+# label from `lookup`. Summed by AphiaID exactly as obs (and, for larvae, already
+# summed over the LarvaeMeasured rows of one length or one stage).
 append_obs_attribute(con, glue("
   SELECT '{ds_key}', {ns_key(ds_key, 'net', 'i.net_uuid')},
          dt.taxon_key, i.life_stage,
          CASE i.measurement_type WHEN 'size' THEN 'body_length' ELSE i.measurement_type END,
          i.measurement_value,
          CASE WHEN i.measurement_type = 'stage' THEN lk.description ELSE NULL END,
-         i.tally, NULL::VARCHAR
+         CAST(SUM(i.tally) AS INTEGER), NULL::VARCHAR
   FROM ichthyo i
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
   LEFT JOIN lookup lk ON lk.lookup_type = i.life_stage || '_stage'
                      AND lk.lookup_num = CAST(i.measurement_value AS INTEGER)
-  WHERE i.measurement_type IN ('stage','size')"))
+  WHERE i.measurement_type IN ('stage','size')
+  GROUP BY i.net_uuid, dt.taxon_key, i.life_stage, i.measurement_type,
+           i.measurement_value, lk.description"))
+
+# the published keys are unique (Ed Weber 2026-09-25: "you will have to aggregate");
+# v2026.10.01 had 3 duplicated obs keys, the 2026-09-26 export 25 before this sum
+n_obs_dup <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT sample_key, taxon_key, life_stage, measurement_type
+                        FROM obs GROUP BY ALL HAVING COUNT(*) > 1)")[[1]]
+n_attr_dup <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT sample_key, taxon_key, life_stage, measurement_type, bin_value
+                        FROM obs_attribute GROUP BY ALL HAVING COUNT(*) > 1)")[[1]]
+n_rows_src <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid) JOIN tow t USING (tow_uuid)
+                  JOIN site s USING (site_uuid) WHERE i.measurement_type IS NULL")[[1]]
+stopifnot(
+  "obs (sample_key, taxon_key, life_stage, measurement_type) must be unique" = n_obs_dup == 0,
+  "obs_attribute (sample_key, taxon_key, life_stage, measurement_type, bin_value) must be unique" =
+    n_attr_dup == 0,
+  "every obs row has a taxon_key (else unresolved codes would be summed together)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL")[[1]] == 0,
+  "summing by AphiaID keeps every individual" =
+    dbGetQuery(con, "SELECT SUM(measurement_value) FROM obs")[[1]] ==
+    dbGetQuery(con, "SELECT SUM(i.tally) FROM ichthyo i JOIN net n USING (net_uuid)
+                     JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+                     WHERE i.measurement_type IS NULL")[[1]])
+n_obs_now <- dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]]
+cat(glue("AphiaID aggregation: {format(n_rows_src, big.mark = ',')} source count rows -> ",
+         "{format(n_obs_now, big.mark = ',')} obs rows ({n_rows_src - n_obs_now} summed into a ",
+         "row of the same net and AphiaID)\n"))
 
 # sample_measurement — the five net-level effort quantities, long-formatted
 append_sample_measurement(con, glue("
@@ -1769,11 +1863,15 @@ stopifnot(
   "sample_key must be globally unique" =
     dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT sample_key FROM sample
                      GROUP BY 1 HAVING COUNT(*) > 1)")[[1]] == 0,
-  "obs must carry only the abundance headline" =
+  "obs must carry only the abundance headline (one row per net x AphiaID x life stage)" =
     core$obs ==
-    dbGetQuery(con, "SELECT COUNT(*) FROM ichthyo i JOIN net n USING (net_uuid)
-                     JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
-                     WHERE i.measurement_type IS NULL")[[1]],
+    dbGetQuery(con, "SELECT COUNT(*) FROM (
+                       SELECT DISTINCT i.net_uuid, dt.taxon_key, i.life_stage
+                       FROM ichthyo i JOIN net n USING (net_uuid)
+                       JOIN tow t USING (tow_uuid) JOIN site s USING (site_uuid)
+                       LEFT JOIN dataset_taxon dt ON dt.dataset_key = 'swfsc_ichthyo'
+                         AND dt.ds_taxa_code = CAST(i.species_id AS VARCHAR)
+                       WHERE i.measurement_type IS NULL)")[[1]],
   "obs must carry no size/stage rows" =
     dbGetQuery(con, "SELECT COUNT(*) FROM obs
                      WHERE measurement_type <> 'abundance'")[[1]] == 0,
