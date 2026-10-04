@@ -2488,6 +2488,22 @@ ctd_bounds <- tibble::tribble(
 d_meas_type <- calcofi4db::declare_measurement_bounds(
   ctd_bounds, here("metadata/measurement_type.csv"))
 
+# --- the bottle pigments take the bottle database's floors ---------------------
+# btl_chlorophyll_a and btl_phaeopigment carried valid_min = 0, which removed 261
+# small negative provider values over 2021-07 to 2025-04 (CalCOFI/workflows#131
+# item 4): mostly -0.001 to -1.5, a fluorometric reading near zero, which is real,
+# not impossible. A bound is a sentinel guard, not the test of "valid". The same
+# quantities in calcofi_bottle (chlorophyll_a, phaeopigment) are declared with
+# floors of -1 and -5, so these take those floors (decided for #131, 2026-10-04); -99 is still
+# removed as the sentinel above and anything below a floor still falls.
+# overwrite = TRUE: this deliberately replaces the declared 0.
+d_meas_type <- calcofi4db::declare_measurement_bounds(
+  tibble::tribble(
+    ~measurement_type,   ~valid_min, ~valid_max,
+    "btl_chlorophyll_a",         -1,        100,
+    "btl_phaeopigment",          -5,        100),
+  here("metadata/measurement_type.csv"), overwrite = TRUE)
+
 bounds_pre <- check_measurement_bounds(
   con, "ctd_measurement", mt = d_meas_type)
 
