@@ -8,6 +8,53 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD casts: one copy per file, casts tested by their median position, two stations repaired, pigment floors (#131)
+
+Five defects in `ingest_calcofi_ctd-cast.qmd` found by auditing v2026.10.01 against the provider's
+`*_CTDBTL_*` files (CalCOFI/workflows#131).
+
+- **One copy of each file (2204SH).** The archive holds the bottle-merged file twice, `db-csvs/`
+  (May 2022) and `csvs-plots/` (February 2025 re-export: nutrients, `BTL_Temp`, 559 more `OxBuM`,
+  corrected `Ox*uM_StaCorr`; times to the minute, SPAR/PAR to three figures). Both were read and,
+  writing the time differently, both survived dedup: **2,941,303 duplicated keys** in `obs` +
+  `obs_ctd_full`. Where a May 2022 scan fell on a whole minute the keys matched and the older copy
+  won the tiebreak: 14 bottles lost nutrients, `BTL_Temp` and `OxBuM`, the **92 missing values**.
+  Now the re-export alone is read (`CTD_COPY_PREFER`; seven other archives hold byte-identical
+  copies and keep the shortest path, as dedup did). The re-export also drops 7 shallow bottles and
+  moves one, which leave with the old copy.
+- **Distance filter on the cast's median position.** A cast within 10 km of its station keeps every
+  scan; a scan more than 0.05 deg from the median (a GPS glitch) keeps its values at the median
+  position. A cast whose median fails keeps the old per-scan test. Restores 2404SH's 626 glitch
+  scans (11 bottles) and GPS-glitched scans on 0801JD, 0711NH, 0310NH, 1507OC and 10 other cruises.
+- **Stations.** 2204SH casts 094/095 write line 066.3 but sit on 063.3 (`CTD_STATION_OVERRIDE`,
+  questions.csv Q43); 2504SH cast 045 is a real occupation 11.0 km off 083.3 039.4, kept at its
+  true position (`CTD_OFF_STATION_KEEP`).
+- **Pigment floors.** `btl_chlorophyll_a` -1 and `btl_phaeopigment` -5, the floors `calcofi_bottle`
+  declares; near-zero negative readings return, -99 still falls.
+- **Mis-filed upcasts (1604SH, 2105SH).** Direction comes from the Cast_ID; seven upcasts filed in
+  the downcast file stop doubling (**75,310 duplicated keys**).
+- **Ratchets.** A (cast, depth) read twice stops the render outside `CTD_DUP_SCAN_CRUISES`;
+  `CTD_DUP_SCAN_MAX` holds the cruises still open (1501NH `dualTCO/` re-processing, 9510NH /
+  9504NH extra casts reusing cast numbers, six with 1-177 scans: 1,951,755 keys) to their count.
+
+**Predicted** (the changed rules re-run on the source files of the 39 affected cruises by a
+mini-pipeline that reproduces v2026.10.01's `obs` and `obs_ctd_full` row for row under the old
+rules; excludes #127's depth-constant drop and 2026-07's re-issued archive):
+
+| table | added | removed | changed | duplicated keys |
+|---|---|---|---|---|
+| `obs` | 21,587 | 169,369 | 12,882 | 161,144 → 1,550 |
+| `obs_ctd_full` | 273,352 | 2,863,345 | 321,217 | 2,864,642 → 7,623 |
+
+2022-04 alone: `obs` +3,928 / −151,648 / ~12,882, `obs_ctd_full` +73,988 / −2,796,552 / ~321,217
+(changed = the re-export's oxygen µmol/kg station-corrected, SPAR/PAR rounding, `EstChl_StaCorr`).
+Bottle-grain `obs` rows (`btl_*`, `salinity_btl`, `oxygen_btl_*`): +303 / −3,409 in 2022-04,
++127 in 2024-04, +57 in 2025-04, +840 / +346 in 2008-01 / 2007-11, −364 / −176 in 2016-04 / 2021-05
+(the doubled upcasts), +384 pigment values elsewhere. Per type and cruise:
+`prediction_by_cruise_type.csv` in the #131 hand-off.
+
+**Measured** (`diff_stage_vs_release()` after the re-stage): _to fill_.
+
 ## CTD: derived series that hold one value at every depth are withheld (not yet rendered)
 
 A series can be in bounds, unflagged and still not a profile. A census of every ctd-cast downcast
