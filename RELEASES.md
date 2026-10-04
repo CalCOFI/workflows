@@ -8,6 +8,28 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD: derived series that hold one value at every depth are withheld (not yet rendered)
+
+A series can be in bounds, unflagged and still not a profile. A census of every ctd-cast downcast
+CSV (`libs/census_depth_constant_ctd.R` → `data/qc/ctd_depth_constant_census.csv`; a cast is judged
+with at least 6 values over at least 50 m and is constant when its range is below 1e-9) found the
+provider's `EstNO3_CruiseCorr` (`est_nitrate_cruise_corr`) is **one value over the whole cast on 441
+of 5,066 judged casts (8.7%), across 20 of 76 cruises, and on every judged cast of seven**
+(2304SH, 2504SH, 2301RL, 2307SR, 2105SH, 2411SR, 0810NH), while `EstNO3_StaCorr` on the same casts
+varies (0 of 4,241). Mostly exact zeros, the rest a per-cast offset (Rasmus Swalethorp's
+transect-plotter screenshot of line 93.3 showed vertical stripes). The same shape is in
+`Ox1uM_CruiseCorr` (329 casts of 9,837, three cruises), `OxAveuM_StaCorr` (124 of 4,321, three
+cruises) and a handful of casts in `EstChl_*` and the other `Ox*_StaCorr` columns (2-8 each);
+`Salt*_Corr`, `Ox*_CruiseCorr` (other than `Ox1uM`) and `EstNO3_StaCorr` have none.
+
+`ingest_calcofi_ctd-cast.qmd` now calls `calcofi4db::check_depth_constant_series()` (4.17.3) after
+the accepted flags and overrides and before the sensor-pair averages, and **drops** those
+(cast, series) values (dropped, not flagged). Consequence at the next ctd-cast render: the affected
+casts lose `est_nitrate_cruise_corr` / `oxygen_*_cruise_corr` / `oxygen_*_sta_corr` rows in
+`ctd_measurement` and downstream (`obs_ctd_full`, `ctd_summary`); a sensor-pair average that rested
+on a withheld sensor is rebuilt from the other. `questions.csv` Q42 asks the CTD team whether
+`EstNO3_CruiseCorr` is a per-cast offset in these files and whether to withhold or recompute it.
+
 ## CTD casts: two provider questions on bottle values after 2021-05
 
 `calcofi_bottle` ends 2021-05-13, where the provider's bottle database ends; later bottle values
