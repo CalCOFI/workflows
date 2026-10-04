@@ -203,7 +203,7 @@ What else changes for consumers:
 - **`sample_type` gains `sighting`, `deployment`, `scan` (and `water`, `filter` with the eDNA datasets).**
 - **`measurement_type` gains `acoustic_presence`, `calf_count`, `call_type`, `edna_presence`,
   `effort_status`, `group_size`, `group_size_max`, `group_size_min` and `transect_length`.**
-  `behavior`'s `_source_datasets` names `sio_cetacean-sightings`, but no behaviour row of it ships.
+  `behavior`'s `_source_datasets` names only `farallon_bird-mammal`: `sio_cetacean-sightings` publishes no behaviour row until its codebook arrives (Q03). `edna_presence` is emitted differently by the two eDNA datasets (see the `calcofi_2022-edna` section).
 - **Counts pool across observer teams**: `sio_cetacean-sightings` and `farallon_bird-mammal` count
   cetaceans on the same cruises with independent observers, so summing the two counts some animals
   twice (both descriptions say so).
