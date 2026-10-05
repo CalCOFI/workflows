@@ -932,7 +932,7 @@ they render nowhere yet. No data changes.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.05 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.10.05
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.05 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.23170248
 
 Cite the source datasets you use alongside the release:
 
