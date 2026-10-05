@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> General R/Quarto/plumber conventions live in the parent `../../CLAUDE.md`
+> General R/Quarto/plumber conventions live in the user-level `~/.claude/CLAUDE.md`
 > (2-space indent, snake_case, `|>`, roxygen2, `librarian::shelf()` outside
 > packages, etc.). This file covers what is specific to the `workflows` repo.
 >
