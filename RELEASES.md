@@ -265,9 +265,12 @@ Against v2026.10.01 that is 1,760 `obs_ctd_full` rows removed (115 + 173 + 111 +
 229 + 425) and 153 `obs` rows (16 + 24 + 22 + 27 + 6 + 58); 31 `obs_ctd_full` and 3 `obs` values
 change, `oxygen_umol_kg_ave_sta_corr` on 2022-04-3322 rebuilt from the other sensor. The census
 above counted 441 casts of `EstNO3_CruiseCorr` alone, across 20 cruises; the cells in the table
-are the ones the render withheld.
+are the ones that first render withheld.
 
-**Why only 32, and the second test (predicted, not yet rendered).** The chunk grouped by
+In total the corrected guard removes 800,651 `obs_ctd_full` values and 44,054 `obs` values and
+changes 7,920 and 619 (the rebuilt averages); 532 and 77 values the first render withheld return.
+
+**Why only 32, and the second test.** The chunk grouped by
 `ctd_cast_uuid`, which hashes each scan's time, so a "cast" held one value except in
 minute-resolution files, and the 32 cells were stretches of a cast inside one minute. It now
 judges `(cruise_key, cast_key, cast_dir)`, one direction of one occupation, with two tests
@@ -283,18 +286,21 @@ judges `(cruise_key, cast_key, cast_dir)`, one direction of one occupation, with
    1,480, beside ~0.003 µg/L). Station-corrected oxygen ramps to 0 where its per-cast
    regression fails (2408SR cast 033: sensor 26 µmol/kg at 322 m, 0.0 from 322 to 517 m).
 
-Predicted from the 2026-10-04 wrangling database, rows removed from the staged shard:
+Measured on the re-render of 2026-10-04 (finished 21:33), as rows removed against the staging build
+of that afternoon, which carried the 32-cell version. The prediction made from the wrangling
+database matched exactly on six series and to within 82 rows on the other three (cruise 2204SH,
+whose runs the earlier deletions had split in that database):
 
 | series | test | casts (D + U) | cruises | `obs_ctd_full` | `obs` |
 |---|---|---:|---:|---:|---:|
 | `est_nitrate_cruise_corr` | whole cast | 864 | 21 | 365,573 | 28,917 |
 | `oxygen_umol_kg_1_cruise_corr` | whole cast | 391 | 3 | 180,561 | (not canonical) |
 | `est_chlorophyll_a_sta_corr` | whole cast | 8 | 3 | 1,596 | 144 |
-| `oxygen_umol_kg_1_sta_corr` | both | 16 + 194 runs | 20 | 36,308 | (not canonical) |
-| `oxygen_umol_kg_2_sta_corr` | both | 10 + 208 runs | 20 | 34,099 | (not canonical) |
+| `oxygen_umol_kg_1_sta_corr` | both | 16 + 195 runs | 20 | 36,390 | (not canonical) |
+| `oxygen_umol_kg_2_sta_corr` | both | 10 + 210 runs | 20 | 34,147 | (not canonical) |
 | `oxygen_ml_l_1_sta_corr` | both | 6 + 40 runs | 19 | 13,099 | 979 |
 | `oxygen_ml_l_2_sta_corr` | both | 7 + 48 runs | 16 | 13,407 | 1,189 |
-| `oxygen_umol_kg_ave_sta_corr` | rebuilt from its sensors | | | 142,660 (+5,343 changed) | 11,676 (+357 changed) |
+| `oxygen_umol_kg_ave_sta_corr` | rebuilt from its sensors | | | 142,742 (+5,343 changed) | 11,681 (+357 changed) |
 | `oxygen_ml_l_ave_sta_corr` | rebuilt from its sensors | | | 13,136 (+2,577 changed) | 1,144 (+262 changed) |
 
 The averages are rebuilt from the sensors that remain, so they follow the sensors: an average
@@ -305,7 +311,7 @@ filed in the downcast file and the duplicate copies of 0707, 1701). Every value 
 withholds outside `est_nitrate_cruise_corr` is an exact 0, so no real near-constant profile is
 caught. Of the 1,051 values the 2026-10-04 render withheld on 2204SH and 1501NH, the 752 oxygen
 values stay withheld (zero runs); the 299 `est_chlorophyll_a_sta_corr` zeros return. ctd-derived:
-8 cast records lose their `chl_*` (all-zero `est_chlorophyll_a_sta_corr`); `sigma_theta_ave`,
+4 casts lose their four `chl_*` values (all-zero `est_chlorophyll_a_sta_corr`); `sigma_theta_ave`,
 spice and the mixed-layer depths rest on temperature and salinity, which neither test touches.
 
 ## CTD derived products: the CTD team's mixed-layer depth and chlorophyll-maximum definitions
