@@ -1,0 +1,173 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.10.05",
+  "collection": "sio_cetacean-sightings",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-125.731, 29.8267],
+        [-117.2218, 29.8267],
+        [-117.2218, 44.4128],
+        [-125.731, 44.4128],
+        [-125.731, 29.8267]
+      ]
+    ]
+  },
+  "bbox": [-125.731, 29.8267, -117.2218, 44.4128],
+  "properties": {
+    "title": "CalCOFI Cetacean Visual Line-Transect Sightings — v2026.10.05",
+    "description": "Cetacean (whale, dolphin, porpoise) sightings and on-effort visual line-transect survey segments from quarterly CalCOFI cruises, 2004-2022 (effort through 2021). Curated by the Scripps Whale Acoustics Lab (Hildebrand / Baumann-Pickering) and staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app). The same cruises also carry the Farallon Institute's seabird and marine mammal survey (farallon_bird-mammal), run by an independent observer team: both datasets are kept, so a cetacean group seen by both teams appears once in each, and summing the two counts the same animals twice. The behaviour codes (primary and other behaviour) are held back: they are bare numeric codes with no codebook yet (Q03), so no behaviour rows are published until the lab supplies one; they remain in the archived source.\n",
+    "datetime": null,
+    "start_datetime": "2004-01-01T00:00:00Z",
+    "end_datetime": "2022-12-31T23:59:59Z",
+    "created": "2026-10-05T00:00:00Z",
+    "license": "custom",
+    "sci:doi": "10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb",
+    "sci:citation": "CalCOFI - Scripps Institution of Oceanography and J. Hildebrand. 2017. Index of visual monitoring, location, species behavior, and identification of cetaceans from CalCOFI cruises in the California Current System, 2005-2015 (ongoing). ver 2. Environmental Data Initiative. https://doi.org/10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=sio_cetacean-sightings/dd025c8940d2b17ace3c11da/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 147745,
+      "file:checksum": "12206e709005bc17c60ea7aee59528c08d11ee4d6b6533a7c1d7a512855d3c4c66d0",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "sio_cetacean-sightings": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-sightings/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_sio_cetacean-sightings.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://github.com/CalCOFI/marmam-app/tree/7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80/data/whale_visual_data",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-sightings/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-sightings/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-sightings/items/v2026.10.05.json",
+      "type": "application/json"
+    }
+  ]
+}

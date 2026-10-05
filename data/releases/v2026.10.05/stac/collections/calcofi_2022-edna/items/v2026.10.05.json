@@ -1,0 +1,173 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.10.05",
+  "collection": "calcofi_2022-edna",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-122.8364, 33.8101],
+        [-119.4034, 33.8101],
+        [-119.4034, 36.3464],
+        [-122.8364, 36.3464],
+        [-122.8364, 33.8101]
+      ]
+    ]
+  },
+  "bbox": [-122.8364, 33.8101, -119.4034, 36.3464],
+  "properties": {
+    "title": "CalCOFI October 2022 Vertebrate eDNA — v2026.10.05",
+    "description": "eDNA metabarcoding survey of vertebrates from water samples collected during the October 2022 CalCOFI cruise. Water filters from CalCOFI/GEMCAP stations off Southern California were run through one or two molecular assays: a mitochondrial D-loop assay (cetacean detections, incl. Delphinus and Megaptera novaeangliae) and a 12S rRNA \"MiFish\" assay (fish detections). Published as an intercalibration exercise (source datasetID \"CalCOFI_Intercal\") on GBIF/OBIS, linked to Patin et al. 2026 (Methods in Ecology and Evolution, https://doi.org/10.1111/2041-210x.70370). Sequence read counts are a semi-quantitative signal of PCR-amplified DNA, not abundance, and are not comparable between assays. Published as detections only: edna_presence = 1 and the read counts. The source archive holds positive detections only, so the absence of a row for a filter and taxon is not a non-detection for this dataset (a filter or assay run with no detection is simply missing, and absence cannot be inferred); this differs from sio_cetacean-edna, where 0 means not detected in a sequenced sample.\n",
+    "datetime": null,
+    "start_datetime": "2022-01-01T00:00:00Z",
+    "end_datetime": "2022-12-31T23:59:59Z",
+    "created": "2026-10-05T00:00:00Z",
+    "license": "CC-BY-4.0",
+    "sci:doi": "10.15468/n52j6r",
+    "sci:citation": "Patin N, ODonnell G (2026). CalCOFI October 2022 Vertebrate eDNA. Version 1.2. Occurrence dataset. https://doi.org/10.15468/n52j6r\n"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_2022-edna/f4bd530899502d593fd4a585/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 5879,
+      "file:checksum": "1220d633639338a6a7700e84cfa8aac31f395a2a6e788a37bd62ee9d941f021ae38f",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "calcofi_2022-edna": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_2022-edna/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_calcofi_2022-edna.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://www.gbif.org/dataset/10524092-539d-4ea4-8539-2e91ad8581a9",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_2022-edna/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_2022-edna/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_2022-edna/items/v2026.10.05.json",
+      "type": "application/json"
+    }
+  ]
+}

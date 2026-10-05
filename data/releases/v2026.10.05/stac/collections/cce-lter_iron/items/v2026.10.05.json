@@ -1,0 +1,173 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.10.05",
+  "collection": "cce-lter_iron",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-124.323, 29.85],
+        [-117.307, 29.85],
+        [-117.307, 35.088],
+        [-124.323, 35.088],
+        [-124.323, 29.85]
+      ]
+    ]
+  },
+  "bbox": [-124.323, 29.85, -117.307, 35.088],
+  "properties": {
+    "title": "CCE-LTER Dissolved Iron (CalCOFI Cruises) — v2026.10.05",
+    "description": "Dissolved iron (Fe) concentrations from CalCOFI cruises in the southern California Current System, Nov. 2002 - July 2004 (completed). Surface (0 m) samples collected with a pole sampler, analyzed by FeLume flow-injection analysis. The source also carries total iron (no real values) and a shipboard iron-addition bioassay response (Chla response to Fe+, units unconfirmed); neither is released yet.\n",
+    "datetime": null,
+    "start_datetime": "2002-01-01T00:00:00Z",
+    "end_datetime": "2004-12-31T23:59:59Z",
+    "created": "2026-10-05T00:00:00Z",
+    "license": "custom",
+    "sci:doi": "10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1",
+    "sci:citation": "California Current Ecosystem LTER, CalCOFI - Scripps Institution of Oceanography, and K. Barbeau. 2017. Measurements of dissolved inorganic concentrations of nutrient iron and of iron limitation at selected stations and depths from CalCOFI cruises in the California Current System, Nov. 2002 - July 2004 (completed) ver 3. Environmental Data Initiative. https://doi.org/10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1.\n"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=cce-lter_iron/24e9a0cc46c34a2e971fca62/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 6806,
+      "file:checksum": "1220eef8fd51c89c47ef68ee0e98b1b88d68641a9549ebc505b998ea2ddb346877ad",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "cce-lter_iron": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_iron/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_cce-lter_iron.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.21.3",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_iron/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_iron/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_iron/items/v2026.10.05.json",
+      "type": "application/json"
+    }
+  ]
+}

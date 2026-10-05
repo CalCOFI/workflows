@@ -20,6 +20,7 @@ erDiagram
         int month
         varchar ship_name
         varchar ship_nodc
+        varchar ship_ices
         bigint ichthyo
         bigint bottle
         bigint ctd_cast
@@ -60,6 +61,12 @@ erDiagram
         varchar ds_taxa_code
         varchar ds_source_json
     }
+    fish {
+        varchar sample_key PK,FK
+        int species_id PK
+        varchar taxon_key FK
+        int tally
+    }
     grid {
         varchar grid_key PK
         double station
@@ -73,7 +80,7 @@ erDiagram
         geometry geom_ctr
     }
     lookup {
-        int lookup_id
+        int lookup_id PK
         varchar lookup_type
         int lookup_num
         varchar lookup_chr
@@ -183,6 +190,7 @@ erDiagram
         varchar ship_key PK
         varchar ship_name
         varchar ship_nodc
+        varchar ship_ices
         varchar _source_file
         int _source_row
         timestamp _ingested_at
@@ -235,20 +243,22 @@ erDiagram
     sample ||--o{ sample : "parent_sample_key"
     sample ||--o{ sample : "root_sample_key"
     sample ||--o{ obs : "sample_key"
+    taxon ||--o{ obs : "taxon_key"
     measurement_type ||--o{ obs : "measurement_type"
     sample ||--o{ sample_measurement : "sample_key"
     measurement_type ||--o{ sample_measurement : "measurement_type"
-    taxon ||--o{ obs : "taxon_key"
+    taxon ||--o{ dataset_taxon : "taxon_key"
+    taxon ||--o{ taxon : "parent_taxon_key"
     sample ||--o{ obs_attribute : "sample_key"
     taxon ||--o{ obs_attribute : "taxon_key"
     measurement_type ||--o{ obs_attribute : "measurement_type"
-    taxon ||--o{ dataset_taxon : "taxon_key"
-    taxon ||--o{ taxon : "parent_taxon_key"
     taxon ||--o{ taxon_group : "taxon_key"
     grid ||--o{ sample : "grid_key"
     cruise ||--o{ sample : "cruise_key"
     grid ||--o{ obs : "grid_key"
     cruise ||--o{ obs : "cruise_key"
+    sample ||--o{ fish : "sample_key"
+    taxon ||--o{ fish : "taxon_key"
     sample ||--o{ obs : "sample_key"
     dataset ||--o{ obs : "dataset_key"
     grid ||--o{ obs : "grid_key"
@@ -275,12 +285,11 @@ erDiagram
     dataset ||--o{ obs_attribute : "dataset_key"
     classDef _e8e8e8 stroke:#e8e8e8,stroke-width:3px
     class sample,obs,sample_measurement,measurement_type,obs_attribute,cruise,dataset _e8e8e8
-    classDef _cfe8dc stroke:#cfe8dc,stroke-width:3px
     classDef _dcdcdc stroke:#dcdcdc,stroke-width:3px
     class taxon,dataset_taxon,taxon_group _dcdcdc
     classDef _b5e8b0 stroke:#b5e8b0,stroke-width:3px
     class region _b5e8b0
     classDef _cdebc6 stroke:#cdebc6,stroke-width:3px
-    class ship,lookup,grid _cdebc6
+    class ship,lookup,grid,fish _cdebc6
     classDef _cfe8ea stroke:#cfe8ea,stroke-width:3px
     class spatial,spatial_attribute _cfe8ea

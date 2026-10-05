@@ -6,7 +6,7 @@
   "tables": {
     "sample": {
       "name_long": "Sample",
-      "description_md": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+      "description_md": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
     },
     "obs": {
       "name_long": "Observation",
@@ -291,11 +291,11 @@
     },
     "sample.sample_type": {
       "name_long": "Sample Type",
-      "description_md": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`."
+      "description_md": "Event grain: `site`, `tow`, `net`, `subsample`, `cast`, `bottle`, `water` (an eDNA water sample), `filter` (an eDNA water filter), `underway`, `transect` (a visual-survey effort segment), `sighting`, `deployment` (a sonobuoy), `scan` (one analysed hour of a recording) or `region_pool`."
     },
     "sample.parent_sample_key": {
       "name_long": "Parent Sample Key",
-      "description_md": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
+      "description_md": "The containing event (net → tow → site; bottle → cast; sighting → transect; scan → deployment). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
     },
     "sample.root_sample_key": {
       "name_long": "Root Sample Key",

@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.05
+
 ## The grid is one cell per official station, and a key no longer names the same water
 
 `grid` was 218 Voronoi cells of an idealized lattice (5, 10 and 20 station units in `+proj=calcofi`),
