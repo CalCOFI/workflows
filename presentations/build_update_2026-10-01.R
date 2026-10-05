@@ -348,14 +348,12 @@ new_slide()
 headline("For this group", "Decisions we need")
 tbl(ft_tbl(data.frame(
   Decision = c("Ship codes", "eDNA sample hierarchy", "Cetacean counts", "Shared bounds and units",
-               "Phytoplankton duplicates", "Kuali vendor review", "SCCOOS quote"),
+               "Phytoplankton duplicates"),
   Question = c("SWFSC asks for ICES codes; our cruise_key uses NODC",
                "2022 filters are replicates of 37 water samples; cetacean eDNA matched to bottles: add a parent?",
                "Two observer teams on the same cruises: split species counts per dataset?",
                "chl_fluor valid_min = 0 is shared with METS; eDNA oxygen arrives in mg/L",
-               "12 samples (cruises 0704, 1202, 1203) carry two rows per code (workflows#124)",
-               "Reply to Pilar drafted 9/30: sent?",
-               "Trim Quote 1 by $433.25 to hold $65,625?"),
+               "12 samples (cruises 0704, 1202, 1203) carry two rows per code (workflows#124)"),
   Proposal = c("keep NODC in the key; add ICES as a column (reply drafted)",
                "yes: parent_sample_key to the water sample / matched bottle",
                "yes: per-dataset counts in taxa.json",
@@ -467,8 +465,6 @@ NOTES <- list(
 "Whale counts: two independent observer teams (the whale survey and the Farallon seabird and mammal survey) sometimes saw the same animals on the same cruises. Proposal: report species counts per dataset so totals are not double-counted.",
 "Shared bounds and units: the 2022 eDNA dataset reports oxygen in mg/L while the rest of the database uses mL/L, and a lower limit of zero was set on a chlorophyll measurement shared with another dataset. Proposal: convert to the shared unit and keep the zero floor.",
 "Phytoplankton duplicates: 12 samples from three cruises have every species listed twice. Proposal: ask Venrick which copy is correct, keeping the first meanwhile.",
-"Kuali vendor review (UCSD's supplier security questionnaire): a reply to Pilar was drafted on 30 September; confirm whether it was sent.",
-"SCCOOS quote: whether to trim the first quote by $433.25 so the total stays at $65,625; Erin's call.",
 "Source: the plan's decisions list and the review reports."),
 `13` = c(
 "The next five weeks.",
