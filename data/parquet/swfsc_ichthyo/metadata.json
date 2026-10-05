@@ -6,7 +6,7 @@
   "tables": {
     "sample": {
       "name_long": "Sample",
-      "description_md": "One row per physical sampling event at its native grain (site, tow, net, cast, bottle, underway, transect, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+      "description_md": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
     },
     "obs": {
       "name_long": "Observation",
@@ -47,6 +47,10 @@
     "dataset": {
       "name_long": "Dataset",
       "description_md": ""
+    },
+    "fish": {
+      "name_long": "Fish",
+      "description_md": "Fish grown past the larval stage (SWFSC Fish table): counts per net and CalCOFI species code. Not in obs: whether these fish are also in the larval count, and which life stage they are, is asked (swfsc_ichthyo_20)."
     }
   },
   "columns": {
@@ -232,6 +236,23 @@
       "name_long": "Ds Source Json",
       "units": null,
       "description_md": ""
+    },
+    "fish.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The net (sample_type net) the fish were counted in; FK to sample."
+    },
+    "fish.species_id": {
+      "name_long": "Species ID",
+      "description_md": "CalCOFI species code (SWFSC SppCode); with sample_key the primary key. Its name is dataset_taxon.ds_scientific_name for ds_taxa_code = species_id."
+    },
+    "fish.taxon_key": {
+      "name_long": "Taxon Key",
+      "description_md": "The taxon the species code resolves to (by its WoRMS AphiaID); FK to taxon."
+    },
+    "fish.tally": {
+      "name_long": "Tally",
+      "units": "count",
+      "description_md": "Raw count of fish in the sorted portion of the net (not standardized; see the net's std_haul_factor and prop_sorted in sample_measurement)."
     },
     "grid.grid_key": {
       "name_long": "Grid Key",
@@ -437,11 +458,11 @@
     },
     "sample.sample_type": {
       "name_long": "Sample Type",
-      "description_md": "Event grain: `site`, `tow`, `net`, `cast`, `bottle`, `underway`, `transect` or `region_pool`."
+      "description_md": "Event grain: `site`, `tow`, `net`, `subsample`, `cast`, `bottle`, `water` (an eDNA water sample), `filter` (an eDNA water filter), `underway`, `transect` (a visual-survey effort segment), `sighting`, `deployment` (a sonobuoy), `scan` (one analysed hour of a recording) or `region_pool`."
     },
     "sample.parent_sample_key": {
       "name_long": "Parent Sample Key",
-      "description_md": "The containing event (net → tow → site; bottle → cast). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
+      "description_md": "The containing event (net → tow → site; bottle → cast; sighting → transect; scan → deployment). NULL at the top of the chain. Flat adjacency list: attributes are not inherited."
     },
     "sample.root_sample_key": {
       "name_long": "Root Sample Key",
@@ -489,7 +510,7 @@
     "sample.depth_max_m": {
       "name_long": "Depth Max",
       "units": "m",
-      "description_md": "Deepest depth sampled by this event."
+      "description_md": "Deepest depth sampled by this event; for swfsc_ichthyo tows and nets the maximum possible depth of the net (SWFSC Net.NetDepth, nominal: over a shallower sea floor the net did not reach it)."
     },
     "sample.tow_type": {
       "name_long": "Tow Type",
@@ -546,6 +567,11 @@
       "name_long": "Ship Nodc",
       "units": null,
       "description_md": ""
+    },
+    "ship.ship_ices": {
+      "name_long": "Ship Ices",
+      "units": null,
+      "description_md": "ICES platform code of the ship, beside the NODC code that keys cruise_key (swfsc_ichthyo_14)"
     },
     "ship._source_file": {
       "name_long": " Source File",
@@ -646,22 +672,22 @@
   },
   "contributions": {
     "sample": {
-      "rows": 213122,
+      "rows": 212258,
       "owned": true,
       "shared": true
     },
     "obs": {
-      "rows": 482250,
+      "rows": 487616,
       "owned": true,
       "shared": true
     },
     "obs_attribute": {
-      "rows": 369978,
+      "rows": 367094,
       "owned": true,
       "shared": true
     },
     "sample_measurement": {
-      "rows": 320110,
+      "rows": 324284,
       "owned": true,
       "shared": true
     },
@@ -676,7 +702,7 @@
       "shared": true
     },
     "cruise": {
-      "rows": 691,
+      "rows": 694,
       "owned": true,
       "shared": false
     },
@@ -691,9 +717,14 @@
       "shared": false
     },
     "grid": {
-      "rows": 218,
+      "rows": 225,
       "owned": true,
       "shared": true
+    },
+    "fish": {
+      "rows": 10796,
+      "owned": true,
+      "shared": false
     }
   }
 }

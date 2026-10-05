@@ -11,7 +11,10 @@
     "dataset_taxon": "ds_taxon_key",
     "grid": "grid_key",
     "cruise": "cruise_key",
-    "ship": "ship_key"
+    "ship": "ship_key",
+    "fish": ["sample_key", "species_id"],
+    "dataset": "dataset_key",
+    "lookup": "lookup_id"
   },
   "foreign_keys": [
     {
@@ -79,6 +82,18 @@
       "column": "sample_key",
       "ref_table": "sample",
       "ref_column": "sample_key"
+    },
+    {
+      "table": "fish",
+      "column": "sample_key",
+      "ref_table": "sample",
+      "ref_column": "sample_key"
+    },
+    {
+      "table": "fish",
+      "column": "taxon_key",
+      "ref_table": "taxon",
+      "ref_column": "taxon_key"
     },
     {
       "table": "dataset_taxon",
