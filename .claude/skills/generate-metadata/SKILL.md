@@ -318,7 +318,7 @@ to consumers (calcofi4r `cc_describe_table()`, `cc_db_catalog()`).
 ## Example
 
 ```
-/generate-metadata calcofi dic ~/My\ Drive/projects/calcofi/data-public/calcofi/dic
+/generate-metadata calcofi dic ~/My\ Drive/projects/calcofi/CalCOFI\ Data\ Folder/data-public/calcofi/dic
 ```
 
 Creates:
