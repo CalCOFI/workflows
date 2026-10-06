@@ -2,7 +2,11 @@
 # deploy_consumers.sh — bring every server-side consumer onto the promoted release.
 #
 # Run from the workflows repo AFTER latest.txt has been promoted:
-#   bash scripts/deploy_consumers.sh [--release vYYYY.MM.DD] [--skip-prep]
+#   bash scripts/deploy_consumers.sh [--release vYYYY.MM.DD] [--skip-prep] [--skip-media]
+#
+# Step 7 (the species and measurement faces) needs the landing-site checkout beside this repo
+# (CALCOFI_SITE_DIR, default ../CalCOFI.github.io) and, only when a release added keys, gcloud
+# authenticated as calcofi-admin; the Mac mini has both.
 #
 # test_release.qmd calls this automatically when CALCOFI_DEPLOY=true, so a normal
 # `tar_make()` still only builds and promotes; deploying stays one deliberate flag.
@@ -31,10 +35,12 @@ HOST="${CALCOFI_SSH_HOST:-calcofi}"
 GH="/share/github/CalCOFI"
 RELEASE=""
 SKIP_PREP=0
+SKIP_MEDIA=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --release)   RELEASE="$2"; shift 2 ;;
-    --skip-prep) SKIP_PREP=1; shift ;;
+    --release)    RELEASE="$2"; shift 2 ;;
+    --skip-prep)  SKIP_PREP=1; shift ;;
+    --skip-media) SKIP_MEDIA=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -177,8 +183,8 @@ curl -s --max-time 60 https://h3t.calcofi.io/h3t/health | sed 's/^/      /'
 #     2026-10-04 and followed a promotion only through test_release.qmd's
 #     gh_dispatch table and its Monday cron; a dispatch that is not in the deploy
 #     script is a dispatch nobody checks. Its refresh.yml also reads the two media
-#     sidecars (species + measurement faces) at BUILD time, so the manual step 7
-#     below re-dispatches it once the media are uploaded.
+#     sidecars (species + measurement faces) at BUILD time, so step 7 below
+#     re-dispatches it once it has uploaded new media.
 echo "==> 6/6 dispatching the hosted consumers (GitHub Actions)"
 SITE_DISPATCHED=0
 if command -v gh >/dev/null 2>&1; then
@@ -213,7 +219,7 @@ fi
 #   /measurements/   the measurement index                <- measurements.json
 #   /species/        the species index                    <- taxa.json
 # Polled (a refresh run takes ~1.5-2 min); a cache-busting query defeats the Pages CDN. A stale
-# section is a FAILURE (exit 1 after the manual block below is printed), not a warning: it is the
+# section is a FAILURE (exit 1 after step 7 below has run), not a warning: it is the
 # whole point of the dispatch. Skipped, saying so, where the dispatch did not fire.
 SITE="${CALCOFI_SITE:-https://calcofi.io}"
 site_fail=0
@@ -236,32 +242,94 @@ else
   echo "==> 6b/6 skipped: the CalCOFI.github.io dispatch did not fire. Dispatch it, then: curl -s $SITE/data.json | grep -o 'release v[0-9.]*'"
 fi
 
-# 7. MANUAL: the media, then the site again ----------------------------------------------
+# 7. the media, when the release added keys ----------------------------------------------
 # The species faces (taxa_media.json) and the measurement faces (measurements_media.json) are NOT
 # release content: scripts/fetch_species_media.py and scripts/fetch_measurement_faces.py build
 # them from public services into gs://calcofi-files-public/{species,measurement}-media/, ONE copy
-# for every release. Their GitHub workflows are `if: false` (no GCP_SA_KEY secret), so this stays a
-# human step on a machine whose gcloud is authenticated as calcofi-admin. It is printed, not run,
-# because it writes to a public bucket and the species pass takes ~1.2 h cold (a warm .cache/
-# resumes, so only the taxa new in this release are fetched). Run it AFTER the dispatch above and
-# then dispatch the site once more, because Jekyll reads both sidecars at build time: a species the
-# release added draws no face until its entry exists, a measurement key it added no structure.
-cat <<EOF
-==> 7/7 MANUAL: the media for $RELEASE (this script does not run it)
-    cd ../CalCOFI.github.io                      # the landing site checkout
-    scripts/fetch_release.sh                     # _data/taxa.json + measurements.json of the promoted release
-    # species faces (Pillow only; resumable; a warm cache fetches just the new taxa)
-    scripts/fetch_species_media.py
-    scripts/check_species_media.py               # the gate, BEFORE anything reaches the bucket
-    scripts/fetch_species_media.py --upload      # rsync to gs://calcofi-files-public/species-media/
-    # measurement faces (RDKit, in the ignored venv: requirements-media.txt)
-    [ -d .venv-media ] || { uv venv --python 3.12 .venv-media && uv pip install --python .venv-media/bin/python -r requirements-media.txt; }
-    .venv-media/bin/python scripts/fetch_measurement_faces.py
-    python3 scripts/check_measurement_faces.py
-    .venv-media/bin/python scripts/fetch_measurement_faces.py --upload
-    # the site reads both sidecars at build time: rebuild it, then re-run the 6b check
-    gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io
-EOF
+# for every release. Until 2026-10-06 this step was printed and never run, and skipping it is
+# silent: the site builds, and a taxon or measurement key the release added simply draws no face.
+# So it now runs whenever it is due, and only then:
+#   * scripts/media_due.py compares the promoted release's taxa.json + measurements.json with the
+#     two published sidecars (exit 0 nothing due, 3 due, 2 cannot tell). A release that adds no key
+#     costs one HTTP read per file here.
+#   * When due: gcloud must be calcofi-admin (the bucket is public; the workflows that would do
+#     this on GitHub are `if: false` for want of a GCP_SA_KEY secret), then fetch_release.sh, the
+#     fetcher of each kind that is due, its check (the gate, BEFORE anything reaches the bucket),
+#     the upload, and the site rebuilt, because Jekyll reads both sidecars at build time.
+#   * A fetcher always writes the WHOLE sidecar from the record (never --only, which would publish
+#     a sidecar holding just the new keys); the warm .cache/ in the site checkout makes that a fetch
+#     of the new keys alone. A cold species cache is ~1.2 h.
+#   * The step is verified on the published bytes: media_due.py must then find nothing missing.
+# Any failure here fails the deploy (exit 1 at the end), after the rest has run.
+SITE_DIR="${CALCOFI_SITE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/CalCOFI.github.io}"
+MEDIA_ACCOUNT="${CALCOFI_MEDIA_ACCOUNT:-calcofi-admin@ucsd-sio-calcofi.iam.gserviceaccount.com}"
+media_fail=0
+media_step() {
+  local due_json due_rc n_sp n_ms acct log run_id t0 i
+  git -C "$SITE_DIR" pull --ff-only -q || { echo "    git pull failed in $SITE_DIR" >&2; return 1; }
+  due_json=$(cd "$SITE_DIR" && python3 scripts/media_due.py --json) && due_rc=0 || due_rc=$?
+  if [ "$due_rc" -eq 2 ] || [ -z "$due_json" ]; then
+    echo "    media_due.py could not read the records or the sidecars" >&2; return 1; fi
+  read -r n_sp n_ms < <(python3 -c 'import json,sys; d=json.load(sys.stdin)
+print(len(d["species"]["missing"]), len(d["measurements"]["missing"]))' <<<"$due_json")
+  printf '    species       missing %s\n    measurements  missing %s\n' "$n_sp" "$n_ms"
+  if [ "$due_rc" -eq 0 ]; then echo "    media up to date for $RELEASE"; return 0; fi
+
+  acct=$(gcloud config get-value account 2>/dev/null | tr -d '[:space:]')
+  [ "$acct" = "$MEDIA_ACCOUNT" ] || {
+    echo "    gcloud is '$acct', not $MEDIA_ACCOUNT: cannot upload the media" >&2; return 1; }
+  log="$SITE_DIR/.cache/deploy_media_$RELEASE.log"
+  mkdir -p "$SITE_DIR/.cache"
+  echo "    fetching (log: $log)"
+  # every command ends in `|| exit 1`: this subshell runs on the left of `||`, where bash ignores
+  # `set -e` (inside it too), and a check that fails must stop its upload
+  (
+    cd "$SITE_DIR" || exit 1
+    [ -x .venv-media/bin/python ] || {
+      uv venv --python 3.12 .venv-media && uv pip install --python .venv-media/bin/python -r requirements-media.txt; } || exit 1
+    scripts/fetch_release.sh || exit 1
+    if [ "$n_sp" -gt 0 ]; then
+      .venv-media/bin/python scripts/fetch_species_media.py --quiet || exit 1
+      python3 scripts/check_species_media.py || exit 1
+      .venv-media/bin/python scripts/fetch_species_media.py --upload --quiet || exit 1
+    fi
+    if [ "$n_ms" -gt 0 ]; then
+      .venv-media/bin/python scripts/fetch_measurement_faces.py --quiet || exit 1
+      python3 scripts/check_measurement_faces.py || exit 1
+      .venv-media/bin/python scripts/fetch_measurement_faces.py --upload --quiet || exit 1
+    fi
+  ) > "$log" 2>&1 || { echo "    the media fetch, check or upload failed:" >&2; tail -20 "$log" | sed 's/^/      /' >&2; return 1; }
+
+  # the published bytes, not the local run, are what the site reads
+  (cd "$SITE_DIR" && python3 scripts/media_due.py) | sed 's/^/    /' || {
+    echo "    the published sidecars still miss keys after the upload" >&2; return 1; }
+
+  # Jekyll reads both sidecars at build time: rebuild the site and wait for it
+  command -v gh >/dev/null 2>&1 || { echo "    gh not installed: gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io" >&2; return 1; }
+  t0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io >/dev/null || return 1
+  run_id=""
+  for i in $(seq 1 12); do   # the run this dispatch created, not the newest one that happens to exist
+    sleep 10
+    run_id=$(gh run list -R CalCOFI/CalCOFI.github.io --workflow refresh.yml -L 5 \
+      --json databaseId,createdAt -q "[.[] | select(.createdAt >= \"$t0\")][0].databaseId // empty")
+    [ -n "$run_id" ] && break
+  done
+  [ -n "$run_id" ] || { echo "    no refresh.yml run appeared after the dispatch" >&2; return 1; }
+  if gh run watch "$run_id" -R CalCOFI/CalCOFI.github.io --exit-status >/dev/null 2>&1; then
+    echo "    calcofi.io rebuilt with the new media (run $run_id)"
+  else
+    echo "    calcofi.io refresh run $run_id failed: gh run view $run_id -R CalCOFI/CalCOFI.github.io --log-failed" >&2; return 1
+  fi
+}
+if [ "$SKIP_MEDIA" -eq 1 ]; then
+  echo "==> 7/7 skipping the media (--skip-media)"
+elif [ ! -d "$SITE_DIR/.git" ]; then
+  echo "==> 7/7 FAILED: no landing-site checkout at $SITE_DIR (set CALCOFI_SITE_DIR)" >&2; media_fail=1
+else
+  echo "==> 7/7 the species and measurement faces ($SITE_DIR)"
+  media_step || media_fail=1
+fi
 
 echo "==> consumers deployed for $RELEASE"
-[ "$site_fail" -eq 0 ] || exit 1
+[ "$site_fail" -eq 0 ] && [ "$media_fail" -eq 0 ] || exit 1
