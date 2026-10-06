@@ -1,7 +1,7 @@
 tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
 TOC,toc_sample,studyName,study_name,VARCHAR,VARCHAR,Provider study/cruise identifier string; ship NODC code in the trailing token -- input to derive_cruise_key_on_casts().,,"verified 2026-10-06: 22 distinct, format YYYY-MM-DD-C-{shipcode}"
 TOC,toc_sample,Cruise,cruise_ym,VARCHAR,VARCHAR,CalCOFI cruise designation (YYYYMM) -- passed to derive_cruise_key_on_casts() as the source's own designation.,,EML: 'CalCOFI cruise name used by laboratory'
-TOC,toc_sample,Datetime GMT,datetime_start_utc,VARCHAR,TIMESTAMP,Sample date and time (UTC/GMT) from ship instrumentation.,,"2008-03-25 to 2017-08-16; one row is '0000-00-00 00:00:00' (held out, Q06)"
+TOC,toc_sample,Datetime GMT,datetime_start_utc,VARCHAR,TIMESTAMP,Sample date and time (UTC/GMT) from ship instrumentation.,,"2008-03-25 to 2017-08-16; one row is '0000-00-00 00:00:00' (held out, Q05)"
 TOC,toc_sample,Latitude (º),latitude,VARCHAR,DOUBLE,Sample latitude in decimal degrees (WGS84).,decimal_degrees,fld_old is the literal source header including its unit suffix; blank on the undated row
 TOC,toc_sample,Longitude (º),longitude,VARCHAR,DOUBLE,Sample longitude in decimal degrees (WGS84; west negative).,decimal_degrees,fld_old is the literal source header including its unit suffix; blank on the undated row
 TOC,toc_sample,Line,line,VARCHAR,DOUBLE,CalCOFI sampling grid line.,,unpadded in the source (e.g. '93.3'); 13 distinct
@@ -15,8 +15,9 @@ TOC,toc_sample,,sample_key_id,,VARCHAR,"Natural sample key: study_name-cast_numb
 TOC,toc_sample,,site_key,,VARCHAR,CalCOFI station key in 'LLL.L SSS.S' form.,,derived from line + station via normalize_site_key()
 TOC,toc_sample,,cruise_key,,VARCHAR,Natural cruise key YYYY-MM-NODC; resolved via derive_cruise_key_on_casts().,,see Resolve Ship and Cruise Keys
 TOC,toc_measurement,Total Organic Carbon (µmol/L),,VARCHAR,,Total organic carbon (dissolved plus particulate) concentration.,umol/L,"pivoted to measurement_type='toc'; median 61.5, 99th percentile 111, max 2,208 umol/L (13 values near 2,100, Q01)"
-TOC,toc_measurement,TOC CV (%),toc_cv_pct,VARCHAR,DOUBLE,TOC coefficient of variation. Not published (Q03).,percent,blank on 59 rows; 6 rows above 10%
+TOC,toc_measurement,TOC CV (%),toc_cv_pct,VARCHAR,DOUBLE,"TOC coefficient of variation, SD / mean x 100 (Q03). Published as obs.measurement_prec = TOC x CV / 100.",percent,blank on 59 rows; 6 rows above 10%
 TOC,toc_measurement,,measurement_id,,INTEGER,Sequential measurement identifier; primary key of toc_measurement.,,derived (row_number)
 TOC,toc_measurement,,sample_id,,INTEGER,FK to toc_sample.sample_id.,,
 TOC,toc_measurement,,measurement_type,,VARCHAR,FK to measurement_type.measurement_type (toc).,,units carried by measurement_type.csv
 TOC,toc_measurement,,measurement_value,,DOUBLE,Numeric value of the measurement; units carried by measurement_type.,,
+TOC,toc_measurement,,measurement_prec,,DOUBLE,"Standard deviation of the TOC value: TOC x CV / 100 (CV = SD / mean x 100, Q03); NULL where the CV is blank.",umol/L,derived; projected to obs.measurement_prec

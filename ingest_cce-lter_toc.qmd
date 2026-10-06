@@ -33,7 +33,7 @@ editor_options:
 
 **Source**: EDI package `knb-lter-cce.253.3` (Aluwihare), entity *TOC*
 (`table_253.csv`): 10,150 rows, 13 columns, **22** cruises from 2008-03 to
-2017-08 (the package title says "nine CalCOFI cruises", Q05). Fetched by
+2017-08. Fetched by
 `libs/download_toc.R`, revision and md5 pinned. Licence: CC0 1.0 (the EML's
 `intellectualRights`).
 
@@ -45,16 +45,18 @@ editor_options:
 - **Realm**: `env`. One measurement type, `toc`, in µmol/L. TOC is dissolved
   plus particulate organic carbon; the provider reports TOC rather than DOC for
   this region (see the abstract).
-- **Not published** (kept in the archived source): `TOC CV (%)` (its meaning is
-  unconfirmed, Q03) and `Associated Bottle number` (Q04).
+- **Precision**: `TOC CV (%)` is the coefficient of variation (SD / mean x 100,
+  Q03), so each value's standard deviation, `TOC x CV / 100` in µmol/L, is
+  published as `obs.measurement_prec` (NULL on the 59 rows with no CV).
+- **Not published** (kept in the archived source): `Associated Bottle number`
+  (Q04).
 - **Cleaned before publishing** (each counted and asserted below):
   - 2 rows that repeat another row in every column are dropped.
   - 1 row with no date (`0000-00-00`), no position and depth `NULL` is held out
-    (Q06).
+    (Q05).
 - **High values**: 13 values lie between 2,077 and 2,208 µmol/L, the range of
   seawater *inorganic* carbon, 20 to 60 times the median. They are published
-  as-is for now (no upper bound is declared) and are the subject of Q01, which
-  proposes a ceiling of 1,000 µmol/L.
+  as-is (no upper bound is declared) and are the subject of Q01.
 - **Cruise key**: ship code from `studyName` plus the source's `Cruise`
   designation (YYYYMM), via `derive_cruise_key_on_casts()`.
 - **Bottle match** (evidence only): same as `poc-pon`; `calcofi_bottle` cast by
@@ -101,7 +103,7 @@ dir_meta       <- here(glue("metadata/{provider}/{dataset}"))
 publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
 
 # toc is registered in metadata/measurement_type.csv by this change
-# (valid_min = 0; valid_max proposed in Q01, not declared)
+# (valid_min = 0; no upper bound, see Q01)
 d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
 stopifnot("toc must be pre-registered" = "toc" %in% d_meas_type$measurement_type)
 
@@ -170,7 +172,7 @@ names(d_raw) <- hdr_new
    dropped.
 2. **Undated row.** One row (2009-01-08-C-32NM, line 93.3 station 60, cast 11
    bottle 19) has the date `0000-00-00 00:00:00`, no position and depth `NULL`.
-   It is held out (Q06).
+   It is held out (Q05).
 
 No `-999` sentinel occurs; the only non-numeric measurement-side value is that
 one `NULL` depth (asserted).
@@ -207,11 +209,11 @@ d_rows <- d_dedup |>
     site_key      = normalize_site_key(sprintf("%.1f %.1f", line, station)),
     sample_key_id = paste(study_name, cast_number, bottle_number, sep = "-"))
 
-# the undated row: no datetime, position or depth -> hold out (Q06)
+# the undated row: no datetime, position or depth -> hold out (Q05)
 is_undated <- with(d_rows,
   is.na(datetime_start_utc) | is.na(latitude) | is.na(longitude) | is.na(depth_m))
 d_hold <- d_rows[is_undated, ]
-stopifnot("exactly one undated row held out (Q06)" =
+stopifnot("exactly one undated row held out (Q05)" =
             nrow(d_hold) == 1 && d_hold$sample_key_id == "2009-01-08-C-32NM-11-19")
 d_rows <- d_rows[!is_undated, ]
 
@@ -261,6 +263,8 @@ d_meas <- d_rows |>
     sample_id,
     measurement_type  = "toc",
     measurement_value = toc_umol_l,
+    # CV = SD / mean x 100 (Q03), so the SD of this value in umol/L is TOC x CV / 100
+    measurement_prec  = toc_umol_l * toc_cv_pct / 100,
     toc_cv_pct)
 stopifnot("one measurement per kept TOC row" = nrow(d_meas) == nrow(d_rows))
 dbWriteTable(con, "toc_measurement", d_meas, overwrite = TRUE)
@@ -382,17 +386,17 @@ cc_erd(
 |---|---|---|
 | `toc_sample` | `sample` (`bottle`) | one row per bottle; key `cce-lter_toc:bottle:{studyName}-{Cast Number}-{Bottle number}`; `depth_min_m = depth_max_m = Depth (m)` (the target depth); time = `Datetime GMT`; `cruise_key` from ship code + `Cruise` |
 | `Total Organic Carbon (µmol/L)` | `obs` `toc` | verbatim, µmol/L; one obs per source row, so a bottle with replicate analyses has 2 or 4 |
-| `TOC CV (%)` | -- | **not published**: meaning unconfirmed (Q03) |
+| `TOC CV (%)` | `obs.measurement_prec` | `TOC x CV / 100`: the value's standard deviation in µmol/L (CV = SD / mean x 100, Q03); NULL where the CV is blank |
 | `Associated Bottle number` | -- | **not published** (Q04) |
 | matched `calcofi_bottle` cast/bottle | -- | **not published**: evidence only, not `parent_sample_key` |
-| 2 exact-duplicate rows, 1 undated row | -- | dropped / held out (Q06) |
+| 2 exact-duplicate rows, 1 undated row | -- | dropped / held out (Q05) |
 
 ## Check Declared Bounds
 
-`toc` is registered with `valid_min = 0`. Its `valid_max` is **not declared**:
-Q01 proposes 1,000 µmol/L, about 9 times the 99th percentile (111 µmol/L) and
-well below the 13 values near 2,100 µmol/L that Q01 asks about. Until the
-provider agrees, those 13 values are published.
+`toc` is registered with `valid_min = 0` only (a concentration cannot be
+negative). No upper bound is declared, so nothing is dropped for being high:
+the 13 values near 2,100 µmol/L are published as-is until the provider answers
+Q01. A one-sided bound counts as declared, so this check reports `ok`.
 
 ```{r}
 #| label: bounds-check
@@ -402,7 +406,7 @@ bounds_datatable(bounds_pre)
 oob_tally <- drop_out_of_bounds(con, "toc_measurement", mt = d_meas_type)
 cat(glue(
   "out-of-range rows removed: {format(sum(oob_tally$n_bad %||% 0), big.mark=',')} ",
-  "(only valid_min = 0 is declared; the upper bound awaits Q01)"), "\n")
+  "(only valid_min = 0 is declared)"), "\n")
 
 bounds_post <- check_measurement_bounds(
   con, "toc_measurement", mt = d_meas_type, include_undeclared = FALSE)
@@ -449,7 +453,7 @@ append_obs(con, glue("
          s.grid_key, s.cruise_key, s.latitude, s.longitude,
          CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,
          NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
-         NULL::VARCHAR, NULL::DOUBLE
+         NULL::VARCHAR, m.measurement_prec
   FROM toc_measurement m
   JOIN toc_sample s USING (sample_id)"))
 
