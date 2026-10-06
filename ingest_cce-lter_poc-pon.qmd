@@ -33,8 +33,7 @@ editor_options:
 
 **Source**: EDI package `knb-lter-cce.54.10` (Goericke), entity
 *ParticulateOrganicCarbonandNitrogen* (`table_54.csv`): 17,413 rows, 18 columns,
-73 cruises from 2004-11 to 2023-04 (the package title still says "November
-2022", Q05). Fetched by `libs/download_poc_pon.R`, revision and md5 pinned.
+73 cruises from 2004-11 to 2023-04. Fetched by `libs/download_poc_pon.R`, revision and md5 pinned.
 Licence: CC0 1.0 (the EML's `intellectualRights`).
 
 - **Provider**: `cce-lter` (same as `iron`, `euphausiids`, `picoplankton-bacteria`).
@@ -47,7 +46,7 @@ Licence: CC0 1.0 (the EML's `intellectualRights`).
   `ug_CperL` and `ug_NperL` (the same values in µg/L; the notebook asserts the
   conversion), `C/N ratio` and `C/N molar ratio` (ratios of the published values,
   also asserted), `Associated Bottle Number` (meaning unconfirmed, Q03) and
-  `Notes` (free text on 12 rows, Q06).
+  `Notes` (free text on 12 rows, Q05).
 - **Cleaned before publishing** (each counted and asserted below):
   - 4 rows that repeat another row in every column are dropped (2019-11 cast 25,
     Q02).
@@ -278,8 +277,7 @@ dbWriteTable(con, "poc_sample", d_sample, overwrite = TRUE)
 The µg/L columns and both ratios are not published because they follow from
 `poc` and `pon`. That is only safe if they really do, so it is checked here: µg/L
 is µmol/L times the atomic weight (C 12.0107, N 14.0067), and the ratios are
-`C/N` in µg and in µmol. The EML's definition of both ratio columns reads
-"Nitrogen:Carbon ratio"; the values are C:N (Q07).
+`C/N` in µg and in µmol.
 
 ```{r}
 #| label: derived-check
@@ -465,7 +463,7 @@ Source to core (what a consumer sees):
 | `umol/L_N (µmol/L)` | `obs` `pon` | verbatim, µmol/L |
 | `ug_CperL`, `ug_NperL`, `C/N ratio`, `C/N molar ratio` | -- | **not published**: follow from `poc`/`pon` (asserted in "Derived columns agree") |
 | `Associated Bottle Number` | -- | **not published**: meaning unconfirmed (Q03) |
-| `Notes` | -- | **not published**: free text on 12 rows (Q06) |
+| `Notes` | -- | **not published**: free text on 12 rows (Q05) |
 | matched `calcofi_bottle` cast/bottle | -- | **not published**: evidence only, not `parent_sample_key` |
 | 4 exact-duplicate rows, 2 conflicting-key rows, 10 no-depth rows | -- | dropped / held out (Q02, Q04) |
 
@@ -667,8 +665,9 @@ if (publish_to_gcs) {
 
 ## Questions for Data Providers
 
-Follow-up questions for CCE-LTER (Ralf Goericke), ranked. Q01 (bounds) and Q02
-(duplicates) are `proposed`: each carries an answer for the provider to confirm.
+Follow-up questions for CCE-LTER (Ralf Goericke), ranked. Q01 (bounds), Q02
+(duplicates) and Q04 (missing depths) are `proposed`: each carries an answer for
+the provider to confirm.
 None is a blocker: what is published is the source's own µmol/L values, and the
 rows the questions are about are held out.
 

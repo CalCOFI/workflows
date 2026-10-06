@@ -12,9 +12,9 @@ ParticulateOrganicCarbonandNitrogen,poc_sample,Associated Bottle Number,associat
 ParticulateOrganicCarbonandNitrogen,poc_sample,Depth (m),depth_m,VARCHAR,DOUBLE,Sample depth below surface (CTD depth queried from the CalCOFI database per the EML).,m,"blank on 10 rows (held out, Q04); range 1-270 m"
 ParticulateOrganicCarbonandNitrogen,poc_sample,ug_CperL (µg/L),poc_ug_l,VARCHAR,DOUBLE,Particulate organic carbon in µg/L. Not published: equals poc x 12.0107 (asserted).,ug/L,
 ParticulateOrganicCarbonandNitrogen,poc_sample,ug_NperL (µg/L),pon_ug_l,VARCHAR,DOUBLE,Particulate organic nitrogen in µg/L. Not published: equals pon x 14.0067 (asserted).,ug/L,
-ParticulateOrganicCarbonandNitrogen,poc_sample,C/N ratio,cn_ratio,VARCHAR,DOUBLE,Carbon to nitrogen ratio by mass. Not published: equals poc_ug_l / pon_ug_l (asserted).,,EML definition reads 'Nitrogen:Carbon ratio'; values are C:N (Q07)
-ParticulateOrganicCarbonandNitrogen,poc_sample,C/N molar ratio,cn_molar_ratio,VARCHAR,DOUBLE,Carbon to nitrogen molar ratio. Not published: equals poc / pon (asserted).,,EML definition reads 'Nitrogen:Carbon ratio'; values are C:N (Q07)
-ParticulateOrganicCarbonandNitrogen,poc_sample,Notes,notes,VARCHAR,VARCHAR,Free-text analyst notes. Not published (Q06).,,populated on 12 rows
+ParticulateOrganicCarbonandNitrogen,poc_sample,C/N ratio,cn_ratio,VARCHAR,DOUBLE,Carbon to nitrogen ratio by mass. Not published: equals poc_ug_l / pon_ug_l (asserted).,,
+ParticulateOrganicCarbonandNitrogen,poc_sample,C/N molar ratio,cn_molar_ratio,VARCHAR,DOUBLE,Carbon to nitrogen molar ratio. Not published: equals poc / pon (asserted).,,
+ParticulateOrganicCarbonandNitrogen,poc_sample,Notes,notes,VARCHAR,VARCHAR,Free-text analyst notes. Not published (Q05).,,populated on 12 rows
 ParticulateOrganicCarbonandNitrogen,poc_sample,,sample_id,,INTEGER,Integer pivot FK between poc_sample and poc_measurement (not the published key; see sample_key_id).,,"derived: row_number() in (study_name, cast_number, bottle_number) order"
 ParticulateOrganicCarbonandNitrogen,poc_sample,,sample_key_id,,VARCHAR,"Natural sample key: study_name-cast_number-bottle_number (asserted unique); the id part of sample_key cce-lter_poc-pon:bottle:{id}.",,derived from the source's own columns so a republished revision cannot shift a key
 ParticulateOrganicCarbonandNitrogen,poc_sample,,site_key,,VARCHAR,CalCOFI station key in 'LLL.L SSS.S' form.,,derived from line + station via normalize_site_key()
