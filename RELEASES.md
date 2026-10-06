@@ -8,6 +8,31 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline
+
+`climatology` grouped each observation by the calendar month it was taken, and every consumer
+matched an anomaly the same way. A cruise sails for two to three weeks and often begins in the last
+days of the month before its own: CalCOFI 2607 (`2026-07-3322`) worked line 93.3 from station 26.4
+to 45 on 30 June and from 50 outward on 1–2 July, so ctd-transects drew no anomaly inshore of
+station 50 ("no baseline for this month"), although 12–14 July cruises of 1993–2013 had sampled
+each of those stations (Rasmus Swalethorp, 2026-10-06). The baseline itself was split the same way:
+within 1993–2013, 9.9 % of CTD casts (35 cruises) and 9.3 % of bottle samples are dated in another
+month than their cruise's (whole cruises designated April were worked mostly in March, and
+1999-08-32NM has three samples dated January). Those values were missing from their own season's
+baseline and stranded in a month few cruises sample, where most failed the five-cruise floor.
+
+Now the month is the one `cruise_key` designates (`YYYY-MM-NODC`), and the window is tested on
+the cruise's year; the event date is used only when the key does not parse
+(`calcofi4db::build_climatology()` 4.22.0). Measured on v2026.10.05's `obs_env` for CTD
+`temperature_ave`: 21,757 cells become 21,686 (1,385 gained, 1,456 lost, mostly March cells that
+held the early days of April cruises); a third of the 20,301 shared cells gain cruises, and their
+means move by 0.057 °C on average and by up to 1.75 °C. The share of post-2013 CTD temperature
+values with a baseline rises from 83.6 % to 85.8 % (station-corrected chlorophyll 83.8 % → 85.5 %).
+
+**Consumers:** match an anomaly on `substr(cruise_key, 6, 2)`, not `month(datetime)`.
+ctd-transects, the Explorer's Sections lens, `calcofi4r::cc_anomaly()` (1.26.0) and the measurement
+pages' anomaly series (`build_measurements_catalog()`) do.
+
 # v2026.10.05
 
 ## The grid is one cell per official station, and a key no longer names the same water
