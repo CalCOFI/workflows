@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.06
+
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline
 
 `climatology` grouped each observation by the calendar month it was taken, and every consumer

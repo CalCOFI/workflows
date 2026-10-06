@@ -1,0 +1,171 @@
+{
+  "type": "Feature",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/file/v2.1.0/schema.json"],
+  "id": "v2026.10.06",
+  "collection": "sio_cetacean-edna",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-122.5333, 31.513],
+        [-117.3054, 31.513],
+        [-117.3054, 35.0882],
+        [-122.5333, 35.0882],
+        [-122.5333, 31.513]
+      ]
+    ]
+  },
+  "bbox": [-122.5333, 31.513, -117.3054, 35.0882],
+  "properties": {
+    "title": "CalCOFI Cetacean eDNA Detections (NCOG samples) — v2026.10.06",
+    "description": "Cetacean species detections from environmental DNA (eDNA) in seawater samples collected by the NOAA CalCOFI Genomics Program (NCOG) at 10-40 m (a few deeper) on CalCOFI cruises, 2014-2016. Seven dolphin and whale species detected by metabarcoding: 1 = detected, 0 = not detected in a sequenced sample (a non-detection, not a confirmed absence). The 62 samples listed as \"not sequenced, PCR negative\" did not amplify, so they say nothing about any species: each stays a sample with no edna_presence rows (not a 0) until the provider says what a PCR negative means (Q04). Samples have no parent sample (each is a root event); the CalCOFI bottle each was filtered from is matched only as evidence of its time and cruise. Each sample is timed by its CTD-rosette bottle cast. Staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app).\n",
+    "datetime": null,
+    "start_datetime": "2014-01-01T00:00:00Z",
+    "end_datetime": "2016-12-31T23:59:59Z",
+    "created": "2026-10-06T00:00:00Z",
+    "license": "unknown"
+  },
+  "assets": {
+    "obs_partition": {
+      "href": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=sio_cetacean-edna/ccdb631db5874f4e12a93f88/data_0.parquet",
+      "type": "application/x-parquet",
+      "title": "obs (parquet, this dataset's partition)",
+      "roles": ["data"],
+      "file:size": 7210,
+      "file:checksum": "12207d32c6f059672b2598fda1f15d9bfc22a787d7e86c6685382ba5aa829a953a07",
+      "table:columns": [
+        {
+          "name": "obs_id",
+          "description": "Surrogate key, renumbered globally when the release concatenates the per-dataset shards.",
+          "type": "BIGINT"
+        },
+        {
+          "name": "realm",
+          "description": "`env` for physical/chemical measurements, `bio` for organism observations.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "dataset_key",
+          "description": "Provenance stamp: `provider_dataset`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "sample_key",
+          "description": "The sampling event this observation came from; joins `sample`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "grid_key",
+          "description": "CalCOFI station grid cell, denormalized from `sample` so rollups need no join. NULL for region-pooled data.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "cruise_key",
+          "description": "Cruise, denormalized from `sample` so rollups need no join.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "latitude",
+          "description": "Observation latitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "longitude",
+          "description": "Observation longitude (WGS84).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "datetime",
+          "description": "Observation time (UTC). NULL for region-pooled data with no event time.",
+          "type": "TIMESTAMP"
+        },
+        {
+          "name": "depth_min_m",
+          "description": "Shallowest depth this observation represents.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "depth_max_m",
+          "description": "Deepest depth this observation represents; equal to `depth_min_m` for point measurements (bottle, CTD scan).",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "taxon_key",
+          "description": "Global taxon key, `worms:<AphiaID>` or `itis:<TSN>` for birds. NULL for `env` rows. Joins `taxon`.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "life_stage",
+          "description": "Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_type",
+          "description": "Measured quantity; joins the `measurement_type` vocabulary.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_value",
+          "description": "The measured value, in the units `measurement_type` declares.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "measurement_qual",
+          "description": "Source quality flag, verbatim.",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "measurement_prec",
+          "description": "Source-reported precision where available.",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "hex_id",
+          "description": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder.",
+          "type": "UBIGINT"
+        }
+      ]
+    },
+    "sio_cetacean-edna": {
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-edna/collection.json",
+      "type": "application/json",
+      "roles": ["overview"],
+      "title": "STAC collection"
+    },
+    "notebook": {
+      "href": "https://calcofi.io/workflows/ingest_sio_cetacean-edna.html",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "ingest notebook"
+    },
+    "source": {
+      "href": "https://github.com/CalCOFI/marmam-app/tree/main/data/edna_data",
+      "type": "text/html",
+      "roles": ["overview"],
+      "title": "source"
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-edna/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-edna/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-edna/items/v2026.10.06.json",
+      "type": "application/json"
+    }
+  ]
+}
