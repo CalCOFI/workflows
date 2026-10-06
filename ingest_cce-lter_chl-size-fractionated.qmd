@@ -45,7 +45,8 @@ quarterly CalCOFI cruises, 1994-01 to 1996-10, completed. Fetched by
 - **No time, position or depth in the source.** Each row carries only its
   cruise and station, and the station's line is rounded to a whole number for
   lines 76.7, 81.8, 83.3 and 86.7 (`077.0 060.0` is station 76.7 60.0);
-  `station_crosswalk.csv` maps all 48 source stations to official ones (Q03).
+  `station_crosswalk.csv` maps all 48 source stations to official ones (Q03;
+  `087.0 039.5` is station 86.7 40.0, the only station that line has between 35 and 45).
   Time and position come from the matching `calcofi_bottle` cast: same
   `cruise_key` and `site_key`
   (`match_by_site_datetime()`), and the cast's own `cruise_key` must equal the
@@ -254,7 +255,9 @@ stopifnot(
   "a matched cast's cruise_key is the one the source designates" =
     dbGetQuery(con, "SELECT COUNT(*) FROM chl_size_station
                      WHERE cast_sample_key IS NOT NULL AND cruise_key <> cruise_key_src")[[1]] == 0,
-  "most station occupations find their cast" = m_cast$matched >= 0.9 * m_cast$total)
+  # ratchet: every occupation found its cast once 087.0 039.5 was mapped to 86.7 40.0
+  # (Q03; 411 of 422 before)
+  "every station occupation finds its cast" = m_cast$matched == m_cast$total)
 
 dbExecute(con, "CREATE OR REPLACE TABLE chl_size_pub AS
                 SELECT * FROM chl_size_station WHERE cast_sample_key IS NOT NULL")
