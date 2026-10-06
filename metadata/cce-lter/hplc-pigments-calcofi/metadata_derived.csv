@@ -1,0 +1,8 @@
+table,column,name_long,units,description_md
+hplc_sample,ship_code,Ship Code,,Trailing code of `study_name` translated to NODC through `metadata/ship_renames.csv`; input to `derive_cruise_key_on_casts()`.
+hplc_sample,cruise_key,Cruise Key,,Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Derived via `calcofi4db::derive_cruise_key_on_casts()` from `ship_code` and `datetime_start_utc`.
+hplc_sample,site_key,Site Key,,"CalCOFI station key 'LLL.L SSS.S', derived with `normalize_site_key()` from the source's Line/Station columns."
+hplc_sample,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+hplc_sample,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
+hplc_sample,sample_id,Sample ID,,Integer pivot FK between `hplc_sample` and `hplc_measurement`; the published key is `sample_key_id`.
+hplc_sample,sample_key_id,Sample Key ID,,Natural sample key `study_name`-`cast_number`-`bottle_number`; the id part of `sample.sample_key`.
