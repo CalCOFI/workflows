@@ -341,6 +341,7 @@ as `cruise_ym_col`.
 #| label: resolve-keys
 load_prior_tables(
   con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",  # public GCS copy when not staged locally
   tables = c("ship", "cruise"), as_view = TRUE)
 
 dbExecute(con, "ALTER TABLE poc_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
@@ -369,8 +370,12 @@ evidence only. It is not published and not set as `parent_sample_key`.
 ```{r}
 #| label: match-bottle
 bottle_parquet <- cc_stage_path("parquet", "calcofi_bottle", "sample.parquet")
-stopifnot("calcofi_bottle's sample shard is staged (run ingest_calcofi_bottle first)" =
-            file_exists(bottle_parquet))
+if (!file_exists(bottle_parquet)) {
+  # not staged on this machine: read calcofi_bottle's public ingest shard instead
+  load_duckdb_extension(con, "httpfs")
+  bottle_parquet <- "https://storage.googleapis.com/calcofi-db/ingest/calcofi_bottle/sample.parquet"
+  cat("calcofi_bottle shard not staged locally -- reading it from GCS\n")
+}
 
 dbExecute(con, glue(
   "CREATE OR REPLACE TABLE bottle_cast AS
@@ -414,6 +419,7 @@ dbGetQuery(con, "
 # spatial last: nothing above has to UPDATE a table that carries geometry
 load_prior_tables(
   con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",
   tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
 add_point_geom(con, "poc_sample", lon_col = "longitude", lat_col = "latitude")
 assign_grid_key(con, "poc_sample") |> datatable(caption = "Grid assignment")
