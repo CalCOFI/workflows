@@ -1,0 +1,93 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json"],
+  "id": "sio_cetacean-sonobuoy",
+  "title": "CalCOFI Sonobuoy Baleen Whale Call Detections",
+  "description": "Hourly presence of blue, fin and humpback whale calls in sonobuoy recordings from CalCOFI cruises, 2004-2012. Each record is one hour of a DIFAR or omnidirectional sonobuoy deployment near a CalCOFI station, scanned by an analyst as 60-second spectrogram windows, with the call types heard. Curated by the Scripps Whale Acoustics Lab (Baumann-Pickering) and staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app). The hydrophone depth is not recorded (the DIFAR or omnidirectional setting is not given), so sample and observation depths are empty, not 0 m. Hours scanned only for a few calls (\"adhoc only\") are kept as samples with no presence value.\n",
+  "keywords": ["EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > MAMMALS", "Marine Turtles, Birds, and Mammals"],
+  "license": "unknown",
+  "providers": [
+    {
+      "name": "Scripps Institution of Oceanography, UC San Diego",
+      "roles": ["producer", "licensor"],
+      "url": "https://scripps.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-124.6293, 29.8464, -117.2573, 37.6141]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2004-01-01T00:00:00Z",
+          "2012-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "obs_attribute",
+      "description": "Sub-occurrence attribution: the breakdown *within* an `obs` headline row. Covers numeric frequency distributions (length bins, stage numbers) and categorical breakdowns (seabird behavior). Counts here sum to the headline where the source is internally consistent."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "taxon_group",
+      "description": "Portable groupings of taxa (phytoplankton functional groups, seabirds, marine mammals). Many taxa per group; a taxon may belong to several."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Seabirds & Marine Mammals"],
+    "calcofi:variables": ["acoustic_presence", "dimensionless", "Seabirds & Marine Mammals"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-sonobuoy/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/sio_cetacean-sonobuoy/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}
