@@ -286,6 +286,7 @@ stopifnot("13 values above 1,000 umol/L at this revision (Q01)" =
 #| label: resolve-keys
 load_prior_tables(
   con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",  # public GCS copy when not staged locally
   tables = c("ship", "cruise"), as_view = TRUE)
 
 dbExecute(con, "ALTER TABLE toc_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
@@ -307,8 +308,12 @@ cat(glue("cruise_key match: {n_ck}/{n_all} ({round(100*n_ck/n_all,1)}%)"), "\n")
 ```{r}
 #| label: match-bottle
 bottle_parquet <- cc_stage_path("parquet", "calcofi_bottle", "sample.parquet")
-stopifnot("calcofi_bottle's sample shard is staged (run ingest_calcofi_bottle first)" =
-            file_exists(bottle_parquet))
+if (!file_exists(bottle_parquet)) {
+  # not staged on this machine: read calcofi_bottle's public ingest shard instead
+  load_duckdb_extension(con, "httpfs")
+  bottle_parquet <- "https://storage.googleapis.com/calcofi-db/ingest/calcofi_bottle/sample.parquet"
+  cat("calcofi_bottle shard not staged locally -- reading it from GCS\n")
+}
 
 dbExecute(con, glue(
   "CREATE OR REPLACE TABLE bottle_cast AS
@@ -344,6 +349,7 @@ cat(glue(
 #| label: spatial
 load_prior_tables(
   con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",
   tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
 add_point_geom(con, "toc_sample", lon_col = "longitude", lat_col = "latitude")
 assign_grid_key(con, "toc_sample") |> datatable(caption = "Grid assignment")
