@@ -1,0 +1,591 @@
+---
+title: "Ingest CCE-LTER Total Organic Carbon"
+calcofi:
+  target_name: ingest_cce_lter_toc
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+    - ingest_calcofi_bottle
+  output: data/parquet/cce-lter_toc/manifest.json
+  provider: cce-lter
+  dataset: toc
+  workflow_url: https://calcofi.io/workflows/ingest_cce-lter_toc.html
+  questions_file: metadata/cce-lter/toc/questions.csv
+  # staged, not released: first ingest of this holding (CalCOFI/workflows#84).
+  # Remove after review, the same way the cetacean ingests were un-held.
+  in_release: false
+  dataset_meta:
+    dataset_name: CCE-LTER Total Organic Carbon (CalCOFI Cruises)
+    dataset_name_short: "Total organic carbon"
+    category: "Nutrients & Chemistry"
+    color: "#4a5d23"
+  tables_owned:
+    - {table: sample, shared: true, note: "core event dimension (one Niskin bottle water sample; own sample grain)"}
+    - {table: obs, shared: true, note: "core observation headline (env realm; toc in umol/L, one row per analysis, replicates kept)"}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#dde5c8"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: EDI package `knb-lter-cce.253.3` (Aluwihare), entity *TOC*
+(`table_253.csv`): 10,150 rows, 13 columns, **22** cruises from 2008-03 to
+2017-08 (the package title says "nine CalCOFI cruises", Q05). Fetched by
+`libs/download_toc.R`, revision and md5 pinned. Licence: CC0 1.0 (the EML's
+`intellectualRights`).
+
+- **Provider**: `cce-lter` (same as `iron`, `poc-pon`).
+- **Grain**: one `sample` per Niskin bottle, keyed by the source's own
+  `(studyName, Cast Number, Bottle number)`. A bottle can carry more than one
+  TOC value: 46 bottles have 2 rows and 4 have 4. Each row is published as its
+  own `obs` (a replicate analysis), not averaged (Q02).
+- **Realm**: `env`. One measurement type, `toc`, in µmol/L. TOC is dissolved
+  plus particulate organic carbon; the provider reports TOC rather than DOC for
+  this region (see the abstract).
+- **Not published** (kept in the archived source): `TOC CV (%)` (its meaning is
+  unconfirmed, Q03) and `Associated Bottle number` (Q04).
+- **Cleaned before publishing** (each counted and asserted below):
+  - 2 rows that repeat another row in every column are dropped.
+  - 1 row with no date (`0000-00-00`), no position and depth `NULL` is held out
+    (Q06).
+- **High values**: 13 values lie between 2,077 and 2,208 µmol/L, the range of
+  seawater *inorganic* carbon, 20 to 60 times the median. They are published
+  as-is for now (no upper bound is declared) and are the subject of Q01, which
+  proposes a ceiling of 1,000 µmol/L.
+- **Cruise key**: ship code from `studyName` plus the source's `Cruise`
+  designation (YYYYMM), via `derive_cruise_key_on_casts()`.
+- **Bottle match** (evidence only): same as `poc-pon`; `calcofi_bottle` cast by
+  `site_key` within 1 day, then the Niskin bottle within 2 m of the target depth.
+  Not published, not a parent.
+
+```{mermaid}
+graph LR
+  A[EDI knb-lter-cce.253.3<br/>table_253.csv, 10,150 rows] --> B[drop exact duplicates<br/>hold out undated row]
+  B --> C[toc_sample<br/>one row per bottle]
+  B --> D[toc_measurement<br/>one row per analysis]
+  C -.ship code + Cruise.-> E[(cruise_key)]
+  C -.site_key + date + depth.-> F[(calcofi_bottle<br/>evidence only)]
+  C --> G[[core: sample]]
+  D --> H[[core: obs, realm=env]]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+cc             <- read_calcofi_meta(here("ingest_cce-lter_toc.qmd"))
+provider       <- cc$provider
+dataset        <- cc$dataset
+tables_owned   <- cc$tables_owned
+ds_key         <- as.character(glue("{provider}_{dataset}"))
+dir_label      <- ds_key
+dir_parquet    <- here(glue("data/parquet/{dir_label}"))
+dir_stage      <- cc_stage_path("parquet", dir_label, create = TRUE)
+dir_src        <- cc_stage_path("source", dir_label, create = TRUE)
+db_path        <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_meta       <- here(glue("metadata/{provider}/{dataset}"))
+publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
+
+# toc is registered in metadata/measurement_type.csv by this change
+# (valid_min = 0; valid_max proposed in Q01, not declared)
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
+stopifnot("toc must be pre-registered" = "toc" %in% d_meas_type$measurement_type)
+
+if (overwrite) {
+  if (file_exists(db_path)) file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp"))) dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+```
+
+## Read Source Data
+
+Pulled from EDI by `libs/download_toc.R` (package `knb-lter-cce.253.3`, entity
+*TOC*), revision 3 with the EML's md5 asserted. The headers carry non-ASCII unit
+suffixes, so they are checked against `\u`-escaped expected names and renamed by
+position.
+
+```{r}
+#| label: read-source
+source(here("libs/download_toc.R"))
+downloaded <- overwrite_all || !file_exists(file.path(dir_src, "data.csv"))
+src_csv <- download_toc(dir_src, overwrite = overwrite_all)
+stopifnot("TOC data.csv not found" = file_exists(src_csv))
+src_stamp <- stamp_source_access(files = src_csv) |>
+  mutate(source = "https://doi.org/10.6073/pasta/ba2ce7e921448a75372109d9f2f5cab2",
+         method = if (downloaded) "download" else "file_mtime")
+
+if (publish_to_gcs) {
+  sync_to_gcs(
+    local_dir  = dir_src,
+    gcs_prefix = glue("archive/{provider}/{dataset}"),
+    bucket     = "calcofi-files-public",
+    exclude    = c(".DS_Store", "*.tmp", "*.gdoc"))
+} else {
+  cat("CALCOFI_SKIP_GCS set -- source NOT archived to gs://calcofi-files-public\n")
+}
+
+d_raw <- read_csv(src_csv, col_types = cols(.default = "c"), na = character(),
+                  locale = locale(encoding = "UTF-8"))
+
+hdr_expected <- c(
+  "studyName", "Cruise", "Datetime GMT", "Latitude (º)", "Longitude (º)",
+  "Line", "Station", "Cast Number", "Bottle number", "Associated Bottle number",
+  "Depth (m)", "Total Organic Carbon (µmol/L)", "TOC CV (%)")
+hdr_new <- c(
+  "study_name", "cruise_ym", "datetime_gmt", "latitude", "longitude",
+  "line", "station", "cast_number", "bottle_number", "associated_bottle_number",
+  "depth_m", "toc_umol_l", "toc_cv_pct")
+
+cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, {ncol(d_raw)} columns"), "\n")
+stopifnot(
+  "expected 10,150 rows x 13 columns (EDI revision 3, checked 2026-10-06)" =
+    nrow(d_raw) == 10150 && ncol(d_raw) == 13,
+  "source header changed: re-check flds_redefine.csv before renaming by position" =
+    identical(names(d_raw), hdr_expected))
+names(d_raw) <- hdr_new
+```
+
+## Clean, Type-Cast
+
+1. **Exact duplicates.** 2 rows repeat another row in every column and are
+   dropped.
+2. **Undated row.** One row (2009-01-08-C-32NM, line 93.3 station 60, cast 11
+   bottle 19) has the date `0000-00-00 00:00:00`, no position and depth `NULL`.
+   It is held out (Q06).
+
+No `-999` sentinel occurs; the only non-numeric measurement-side value is that
+one `NULL` depth (asserted).
+
+```{r}
+#| label: clean-cast
+num <- function(x) suppressWarnings(as.numeric(if_else(x %in% c("", "NULL"), NA_character_, x)))
+
+stopifnot(
+  "no -999 sentinel in this revision" = !any(as.matrix(d_raw) == "-999"),
+  "exactly one NULL cell (the undated row's depth)" = sum(as.matrix(d_raw) == "NULL") == 1)
+
+n_raw   <- nrow(d_raw)
+d_dedup <- distinct(d_raw)
+n_exact <- n_raw - nrow(d_dedup)
+stopifnot("2 exact duplicate rows expected" = n_exact == 2)
+
+d_rows <- d_dedup |>
+  transmute(
+    study_name,
+    cruise_ym,
+    datetime_start_utc = suppressWarnings(ymd_hms(datetime_gmt, tz = "UTC", quiet = TRUE)),
+    latitude           = num(latitude),
+    longitude          = num(longitude),
+    line               = num(line),
+    station            = num(station),
+    cast_number        = suppressWarnings(as.integer(cast_number)),
+    bottle_number      = suppressWarnings(as.integer(bottle_number)),
+    associated_bottle_number = suppressWarnings(as.integer(associated_bottle_number)),
+    depth_m            = num(depth_m),
+    toc_umol_l         = num(toc_umol_l),
+    toc_cv_pct         = num(toc_cv_pct)) |>
+  mutate(
+    site_key      = normalize_site_key(sprintf("%.1f %.1f", line, station)),
+    sample_key_id = paste(study_name, cast_number, bottle_number, sep = "-"))
+
+# the undated row: no datetime, position or depth -> hold out (Q06)
+is_undated <- with(d_rows,
+  is.na(datetime_start_utc) | is.na(latitude) | is.na(longitude) | is.na(depth_m))
+d_hold <- d_rows[is_undated, ]
+stopifnot("exactly one undated row held out (Q06)" =
+            nrow(d_hold) == 1 && d_hold$sample_key_id == "2009-01-08-C-32NM-11-19")
+d_rows <- d_rows[!is_undated, ]
+
+stopifnot(
+  "every kept row has a site_key, cast, bottle and TOC value" =
+    !anyNA(d_rows$site_key) && !anyNA(d_rows$cast_number) &&
+    !anyNA(d_rows$bottle_number) && !anyNA(d_rows$toc_umol_l),
+  "Cruise is a YYYYMM designation on every row" =
+    all(str_detect(d_rows$cruise_ym, "^\\d{4}(0[1-9]|1[0-2])$")))
+
+# one sample per bottle; replicate rows of a bottle must agree on everything
+# except the TOC value and its CV (checked 2026-10-06: they do)
+sample_cols <- c("sample_key_id", "study_name", "cruise_ym", "datetime_start_utc",
+                 "latitude", "longitude", "line", "station", "site_key",
+                 "cast_number", "bottle_number", "associated_bottle_number", "depth_m")
+d_sample <- d_rows |>
+  distinct(across(all_of(sample_cols))) |>
+  arrange(study_name, cast_number, bottle_number) |>
+  mutate(sample_id = row_number())
+stopifnot(
+  "replicate rows of one bottle agree on time, position, depth and bottle" =
+    !anyDuplicated(d_sample$sample_key_id))
+
+n_repl <- d_rows |> count(sample_key_id) |> count(n, name = "n_bottles")
+n_repl |> datatable(caption = "TOC rows per bottle (replicate analyses)", rownames = FALSE)
+stopifnot(
+  "10,089 bottles, 10,147 TOC rows (46 bottles x 2 rows, 4 bottles x 4 rows)" =
+    nrow(d_sample) == 10089 && nrow(d_rows) == 10147)
+
+cat(glue(
+  "{format(n_raw, big.mark=',')} rows read; {n_exact} exact duplicates dropped; ",
+  "{nrow(d_hold)} held out; {format(nrow(d_sample), big.mark=',')} bottles on ",
+  "{n_distinct(d_sample$study_name)} cruises"), "\n")
+
+dbWriteTable(con, "toc_sample", d_sample, overwrite = TRUE)
+```
+
+## Measurements (one row per analysis)
+
+```{r}
+#| label: measurements
+d_meas <- d_rows |>
+  inner_join(d_sample |> select(sample_key_id, sample_id), by = "sample_key_id") |>
+  arrange(sample_id, toc_umol_l) |>
+  transmute(
+    measurement_id    = row_number(),
+    sample_id,
+    measurement_type  = "toc",
+    measurement_value = toc_umol_l,
+    toc_cv_pct)
+stopifnot("one measurement per kept TOC row" = nrow(d_meas) == nrow(d_rows))
+dbWriteTable(con, "toc_measurement", d_meas, overwrite = TRUE)
+
+# the highest values, for Q01: 13 values lie at 2,077-2,208 umol/L, the range of
+# seawater dissolved inorganic carbon
+d_meas |>
+  inner_join(d_sample, by = "sample_id") |>
+  filter(measurement_value > 1000) |>
+  select(study_name, site_key, cast_number, bottle_number, depth_m, measurement_value) |>
+  datatable(caption = "TOC above 1,000 umol/L (Q01)", rownames = FALSE)
+stopifnot("13 values above 1,000 umol/L at this revision (Q01)" =
+            sum(d_meas$measurement_value > 1000) == 13)
+```
+
+## Resolve Ship and Cruise Keys
+
+```{r}
+#| label: resolve-keys
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables = c("ship", "cruise"), as_view = TRUE)
+
+dbExecute(con, "ALTER TABLE toc_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
+dbExecute(con, "UPDATE toc_sample SET ship_code = regexp_extract(study_name, '[0-9A-Z]+$')")
+
+cruise_key_result <- derive_cruise_key_on_casts(
+  con, table_name = "toc_sample", datetime_col = "datetime_start_utc",
+  cruise_ym_col = "cruise_ym")
+cruise_key_result$key_stats |>
+  datatable(caption = "cruise_key resolution: span > source designation > month")
+
+n_ck  <- dbGetQuery(con, "SELECT COUNT(*) FROM toc_sample WHERE cruise_key IS NOT NULL")[[1]]
+n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM toc_sample")[[1]]
+cat(glue("cruise_key match: {n_ck}/{n_all} ({round(100*n_ck/n_all,1)}%)"), "\n")
+```
+
+## Match to calcofi_bottle (evidence only)
+
+```{r}
+#| label: match-bottle
+bottle_parquet <- cc_stage_path("parquet", "calcofi_bottle", "sample.parquet")
+stopifnot("calcofi_bottle's sample shard is staged (run ingest_calcofi_bottle first)" =
+            file_exists(bottle_parquet))
+
+dbExecute(con, glue(
+  "CREATE OR REPLACE TABLE bottle_cast AS
+   SELECT sample_key AS cast_sample_key, site_key, cruise_key, datetime
+   FROM read_parquet('{bottle_parquet}')
+   WHERE sample_type = 'cast' AND site_key IS NOT NULL AND datetime IS NOT NULL"))
+dbExecute(con, glue(
+  "CREATE OR REPLACE TABLE bottle_niskin AS
+   SELECT sample_key AS bottle_sample_key, parent_sample_key AS cast_sample_key,
+          depth_max_m AS depth_m
+   FROM read_parquet('{bottle_parquet}')
+   WHERE sample_type = 'bottle' AND depth_max_m IS NOT NULL"))
+
+cast_match <- match_by_site_datetime(
+  con, "toc_sample", "bottle_cast",
+  fk_col = "cast_sample_key", ref_pk = "cast_sample_key",
+  key_col = "site_key", datetime_col = "datetime_start_utc",
+  ref_datetime_col = "datetime", window_days = 1)
+niskin_match <- match_nearest_by_depth(
+  con, "toc_sample", "bottle_niskin",
+  fk_col = "bottle_sample_key", ref_pk = "bottle_sample_key",
+  parent_fk = "cast_sample_key", axis_col = "depth_m", tolerance = 2)
+
+cat(glue(
+  "bottle cast matched: {cast_match$matched}/{cast_match$total} ({cast_match$pct}%); ",
+  "Niskin bottle within 2 m: {niskin_match$matched}/{niskin_match$eligible} ",
+  "({niskin_match$pct}%)"), "\n")
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+add_point_geom(con, "toc_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "toc_sample") |> datatable(caption = "Grid assignment")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+this_provider <- provider; this_dataset <- dataset
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot(nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+```
+
+## Schema Documentation
+
+```{r}
+#| label: schema
+toc_rels <- list(
+  primary_keys = list(
+    toc_sample       = "sample_id",
+    toc_measurement  = "measurement_id",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "toc_measurement", column = "sample_id",
+         ref_table = "toc_sample", ref_column = "sample_id"),
+    list(table = "toc_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(
+  con, tables = c("toc_sample", "toc_measurement", "measurement_type", "dataset"),
+  rels = toc_rels,
+  colors = list(lightblue = c("toc_sample", "toc_measurement"),
+                lightyellow = "measurement_type", white = "dataset"))
+```
+
+| source | core | transform |
+|---|---|---|
+| `toc_sample` | `sample` (`bottle`) | one row per bottle; key `cce-lter_toc:bottle:{studyName}-{Cast Number}-{Bottle number}`; `depth_min_m = depth_max_m = Depth (m)` (the target depth); time = `Datetime GMT`; `cruise_key` from ship code + `Cruise` |
+| `Total Organic Carbon (µmol/L)` | `obs` `toc` | verbatim, µmol/L; one obs per source row, so a bottle with replicate analyses has 2 or 4 |
+| `TOC CV (%)` | -- | **not published**: meaning unconfirmed (Q03) |
+| `Associated Bottle number` | -- | **not published** (Q04) |
+| matched `calcofi_bottle` cast/bottle | -- | **not published**: evidence only, not `parent_sample_key` |
+| 2 exact-duplicate rows, 1 undated row | -- | dropped / held out (Q06) |
+
+## Check Declared Bounds
+
+`toc` is registered with `valid_min = 0`. Its `valid_max` is **not declared**:
+Q01 proposes 1,000 µmol/L, about 9 times the 99th percentile (111 µmol/L) and
+well below the 13 values near 2,100 µmol/L that Q01 asks about. Until the
+provider agrees, those 13 values are published.
+
+```{r}
+#| label: bounds-check
+bounds_pre <- check_measurement_bounds(con, "toc_measurement", mt = d_meas_type)
+bounds_datatable(bounds_pre)
+
+oob_tally <- drop_out_of_bounds(con, "toc_measurement", mt = d_meas_type)
+cat(glue(
+  "out-of-range rows removed: {format(sum(oob_tally$n_bad %||% 0), big.mark=',')} ",
+  "(only valid_min = 0 is declared; the upper bound awaits Q01)"), "\n")
+
+bounds_post <- check_measurement_bounds(
+  con, "toc_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "toc_measurement must hold no value outside a DECLARED bound" =
+    sum(bounds_post$status == "out_of_range") == 0)
+```
+
+## Enforce Column Types
+
+```{r}
+#| label: enforce-types
+enforce_column_types(con)
+```
+
+## Data Preview
+
+```{r}
+#| label: preview-sample
+cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='toc_sample' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM toc_sample LIMIT 200")) |>
+  datatable(caption = "toc_sample -- first 200 rows", rownames = FALSE, filter = "top")
+```
+
+```{r}
+#| label: preview-measurement
+dbGetQuery(con, "SELECT * FROM toc_measurement LIMIT 200") |>
+  datatable(caption = "toc_measurement -- first 200 rows", rownames = FALSE, filter = "top")
+```
+
+## Emit Core Tables
+
+```{r}
+#| label: emit_core
+append_sample(con, sample_arm_self(
+  ds_key, "toc_sample", "sample_key_id", "bottle",
+  dt_col = "datetime_start_utc", site_expr = "site_key",
+  depth_min = "depth_m", depth_max = "depth_m"))
+
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 's.sample_key_id')},
+         s.grid_key, s.cruise_key, s.latitude, s.longitude,
+         CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
+         NULL::VARCHAR, NULL::DOUBLE
+  FROM toc_measurement m
+  JOIN toc_sample s USING (sample_id)"))
+
+q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+core <- list(
+  sample = q1("SELECT COUNT(*) FROM sample"),
+  obs    = q1("SELECT COUNT(*) FROM obs"))
+cat(glue("core projection -- sample={core$sample} obs={core$obs}"), "\n")
+
+src_total <- q1("SELECT SUM(measurement_value) FROM toc_measurement")
+obs_total <- q1(glue("SELECT SUM(measurement_value) FROM obs WHERE dataset_key = '{ds_key}'"))
+stopifnot(
+  "one sample per bottle" = core$sample == nrow(d_sample),
+  "obs is one row per TOC analysis" = core$obs == q1("SELECT COUNT(*) FROM toc_measurement"),
+  "obs value total equals the source" = isTRUE(all.equal(obs_total, src_total)),
+  "only toc is emitted" =
+    identical(dbGetQuery(con, glue("SELECT DISTINCT measurement_type FROM obs
+                                    WHERE dataset_key = '{ds_key}'"))$measurement_type, "toc"),
+  "sample_key is unique" =
+    q1(glue("SELECT COUNT(*) - COUNT(DISTINCT sample_key) FROM sample
+             WHERE dataset_key = '{ds_key}'")) == 0,
+  "every obs.sample_key resolves in sample" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+        WHERE s.sample_key IS NULL") == 0,
+  "every obs.measurement_type resolves in measurement_type" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN measurement_type t USING (measurement_type)
+        WHERE t.measurement_type IS NULL") == 0)
+
+invisible(dbExecute(con, "DROP TABLE IF EXISTS toc_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE toc_measurement RENAME TO toc_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW toc_measurement AS
+   SELECT o.obs_id AS measurement_id,
+          o.sample_key,
+          substr(o.sample_key, length('{ds_key}:bottle:') + 1) AS sample_key_id,
+          o.measurement_type, o.measurement_value, o.measurement_qual
+   FROM obs o WHERE o.dataset_key = '{ds_key}'")))
+```
+
+### Declared NULLs
+
+```{r}
+#| label: validate
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("validate_for_release:", ifelse(results$passed, "PASSED",
+    "reported findings -- reconciled against the declared NULLs below"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+
+n_null <- function(col) q1(glue(
+  "SELECT COUNT(*) FROM sample WHERE dataset_key = '{ds_key}' AND {col} IS NULL"))
+nullable <- tribble(
+  ~table,   ~column,             ~n,                          ~reason,
+  "sample", "parent_sample_key", n_null("parent_sample_key"), "single-level dataset: every sample is a root (the matched calcofi_bottle bottle is evidence, not a parent)",
+  "sample", "grid_key",          n_null("grid_key"),          "position outside the CalCOFI grid cells",
+  "sample", "cruise_key",        n_null("cruise_key"),        "ship code in studyName not in the ship reference")
+nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
+
+stopifnot(
+  "every sample is a root" = nullable$n[nullable$column == "parent_sample_key"] == nrow(d_sample),
+  "no sample lacks a time, site_key or depth" =
+    n_null("datetime") == 0 && n_null("site_key") == 0 && n_null("depth_max_m") == 0)
+# grid_key / cruise_key NULLs are reported on the first render; once seen, pin
+# each count in an assertion so a change is noticed (a ratchet).
+```
+
+### Core ERD
+
+```{r}
+#| label: erd-core
+core_tbls <- core_output_tables(con)
+cc_erd(con, tables = core_tbls, rels = core_relationships(core_tbls))
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+dir_create(dir_parquet)
+mismatches <- list(cruise_keys = collect_cruise_key_mismatches(con, "toc_sample"))
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+parquet_stats <- write_parquet_outputs(
+  con = con, output_dir = dir_parquet,
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
+  strip_provenance = FALSE, mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+d_tbls_rd <- read_csv(file.path(dir_meta, "tbls_redefine.csv"))
+d_flds_rd <- read_csv(file.path(dir_meta, "flds_redefine.csv"))
+metadata_path <- build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           file.path(dir_meta, "metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned,
+  sources = src_stamp)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet,
+              gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set -- skipping the upload (local verification run)\n")
+```
+
+## Questions for Data Providers
+
+Follow-up questions for CCE-LTER (Lihini Aluwihare), ranked. **Q01** (the 13
+values near 2,100 µmol/L) is the main science caveat on the published `toc`.
+
+```{r}
+#| label: provider-questions
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the cce-lter toc data providers (ranked)")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
+```

@@ -1,30 +1,20 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: cce-lter
-
-# source: WS-R1 2026-09-05
-dataset: toc
-
-# source: https://cite.edirepository.org/cite/knb-lter-cce.253.3?style=ESIP, checked 2026-09-05 (newest EDI revision; overrides the sheet's title where they disagree, see note)
-dataset_name: Total dissolved organic carbon measurements at standard depths in the
-  water column from nine CalCOFI cruises, 2008-2017
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "Total organic carbon"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Nutrients & Chemistry
-
-# source: caloos-sheet row 25, 2026-09-05
-status: external
+# descriptive metadata for cce-lter_toc -- provider-editable (Google Sheet tab
+# `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys
+# (dataset_name, dataset_name_short, category, color, tables) moved to
+# ingest_cce-lter_toc.qmd's calcofi.dataset_meta YAML block on 2026-10-06 when
+# this holding (WS-R1 2026-09-05, CalOOS intake) became an active ingest
+# (CalCOFI/workflows#84 holdings triage). `status`/`module`/`next_step`/
+# `priority_caloos` (holdings-tracker-only fields) were dropped for the same
+# reason -- pipeline stage now lives in metadata/dataset_status.csv.
 
 # source: WS-R1 2026-09-05 default
 visibility: public
 
-# source: caloos-sheet row 25, 2026-09-05
-priority_caloos: EDI
-
-# source: caloos-sheet row 25, 2026-09-05
-module: CalCOFI Particulate and Total Organic Carbon and Nitrogen (POC/PON and TOC),
-  CCE-LTER, SIO, UCSD
+# source: condensed from `abstract` below for the calcofi.io card/table, 2026-10-06
+description: >
+  Total organic carbon (TOC: dissolved plus particulate) in micromoles per
+  liter from Niskin bottle samples at standard depths on 22 CalCOFI cruises,
+  2008 to 2017, measured onshore by high-temperature combustion.
 
 # source: caloos-sheet row 25, 2026-09-05
 abstract: CalCOFI Total Organic Carbon (TOC) contains total organic carbon concentrations,
@@ -46,32 +36,66 @@ abstract: CalCOFI Total Organic Carbon (TOC) contains total organic carbon conce
   Carbon and Nitrogen (POC/PON) dataset, whose values are used together with TOC to
   estimate dissolved organic carbon in open-ocean samples.
 
-# source: caloos-sheet row 25, 2026-09-05
+# source: EML knb-lter-cce.253.3 methods, checked 2026-10-06
+methods_md: >
+  An acidified seawater sample (pH < 3) is sparged with CO2-free air to remove
+  inorganic carbon, then injected onto a combustion column of platinum-coated
+  alumina beads at 680 °C. Non-purgeable organic carbon is converted to CO2 and
+  detected by a nondispersive infrared (NDIR) detector. Calibration: a 5-8 point
+  curve of potassium hydrogen phthalate in Milli-Q water, 10-120 µM C.
+  Protocol:
+  http://cce.lternet.edu/data/methods-manual/augmented-cruises/dissolved-organic-carbon-and-total-nitrogen
+
+# source: EML knb-lter-cce.253.3 creator, checked 2026-10-06
 creators:
 - name: Lihini Aluwihare
-  organization: UCSD SIO
+  organization: Scripps Institution of Oceanography (SIO)
   email: laluwihare@ucsd.edu
   role: lead
 
-# source: caloos-sheet row 25, 2026-09-05
+# source: EML knb-lter-cce.253.3 creator, checked 2026-10-06
 contact: laluwihare@ucsd.edu
 
-# source: caloos-sheet row 25, 2026-09-05
+# source: caloos-sheet row 25, 2026-09-05; EML keywords added 2026-10-06
 keywords:
 - Dissolved Nutrients
+- carbon
+- organic carbon
+- CalCOFI Network
 
-# source: caloos-sheet row 25, 2026-09-05
-quality_control_md: 'QC flags present: No.'
+# source: caloos-sheet row 25, 2026-09-05; source inspection 2026-10-06
+quality_control_md: >-
+  QC flags present: No. The source reports a TOC coefficient of variation per
+  analysis (not published, Q03). 13 values near 2,100 µmol/L, the range of
+  seawater inorganic carbon, are published pending the provider's answer (Q01).
+  Exact duplicate rows are dropped and one undated row is held out (Q06).
 
 # source: caloos-sheet row 25, 2026-09-05
 maintenance: ongoing
 
+# source: https://cite.edirepository.org/cite/knb-lter-cce.253.3?style=ESIP,
+# checked 2026-10-06 -- EDI's own rendering, verbatim
+citation_main: >
+  California Current Ecosystem LTER, CalCOFI - Scripps Institution of
+  Oceanography, and L. Aluwihare. 2025. Total dissolved organic carbon
+  measurements at standard depths in the water column from nine CalCOFI
+  cruises, 2008-2017. ver 3. Environmental Data Initiative.
+  https://doi.org/10.6073/pasta/ba2ce7e921448a75372109d9f2f5cab2.
+
+# source: EML knb-lter-cce.253.3 intellectualRights, checked 2026-10-06:
+# "This data package is released to the public domain under Creative Commons
+# CC0 1.0 No Rights Reserved"
+license: CC0-1.0
+
 # source: https://cite.edirepository.org/cite/knb-lter-cce.253.3?style=ESIP, checked 2026-09-05
 doi: 10.6073/pasta/ba2ce7e921448a75372109d9f2f5cab2
+
+# source: EML knb-lter-cce.253.3 creator, checked 2026-10-06
+pi_names: Lihini Aluwihare
 
 # source: caloos-sheet row 25, 2026-09-05
 link_data_source: https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=253&revision=3
 
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. EDI 253 (TOC) -- no ingest
+# source: EML knb-lter-cce.253.3 alternateIdentifier, checked 2026-10-06
+link_others:
+  - https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/253
