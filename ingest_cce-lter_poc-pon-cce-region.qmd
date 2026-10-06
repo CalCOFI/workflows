@@ -554,7 +554,7 @@ nullable <- tribble(
   "sample", "parent_sample_key", n_null("parent_sample_key"), "single-level dataset: every sample is a root (no calcofi_bottle cast to match on a Process cruise)",
   "sample", "cruise_key",        n_null("cruise_key"),        "CCE Process cruises are not CalCOFI cruises and are not in the SWFSC cruise reference",
   "sample", "site_key",          n_null("site_key"),          "Process-cruise stations are not CalCOFI line/stations",
-  "sample", "grid_key",          n_null("grid_key"),          "position outside the CalCOFI grid cells (Process cruises range to 130.5 W)")
+  "sample", "grid_key",          n_null("grid_key"),          "position outside the CalCOFI grid cells (none on the first render, 2026-10-06; pinned below)")
 nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
 
 stopifnot(
@@ -565,8 +565,9 @@ stopifnot(
     n_null("datetime") == 0 && n_null("latitude") == 0 && n_null("longitude") == 0,
   "no sample lacks a depth (no-depth rows are held out, Q04)" =
     n_null("depth_max_m") == 0)
-# the grid_key NULL count is reported here on the first render; once seen, pin
-# it in an assertion so a change is noticed (a ratchet).
+# ratchet: the first render (2026-10-06) put every sample in a grid cell
+stopifnot("every sample falls in a CalCOFI grid cell (first render: 0 NULL)" =
+            n_null("grid_key") == 0)
 ```
 
 ### Core ERD
