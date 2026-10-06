@@ -3,8 +3,10 @@ ctd_cast,ship_key,Ship Key,,"The ship reference's `ship_key`; equal to the sourc
 ctd_cast,cruise_key,Cruise Key,,"Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Resolved with `calcofi4db::resolve_cruise_key()` from `ship_key`, `datetime_start_utc` and the source's `cruise` designation."
 ctd_cast,cruise_key_method,Cruise Key Method,,"How `cruise_key` was resolved: `span` (inside the cruise's date span) or `source` (the source's own designation)."
 ctd_cast,site_key,Site Key,,"CalCOFI station key 'LLL.L SSS.S' from the source's line/station via `normalize_site_key()`; NULL where the line or station is negative."
-ctd_cast,calcofi_cast_key,Matched CalCOFI Cast,,"`calcofi_ctd-cast` or `calcofi_bottle` cast at the same `site_key` on the nearest date within 1 day (`match_by_site_datetime()`)."
-ctd_cast,calcofi_hours,Hours From CalCOFI Cast,h,Absolute time difference to the matched CalCOFI cast.
-ctd_cast,is_calcofi_dup,Duplicates a CalCOFI Cast,,"TRUE when the matched CalCOFI cast is within 6 h: the same cast, already held calibrated by CalCOFI; held out of the core (Q01)."
+ctd_cast,bottle_cast_key,Matched CalCOFI Bottle Cast,,"`calcofi_bottle` cast at the same `site_key` on the nearest date within 1 day (`match_by_site_datetime()`)."
+ctd_cast,ctd_cast_key,Matched CalCOFI CTD Cast,,"`calcofi_ctd-cast` cast at the same `site_key` on the nearest date within 1 day (`match_by_site_datetime()`)."
+ctd_cast,bottle_hours,Hours From Bottle Cast,h,Absolute time difference to the matched calcofi_bottle cast.
+ctd_cast,ctd_hours,Hours From CTD Cast,h,Absolute time difference to the matched calcofi_ctd-cast cast.
+ctd_cast,is_calcofi_dup,Duplicates a CalCOFI Cast,,"TRUE when the matched bottle or CTD cast is within 6 h: the same cast, already held calibrated by CalCOFI; held out of the core (Q01)."
 ctd_cast,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
 ctd_cast,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.

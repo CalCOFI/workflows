@@ -277,42 +277,63 @@ stopifnot("every cast resolves a cruise_key" = n_ck == nrow(d_cast))
 ## Casts CalCOFI Already Has (held out)
 
 A NOAA cast that is the same cast as a `calcofi_ctd-cast` or `calcofi_bottle`
-cast is a duplicate of a calibrated SIO record. `match_by_site_datetime()`
-finds, for each NOAA cast, the CalCOFI cast at the same `site_key` on the
-nearest date (within 1 day); a match within **6 hours** is treated as the same
-cast and held out. The threshold and the hold-out are Q01.
+cast is a duplicate of a calibrated SIO record. `match_by_site_datetime()` finds,
+for each NOAA cast, the CalCOFI cast at the same `site_key` on the nearest date
+(within 1 day), **once against the bottle casts and once against the CTD casts**:
+the two CalCOFI datasets can time the same cast hours apart (first render,
+2026-10-06: on 2005-01 New Horizon the CTD casts read about 8 h earlier than the
+bottle casts), and a single match picks only one candidate per date. A cast is
+held out when either match is within **6 hours**. The threshold and the hold-out
+are Q01.
 
 ```{r}
 #| label: overlap
-dbExecute(con, glue("
-  CREATE OR REPLACE TABLE calcofi_cast AS
-  SELECT sample_key AS calcofi_cast_key, dataset_key, site_key, datetime
-  FROM read_parquet('{shard_path('calcofi_ctd-cast', 'sample')}')
-  WHERE sample_type = 'cast' AND site_key IS NOT NULL AND datetime IS NOT NULL
-  UNION ALL
-  SELECT sample_key, dataset_key, site_key, datetime
-  FROM read_parquet('{shard_path('calcofi_bottle', 'sample')}')
-  WHERE sample_type = 'cast' AND site_key IS NOT NULL AND datetime IS NOT NULL"))
+ref_tbls <- c(ref_bottle = "calcofi_bottle", ref_ctd_cast = "calcofi_ctd-cast")
+for (tbl in names(ref_tbls)) {
+  ds <- ref_tbls[[tbl]]
+  dbExecute(con, glue("
+    CREATE OR REPLACE TABLE {tbl} AS
+    SELECT sample_key AS ref_cast_key, site_key, datetime
+    FROM read_parquet('{shard_path(ds, 'sample')}')
+    WHERE sample_type = 'cast' AND site_key IS NOT NULL AND datetime IS NOT NULL"))
+}
 
-m_cast <- match_by_site_datetime(
-  con, "ctd_cast", "calcofi_cast",
-  fk_col = "calcofi_cast_key", ref_pk = "calcofi_cast_key",
-  key_col = "site_key", datetime_col = "datetime_start_utc",
-  ref_datetime_col = "datetime", window_days = 1)
+match_hours <- function(ref_tbl, fk, hrs) {
+  m <- match_by_site_datetime(
+    con, "ctd_cast", ref_tbl, fk_col = fk, ref_pk = "ref_cast_key",
+    key_col = "site_key", datetime_col = "datetime_start_utc",
+    ref_datetime_col = "datetime", window_days = 1)
+  dbExecute(con, glue("ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS {hrs} DOUBLE"))
+  dbExecute(con, glue("
+    UPDATE ctd_cast SET {hrs} = ABS(EPOCH(ctd_cast.datetime_start_utc) - EPOCH(r.datetime)) / 3600
+    FROM {ref_tbl} r WHERE r.ref_cast_key = ctd_cast.{fk}"))
+  m
+}
+m_btl <- match_hours("ref_bottle", "bottle_cast_key", "bottle_hours")
+m_ctd <- match_hours("ref_ctd_cast", "ctd_cast_key", "ctd_hours")
 
-dbExecute(con, "ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS calcofi_hours DOUBLE")
-dbExecute(con, "
-  UPDATE ctd_cast SET calcofi_hours = ABS(EPOCH(ctd_cast.datetime_start_utc) - EPOCH(r.datetime)) / 3600
-  FROM calcofi_cast r WHERE r.calcofi_cast_key = ctd_cast.calcofi_cast_key")
 dbExecute(con, "ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS is_calcofi_dup BOOLEAN")
-dbExecute(con, "UPDATE ctd_cast SET is_calcofi_dup = COALESCE(calcofi_hours <= 6, FALSE)")
+dbExecute(con, "
+  UPDATE ctd_cast SET is_calcofi_dup =
+    COALESCE(bottle_hours <= 6, FALSE) OR COALESCE(ctd_hours <= 6, FALSE)")
 
 d_overlap <- dbGetQuery(con, "
   SELECT cruise_ym, ship_code, COUNT(*) AS n_casts,
-         SUM(is_calcofi_dup::INT) AS n_held_dup,
-         COUNT(calcofi_cast_key) - SUM(is_calcofi_dup::INT) AS n_same_day_not_dup
+         SUM(is_calcofi_dup::INT)                 AS n_held_dup,
+         COUNT(*) FILTER (WHERE bottle_hours <= 6) AS n_bottle_6h,
+         COUNT(*) FILTER (WHERE ctd_hours <= 6)    AS n_ctd_6h,
+         COUNT(*) FILTER (WHERE NOT is_calcofi_dup
+                           AND (bottle_cast_key IS NOT NULL OR ctd_cast_key IS NOT NULL)) AS n_near_not_dup
   FROM ctd_cast GROUP BY 1, 2 ORDER BY 1, 2")
 d_overlap |> datatable(caption = "Casts per cruise that CalCOFI already has (held out, Q01)", rownames = FALSE)
+
+# the CTD-vs-bottle timing offset that motivated two matches, reported
+dbGetQuery(con, "
+  SELECT cruise_ym, ship_code, COUNT(*) AS n_both,
+         ROUND(MEDIAN(ctd_hours - bottle_hours), 1) AS median_ctd_minus_bottle_h
+  FROM ctd_cast WHERE bottle_hours IS NOT NULL AND ctd_hours IS NOT NULL
+  GROUP BY 1, 2 ORDER BY 1, 2") |>
+  datatable(caption = "NOAA casts matched to both CalCOFI datasets: hours to each", rownames = FALSE)
 
 n_dup <- sum(d_overlap$n_held_dup)
 n_pub <- nrow(d_cast) - n_dup
