@@ -72,7 +72,13 @@ ingested here.
     published (Q04).
 - **Cruise key**: from the ship code in `studyName` (translated to NODC through
   `metadata/ship_renames.csv`, including CCE-LTER's `33SH` for the 2021-05 Bell
-  M. Shimada cruise) and the sample time, by `derive_cruise_key_on_casts()`.
+  M. Shimada cruise), the sample time and each cruise's designated month, by
+  `derive_cruise_key_on_casts()`. This table has no `Cruise` column, so the
+  designation comes from `cruise_designation.csv` (the same cruises' `Cruise`
+  column in the POC/PON and TOC tables, or the SWFSC cruise for the 11 those
+  tables lack). Without it, 701 samples on cruises with no date span fell back
+  to the sample's own month, and 20 on the 2023-03-25 Shimada cruise were keyed
+  to a cruise that does not exist (2023-03-3322 rather than 2023-04-3322).
 
 ```{mermaid}
 graph LR
@@ -370,8 +376,13 @@ stopifnot(
 Same as `cce-lter_poc-pon`: the trailing token of `studyName` is the ship code,
 translated to NODC by code through `metadata/ship_renames.csv` (CCE-LTER uses
 CalCOFI's own codes 325S, 33SR, 33RL, 31OS, 32BH, 33SH). This table has no
-`Cruise` designation column, so the key comes from the sample time (span, then
-month).
+`Cruise` designation column, so the cruise's designated month comes from
+`metadata/cce-lter/hplc-pigments-calcofi/cruise_designation.csv`: the `Cruise`
+column the POC/PON (EDI 54) and TOC (EDI 253) tables give the same `studyName`,
+or, for the 11 cruises neither has, the SWFSC cruise whose dates hold it. A
+sample is keyed by the cruise whose dates hold it (span), else by that
+designation; never by its own month, which split the 2023-03-25 Shimada cruise
+across two months on the first render.
 
 ```{r}
 #| label: resolve-keys
@@ -398,10 +409,25 @@ dbExecute(con, "
   UPDATE hplc_sample SET ship_code = x.csv_code_new
   FROM _ship_code_xw x WHERE hplc_sample.ship_code = x.csv_code")
 
+d_cruise_des <- read_csv(file.path(dir_meta, "cruise_designation.csv"),
+                         col_types = cols(.default = "c"))
+stopifnot(
+  "every studyName has a designated cruise month" =
+    setequal(d_cruise_des$study_name, unique(d_sample$study_name)),
+  "cruise_ym is YYYYMM" = all(str_detect(d_cruise_des$cruise_ym, "^\\d{4}(0[1-9]|1[0-2])$")))
+dbWriteTable(con, "_cruise_des", as.data.frame(d_cruise_des), overwrite = TRUE)
+dbExecute(con, "ALTER TABLE hplc_sample ADD COLUMN IF NOT EXISTS cruise_ym VARCHAR")
+dbExecute(con, "
+  UPDATE hplc_sample SET cruise_ym = d.cruise_ym
+  FROM _cruise_des d WHERE hplc_sample.study_name = d.study_name")
+
 cruise_key_result <- derive_cruise_key_on_casts(
-  con, table_name = "hplc_sample", datetime_col = "datetime_start_utc")
+  con, table_name = "hplc_sample", datetime_col = "datetime_start_utc",
+  cruise_ym_col = "cruise_ym")
 cruise_key_result$key_stats |>
-  datatable(caption = "cruise_key resolution: span > month")
+  datatable(caption = "cruise_key resolution: span > source designation > month")
+stopifnot("no sample is keyed by its own month (every cruise has a designation)" =
+            !"month" %in% cruise_key_result$key_stats$method)
 
 n_ck  <- dbGetQuery(con, "SELECT COUNT(*) FROM hplc_sample WHERE cruise_key IS NOT NULL")[[1]]
 n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM hplc_sample")[[1]]
@@ -466,7 +492,7 @@ Source to core (what a consumer sees):
 
 | source | core | transform |
 |---|---|---|
-| `hplc_sample` | `sample` (`bottle`) | one row per bottle; key `cce-lter_hplc-pigments-calcofi:bottle:{studyName}-{Cast Number}-{Bottle Number}`; `depth_min_m = depth_max_m = Depth (m)`; time = `Datetime GMT`; `cruise_key` from ship code + time |
+| `hplc_sample` | `sample` (`bottle`) | one row per bottle; key `cce-lter_hplc-pigments-calcofi:bottle:{studyName}-{Cast Number}-{Bottle Number}`; `depth_min_m = depth_max_m = Depth (m)`; time = `Datetime GMT`; `cruise_key` from ship code + time + designated month (`cruise_designation.csv`) |
 | 44 pigment columns (`pigment_columns.csv`) | `obs` `hplc_{pigment}_{sio,umces}` | verbatim, µg/L; one obs per analysis, so a replicate bottle has two of each |
 | `Quality Control flag` | `obs.measurement_qual` | verbatim code 0-3 (`measurement_qual.csv`, code set `hplc-pigments-calcofi`) |
 | `Total chlorophyll b`, `Total Chlorophyll c` (both labs) | -- | **not published**: sums of published pigments (asserted) |
@@ -591,7 +617,7 @@ n_null <- function(col) q1(glue(
 nullable <- tribble(
   ~table,   ~column,             ~n,                          ~reason,
   "sample", "parent_sample_key", n_null("parent_sample_key"), "single-level dataset: every sample is a root",
-  "sample", "grid_key",          n_null("grid_key"),          "position outside the CalCOFI grid cells")
+  "sample", "grid_key",          n_null("grid_key"),          "position outside the CalCOFI grid cells (none on the first render, 2026-10-06; pinned below)")
 nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
 
 stopifnot(
@@ -599,8 +625,9 @@ stopifnot(
   "no sample lacks a time, site_key, cruise_key or depth" =
     n_null("datetime") == 0 && n_null("site_key") == 0 &&
     n_null("cruise_key") == 0 && n_null("depth_max_m") == 0)
-# the grid_key NULL count is reported here on the first render; once seen, pin
-# it in an assertion so a change is noticed (a ratchet).
+# ratchet: the first render (2026-10-06) put every sample in a grid cell
+stopifnot("every sample falls in a CalCOFI grid cell (first render: 0 NULL)" =
+            n_null("grid_key") == 0)
 ```
 
 ### Core ERD
