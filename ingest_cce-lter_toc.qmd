@@ -292,6 +292,26 @@ load_prior_tables(
 dbExecute(con, "ALTER TABLE toc_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
 dbExecute(con, "UPDATE toc_sample SET ship_code = regexp_extract(study_name, '[0-9A-Z]+$')")
 
+# CCE-LTER labels recent ships with CalCOFI's own codes (325S, 33SR, 33RL, 31OS),
+# not the NODC codes the ship reference uses (3322, 33P4, 33UD, 32I1).
+# metadata/ship_renames.csv holds that code -> NODC crosswalk. It is applied by
+# code alone: derive_cruise_key_on_casts() matches renames on code + ship name,
+# and this source has no ship name (same fix as ingest_cce-lter_poc-pon.qmd).
+d_ship_xw <- read_csv(here("metadata/ship_renames.csv"), col_types = cols(.default = "c")) |>
+  distinct(csv_code, csv_code_new) |>
+  filter(csv_code != csv_code_new)
+stopifnot("each ship code in ship_renames.csv maps to one NODC code" =
+            !anyDuplicated(d_ship_xw$csv_code))
+dbWriteTable(con, "_ship_code_xw", as.data.frame(d_ship_xw), overwrite = TRUE)
+dbGetQuery(con, "
+  SELECT s.ship_code AS source_code, x.csv_code_new AS nodc_code, COUNT(*) AS n
+  FROM toc_sample s JOIN _ship_code_xw x ON s.ship_code = x.csv_code
+  GROUP BY 1, 2 ORDER BY 1") |>
+  datatable(caption = "Ship codes translated to NODC (metadata/ship_renames.csv)", rownames = FALSE)
+dbExecute(con, "
+  UPDATE toc_sample SET ship_code = x.csv_code_new
+  FROM _ship_code_xw x WHERE toc_sample.ship_code = x.csv_code")
+
 cruise_key_result <- derive_cruise_key_on_casts(
   con, table_name = "toc_sample", datetime_col = "datetime_start_utc",
   cruise_ym_col = "cruise_ym")
@@ -301,6 +321,8 @@ cruise_key_result$key_stats |>
 n_ck  <- dbGetQuery(con, "SELECT COUNT(*) FROM toc_sample WHERE cruise_key IS NOT NULL")[[1]]
 n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM toc_sample")[[1]]
 cat(glue("cruise_key match: {n_ck}/{n_all} ({round(100*n_ck/n_all,1)}%)"), "\n")
+stopifnot("every sample resolves a cruise_key (an unmatched ship code needs a row in metadata/ship_renames.csv)" =
+            n_ck == n_all)
 ```
 
 ## Match to calcofi_bottle (evidence only)
