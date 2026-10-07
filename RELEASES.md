@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset, staged not released: `cce-lter_poc-pon-cce-region`, POC and PON on CCE-LTER Process cruises, 2006–2024
+
+`ingest_cce-lter_poc-pon-cce-region.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.104.13`
+(Aluwihare, doi:10.6073/pasta/9feb1de01eb3795e7ea39a8b7ba325e6, CC0 1.0; CalCOFI/workflows#84):
+3,216 samples (3,159 Niskin bottles and 57 underway surface samples) with 6,432 `obs` of `poc` and
+`pon`, the types `cce-lter_poc-pon` registers. Process cruises follow water parcels rather than the
+CalCOFI grid, so these samples carry no `cruise_key` and no `site_key`; each still gets a `grid_key`
+from its position. It is **held out of the release** (`in_release: false`) until the provider
+answers the questions on the 76 held-out rows (Q02–Q04).
+
+What ships is registry content only: the `_source_datasets` of `poc` and `pon` also name
+`cce-lter_poc-pon-cce-region`. The holding's catalog abstract, which had described a nitrate
+stable-isotope dataset, is replaced by the EDI package's own (Q01).
+
 # v2026.10.06
 
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline

@@ -1,31 +1,21 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: cce-lter
-
-# source: WS-R1 2026-09-05
-dataset: poc-pon
-
-# source: https://cite.edirepository.org/cite/knb-lter-cce.54.10?style=ESIP, checked 2026-09-05 (newest EDI revision; overrides the sheet's title where they disagree, see note)
-dataset_name: Particulate organic carbon and nitrogen measurements at selected depths
-  in the water column from CalCOFI-CCE Augmented cruises in the California Current
-  System, 2004 - November 2022
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "POC / PON (CalCOFI cruises)"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Nutrients & Chemistry
-
-# source: caloos-sheet row 24, 2026-09-05
-status: external
+# descriptive metadata for cce-lter_poc-pon -- provider-editable (Google Sheet tab
+# `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys
+# (dataset_name, dataset_name_short, category, color, tables) moved to
+# ingest_cce-lter_poc-pon.qmd's calcofi.dataset_meta YAML block on 2026-10-06 when
+# this holding (WS-R1 2026-09-05, CalOOS intake) became an active ingest
+# (CalCOFI/workflows#84 holdings triage). `status`/`module`/`next_step`/
+# `priority_caloos` (holdings-tracker-only fields) were dropped for the same
+# reason -- pipeline stage now lives in metadata/dataset_status.csv.
 
 # source: WS-R1 2026-09-05 default
 visibility: public
 
-# source: caloos-sheet row 24, 2026-09-05
-priority_caloos: EDI
-
-# source: caloos-sheet row 24, 2026-09-05
-module: CalCOFI Particulate and Total Organic Carbon and Nitrogen (POC/PON and TOC),
-  CCE-LTER, SIO, UCSD
+# source: condensed from `abstract` below for the calcofi.io card/table, 2026-10-06
+description: >
+  Particulate organic carbon (POC) and nitrogen (PON) in micromoles per liter
+  from Niskin bottle samples at multiple depths on CalCOFI cruises, 2004 to
+  2023 and ongoing. Samples are filtered onto glass-fiber filters and analyzed
+  onshore by high-temperature combustion.
 
 # source: caloos-sheet row 24, 2026-09-05
 abstract: CalCOFI Particulate Organic Carbon and Nitrogen (POC/PON) contains concentrations
@@ -46,32 +36,68 @@ abstract: CalCOFI Particulate Organic Carbon and Nitrogen (POC/PON) contains con
   CalCOFI's Total Organic Carbon dataset to estimate dissolved organic carbon in open-ocean
   samples.
 
-# source: caloos-sheet row 24, 2026-09-05
+# source: EML knb-lter-cce.54.10 methods (General Methods + Frequency), checked 2026-10-06
+methods_md: >
+  1-L water samples from the CTD rosette's Niskin bottles are filtered onto
+  precombusted glass-fiber filters, stored at -20 °C, dried for 48 h at 60 °C,
+  acidified, and analyzed by high-temperature combustion (Perkin Elmer Model
+  2400 Elemental Analyzer) relative to standards and blanks. Carbon is measured
+  as CO2 and nitrogen as N2 by thermal conductivity. Frequency: selected
+  stations, seasonally. Protocol:
+  http://cce.lternet.edu/data/methods-manual/augmented-cruises/particulate-organic-carbon-nitrogen
+
+# source: EML knb-lter-cce.54.10 creator, checked 2026-10-06
 creators:
 - name: Ralf Goericke
-  organization: UCSD SIO
+  organization: Scripps Institution of Oceanography (SIO)
   email: rgoericke@ucsd.edu
   role: lead
 
-# source: caloos-sheet row 24, 2026-09-05
+# source: EML knb-lter-cce.54.10 creator, checked 2026-10-06
 contact: rgoericke@ucsd.edu
 
-# source: caloos-sheet row 24, 2026-09-05
+# source: caloos-sheet row 24, 2026-09-05; EML keywords added 2026-10-06
 keywords:
 - Dissolved Nutrients
+- carbon
+- organic matter
+- CalCOFI Network
 
-# source: caloos-sheet row 24, 2026-09-05
-quality_control_md: 'QC flags present: No.'
+# source: caloos-sheet row 24, 2026-09-05; source inspection 2026-10-06
+quality_control_md: >-
+  QC flags present: No. The source carries a free-text Notes column on 12 rows
+  (e.g. "possible issue with order"), which is not published (Q05). Exact
+  duplicate rows are dropped and samples with no depth or a conflicting depth
+  are held out by the ingest (Q02, Q04).
 
 # source: caloos-sheet row 24, 2026-09-05
 maintenance: Quarterly; ongoing
 
+# source: https://cite.edirepository.org/cite/knb-lter-cce.54.10?style=ESIP,
+# checked 2026-10-06 -- EDI's own rendering, verbatim
+citation_main: >
+  California Current Ecosystem LTER, CalCOFI - Scripps Institution of
+  Oceanography, and R. Goericke. 2025. Particulate organic carbon and nitrogen
+  measurements at selected depths in the water column from CalCOFI-CCE
+  Augmented cruises in the California Current System, 2004 - November 2022 ver
+  10. Environmental Data Initiative.
+  https://doi.org/10.6073/pasta/830ff22e75a9de5b493af48330e5fc4c.
+
+# source: EML knb-lter-cce.54.10 intellectualRights, checked 2026-10-06:
+# "This data package is released to the public domain under Creative Commons
+# CC0 1.0 No Rights Reserved"
+license: CC0-1.0
+
 # source: https://cite.edirepository.org/cite/knb-lter-cce.54.10?style=ESIP, checked 2026-09-05
 doi: 10.6073/pasta/830ff22e75a9de5b493af48330e5fc4c
 
-# source: caloos-sheet row 24, 2026-09-05
-link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.54.7
+# source: EML knb-lter-cce.54.10 creator, checked 2026-10-06
+pi_names: Ralf Goericke
 
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. EDI 54 (POC/PON, CalCOFI-CCE Augmented cruises) -- no ingest
+# source: EML knb-lter-cce.54.10 packageId, checked 2026-10-06 (was revision 7)
+link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.54.10
+
+# source: EML knb-lter-cce.54.10 alternateIdentifier, checked 2026-10-06 -- the
+# provider's own DataZoo catalog page
+link_others:
+  - https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/54

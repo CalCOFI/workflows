@@ -1,0 +1,10 @@
+table,column,name_long,units,description_md
+poc_sample,ship_code,Ship Code,,Trailing alphanumeric code extracted from source `study_name` (e.g. '33RR' from '2004-11-02-C-33RR'); input to `derive_cruise_key_on_casts()`.
+poc_sample,cruise_key,Cruise Key,,"Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Derived via `calcofi4db::derive_cruise_key_on_casts()` from `ship_code`, `datetime_start_utc` and the source's `Cruise` designation."
+poc_sample,site_key,Site Key,,"CalCOFI station key 'LLL.L SSS.S', derived with `normalize_site_key()` from the source's Line/Station columns."
+poc_sample,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+poc_sample,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
+poc_sample,sample_id,Sample ID,,"Integer pivot FK between `poc_sample` and `poc_measurement`; the published key is `sample_key_id`."
+poc_sample,sample_key_id,Sample Key ID,,"Natural sample key `study_name`-`cast_number`-`bottle_number` (asserted unique); the id part of `sample.sample_key`."
+poc_sample,cast_sample_key,Matched Bottle Cast,,"`calcofi_bottle` cast matched by `site_key` within 1 day (`match_by_site_datetime()`). Evidence only, not published."
+poc_sample,bottle_sample_key,Matched Niskin Bottle,,"`calcofi_bottle` bottle on the matched cast nearest the sample's depth within 2 m (`match_nearest_by_depth()`). Evidence only, not published."
