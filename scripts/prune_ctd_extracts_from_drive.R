@@ -48,8 +48,10 @@
 librarian::shelf(dplyr, fs, glue, purrr, stringr, tibble, quiet = TRUE)
 
 apply_it <- "--apply" %in% commandArgs(trailingOnly = TRUE)
-dir_dl   <- path_expand(
-  "~/My Drive/projects/calcofi/data-public/calcofi/ctd-cast/download")
+dir_dl   <- path(path_expand(Sys.getenv(
+  "CALCOFI_DATA_DIR",
+  "~/My Drive/projects/calcofi/CalCOFI Data Folder/data-public")),
+  "calcofi/ctd-cast/download")
 
 stopifnot("download directory not found" = dir_exists(dir_dl))
 

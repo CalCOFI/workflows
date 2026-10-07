@@ -26,7 +26,8 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-DEFAULT_ACCDB="${HOME}/Library/CloudStorage/GoogleDrive-ben@ecoquants.com/My Drive/projects/calcofi/data-public/calcofi/ctd-cast/CalCOFI_4903-2304_Master_Final_through_2105_October162023.accdb"
+# a shortcut in the CalCOFI Data Folder to the file rswalethorp@ucsd.edu owns
+DEFAULT_ACCDB="${HOME}/My Drive/projects/calcofi/CalCOFI Data Folder/data-public/calcofi/ctd-cast/CalCOFI_4903-2304_Master_Final_through_2105_October162023.accdb"
 ACCDB="${1:-${ACCDB_PATH:-$DEFAULT_ACCDB}}"
 
 DIR_META="${REPO}/metadata/calcofi/hydro-master/accdb"

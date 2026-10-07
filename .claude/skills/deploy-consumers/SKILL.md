@@ -67,33 +67,51 @@ added to step 6; a dispatch that only fires says "dispatched" even when the run 
 
 **Step 6b verifies it.** The script polls the live `/data.json`, `/measurements/` and
 `/species/` (cache-busted, up to ~12 min each) and requires the promoted version string on
-every one; a page that never shows it makes the script **exit 1** after printing step 7.
+every one; a page that never shows it makes the script **exit 1** after step 7 has run.
 The check reads the live site, so it needs no secret. If it fails: `gh run list -R
 CalCOFI/CalCOFI.github.io -L 3`, then `gh run view <id> --log-failed`.
 
-### Step 7: the media (manual, printed by the script, never run by it)
+### Step 7: the media, run whenever the release added a key
 
 The species faces (`taxa_media.json`) and the measurement faces
 (`measurements_media.json` + the ChEBI structures) are **not release content**: they are
 fetched from public services into `gs://calcofi-files-public/{species,measurement}-media/`,
-one copy for every release. Both GitHub workflows (`species-media.yml`,
-`measurement-media.yml`) are `if: false` for want of a `GCP_SA_KEY` secret, so after a
-release that adds taxa or measurement keys a person runs, from `../CalCOFI.github.io`, on a
-machine whose `gcloud` is the calcofi-admin account:
+one copy for every release. Until 2026-10-06 the script only printed this step, and skipping
+it is silent: the site builds, and a taxon or measurement key the release added draws no face.
+It now runs itself, **only when it is due**:
 
-```bash
-scripts/fetch_release.sh                      # taxa.json + measurements.json of the promoted release
-scripts/fetch_species_media.py                # warm cache: only the new taxa (cold: ~1.2 h)
-scripts/check_species_media.py                # the gate, before the bucket
-scripts/fetch_species_media.py --upload
-.venv-media/bin/python scripts/fetch_measurement_faces.py   # venv: requirements-media.txt
-python3 scripts/check_measurement_faces.py
-.venv-media/bin/python scripts/fetch_measurement_faces.py --upload
-gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io   # Jekyll reads both sidecars at build
-```
+1. `scripts/media_due.py` (in `../CalCOFI.github.io`, tested by `_test/media_due_test.py`)
+   compares the promoted release's `taxa.json` + `measurements.json` with the two published
+   sidecars: exit 0 nothing missing, 3 due, 2 cannot tell. An entry is what counts, so a
+   measurement key in the sidecar's `skipped` list is covered, and a key only the sidecar has
+   (a release dropped it) is never a reason to fetch.
+2. When due: `gcloud` must be the calcofi-admin account (the GitHub workflows
+   `species-media.yml` / `measurement-media.yml` stay `if: false` for want of a `GCP_SA_KEY`
+   secret; the Mac mini has the account), then `fetch_release.sh`, and for each kind that is
+   due its fetcher → its check (the gate, before the bucket) → `--upload`, logged to
+   `../CalCOFI.github.io/.cache/deploy_media_<release>.log`.
+3. `media_due.py` again, on the published bytes: it must find nothing missing.
+4. `refresh.yml` dispatched and watched to green, because Jekyll reads both sidecars at build.
 
-Skipping step 7 is silent: the site builds, a new species draws no face and a new
-measurement key no structure, exactly as the page did before. Release-side registry rows
+A failure anywhere fails the deploy (exit 1 at the end, after the rest has run).
+`--skip-media` opts out; `CALCOFI_SITE_DIR` points at another site checkout. Two traps the
+step is written around:
+
+- **A fetcher always writes the whole sidecar from the record.** `--only` would publish a
+  sidecar holding just the new keys and blank every other page; the warm `.cache/` in the
+  site checkout is what makes a full run fetch only the new keys (cold species: ~1.2 h). The
+  warm cache lives on the mini (`.cache/species-media/_cache`, ~207 MB), which is one more
+  reason the deploy runs there.
+- **`set -e` does not reach into a subshell on the left of `||`**, so each fetch/check/upload
+  line ends in `|| exit 1`; without it a failed check would not have stopped its upload.
+
+By hand, from `../CalCOFI.github.io` (same order): `python3 scripts/media_due.py`, then
+`scripts/fetch_release.sh`, `.venv-media/bin/python scripts/fetch_species_media.py`,
+`python3 scripts/check_species_media.py`, `… fetch_species_media.py --upload`, the same three
+for `fetch_measurement_faces.py` / `check_measurement_faces.py`, and
+`gh workflow run refresh.yml --ref main -R CalCOFI/CalCOFI.github.io`.
+
+Release-side registry rows
 (`metadata/measurement_{face,why,method,chem,scale}.csv`) reach the site through
 `measurements.json`, so author them **before** the release is cut; the pages only draw keys
 whose values sit in `obs_env` (`build_measurements_catalog()` reads nothing else), so the

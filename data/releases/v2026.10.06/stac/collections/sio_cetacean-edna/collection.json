@@ -1,0 +1,89 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json"],
+  "id": "sio_cetacean-edna",
+  "title": "CalCOFI Cetacean eDNA Detections (NCOG samples)",
+  "description": "Cetacean species detections from environmental DNA (eDNA) in seawater samples collected by the NOAA CalCOFI Genomics Program (NCOG) at 10-40 m (a few deeper) on CalCOFI cruises, 2014-2016. Seven dolphin and whale species detected by metabarcoding: 1 = detected, 0 = not detected in a sequenced sample (a non-detection, not a confirmed absence). The 62 samples listed as \"not sequenced, PCR negative\" did not amplify, so they say nothing about any species: each stays a sample with no edna_presence rows (not a 0) until the provider says what a PCR negative means (Q04). Samples have no parent sample (each is a root event); the CalCOFI bottle each was filtered from is matched only as evidence of its time and cruise. Each sample is timed by its CTD-rosette bottle cast. Staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app).\n",
+  "keywords": ["EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > MAMMALS", "Marine Turtles, Birds, and Mammals"],
+  "license": "unknown",
+  "providers": [
+    {
+      "name": "Scripps Institution of Oceanography, UC San Diego",
+      "roles": ["producer", "licensor"],
+      "url": "https://scripps.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-122.5333, 31.513, -117.3054, 35.0882]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2014-01-01T00:00:00Z",
+          "2016-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "taxon_group",
+      "description": "Portable groupings of taxa (phytoplankton functional groups, seabirds, marine mammals). Many taxa per group; a taxon may belong to several."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Genomics & eDNA"],
+    "calcofi:variables": ["edna_presence", "dimensionless", "Genomics & eDNA"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-edna/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/sio_cetacean-edna/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}
