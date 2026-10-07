@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset, staged not released: `cce-lter_toc`, total organic carbon on CalCOFI cruises, 2008–2017
+
+`ingest_cce-lter_toc.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.253.3` (Aluwihare,
+doi:10.6073/pasta/ba2ce7e921448a75372109d9f2f5cab2, CC0 1.0), fetched and md5-pinned by
+`libs/download_toc.R` (CalCOFI/workflows#84): 10,089 Niskin bottle samples with 10,147 `toc` obs
+(µmol/L; a bottle analysed more than once keeps each analysis as its own obs). The source's
+coefficient of variation is published as `measurement_prec` (standard deviation = TOC × CV / 100).
+It is **held out of the release** (`in_release: false`) until the provider answers Q01: 13 values near
+2,100 µmol/L, in the range of seawater inorganic carbon. Two exact duplicate rows are dropped and one
+undated row is held out (Q05).
+
+What does ship is one registry row: `measurement_type` gains `toc` (µmol/L, `valid_min = 0`,
+`_prec_column` "TOC CV"; no upper bound).
+
 # v2026.10.06
 
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline
