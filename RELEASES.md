@@ -8,6 +8,22 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset, staged not released: `cce-lter_poc-pon`, particulate organic carbon and nitrogen on CalCOFI cruises, 2004–2023
+
+`ingest_cce-lter_poc-pon.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.54.10` (Goericke,
+doi:10.6073/pasta/830ff22e75a9de5b493af48330e5fc4c, CC0 1.0), fetched and md5-pinned by
+`libs/download_poc_pon.R` (CalCOFI/workflows#84): 17,397 Niskin bottle samples with 34,791 `obs` of
+`poc` and `pon` (µmol/L). It is **held out of the release** (`in_release: false`) until the provider
+confirms the proposed answers (bounds Q01, duplicated rows Q02, missing depths Q04). Four exact
+duplicate rows are dropped and 12 rows held out (a bottle listed at two depths, and 10 with no depth).
+
+What does ship is registry content:
+
+- `measurement_type` gains `poc` and `pon` (µmol/L, `valid_min = 0`; no upper bound yet, Q01).
+- `ship_renames.csv` gains CCE-LTER's code `32BH` → NODC `39C2` (Bold Horizon). CCE-LTER labels
+  recent ships with CalCOFI's own codes (325S, 33SR, 33RL, 31OS, 32BH), so the notebook translates
+  them to NODC by code before keying cruises; without that, 7,717 samples had no `cruise_key`.
+
 # v2026.10.06
 
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline
