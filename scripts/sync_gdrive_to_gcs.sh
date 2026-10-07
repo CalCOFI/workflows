@@ -19,9 +19,10 @@
 #   # for gcs: type=google cloud storage, project_number=ucsd-sio-calcofi
 #
 # overridable via environment (for the new org Shared Drive + service account):
-#   GDRIVE_REMOTE  rclone Drive remote          (default gdrive-ecoquants)
+#   GDRIVE_REMOTE  rclone Drive remote          (default gdrive-ecoquants rooted at
+#                  the CalCOFI Data Folder, 1KYo8-WiWpdYcvHU8CBPvPhJdJdOym0oW)
 #   GCS_REMOTE     rclone GCS remote            (default gcs-calcofi)
-#   GDRIVE_PATH    source path within the remote (default projects/calcofi/...)
+#   GDRIVE_PATH    source path within the remote (default data-public | data-private)
 # e.g. to sync the org Shared Drive via the calcofi-admin service account:
 #   GDRIVE_REMOTE=gdrive-calcofi GDRIVE_PATH=data-public \
 #     GCS_REMOTE=gcs-calcofi-sa ./sync_gdrive_to_gcs.sh public
@@ -30,7 +31,8 @@ set -euo pipefail
 
 # ─── configuration ────────────────────────────────────────────────────────────
 
-GDRIVE_REMOTE="${GDRIVE_REMOTE:-gdrive-ecoquants}"
+# the personal My Drive/projects/calcofi/data-public is retired (2026-10-06)
+GDRIVE_REMOTE="${GDRIVE_REMOTE:-gdrive-ecoquants,root_folder_id=1KYo8-WiWpdYcvHU8CBPvPhJdJdOym0oW}"
 GCS_REMOTE="${GCS_REMOTE:-gcs-calcofi}"
 
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
@@ -68,10 +70,10 @@ done
 # GDRIVE_PATH may be preset in the environment (e.g. "data-public" when the
 # remote's root_folder_id already points at the Shared Drive); else default.
 if [ "$BUCKET_TYPE" = "public" ]; then
-    GDRIVE_PATH="${GDRIVE_PATH:-projects/calcofi/data-public}"
+    GDRIVE_PATH="${GDRIVE_PATH:-data-public}"
     GCS_BUCKET="calcofi-files-public"
 elif [ "$BUCKET_TYPE" = "private" ]; then
-    GDRIVE_PATH="${GDRIVE_PATH:-projects/calcofi/data-private}"
+    GDRIVE_PATH="${GDRIVE_PATH:-data-private}"
     GCS_BUCKET="calcofi-files-private"
 fi
 

@@ -18,5 +18,12 @@ overwrite <- TRUE
 # downloads are always skipped if files exist regardless of this flag
 overwrite_all <- FALSE
 
-# shared Google Drive data root
-dir_data <- "~/My Drive/projects/calcofi/data-public"
+# source files: data-public in the CalCOFI Data Folder, the UCSD-controlled
+# Shared Drive folder (1KYo8-WiWpdYcvHU8CBPvPhJdJdOym0oW) that providers drop
+# files into, reached through its shortcut in My Drive/projects/calcofi. on the
+# Mac mini the same path is a plain folder mirrored from GCS. the personal
+# My Drive/projects/calcofi/data-public is retired (2026-10-06) and holds only
+# pointers. override with CALCOFI_DATA_DIR
+dir_data <- Sys.getenv(
+  "CALCOFI_DATA_DIR",
+  "~/My Drive/projects/calcofi/CalCOFI Data Folder/data-public")
