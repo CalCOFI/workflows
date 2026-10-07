@@ -1,0 +1,706 @@
+---
+title: "Ingest CCE-LTER HPLC Pigments (CalCOFI Cruises)"
+calcofi:
+  target_name: ingest_cce_lter_hplc_pigments_calcofi
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+  output: data/parquet/cce-lter_hplc-pigments-calcofi/manifest.json
+  provider: cce-lter
+  dataset: hplc-pigments-calcofi
+  workflow_url: https://calcofi.io/workflows/ingest_cce-lter_hplc-pigments-calcofi.html
+  questions_file: metadata/cce-lter/hplc-pigments-calcofi/questions.csv
+  # staged, not released: first ingest of this holding (CalCOFI/workflows#84).
+  # Remove after review, the same way the cetacean ingests were un-held.
+  in_release: false
+  dataset_meta:
+    dataset_name: "High Performance Liquid Chromatography (HPLC) pigment analysis from rosette bottle samples at various depths from CalCOFI-CCE Augmented cruises in the California Current System, 2002 to 2023 (ongoing)"
+    dataset_name_short: "HPLC pigments (CalCOFI cruises)"
+    category: "Productivity & Pigments"
+    color: "#3f7f3a"
+  tables_owned:
+    - {table: sample, shared: true, note: "core event dimension (one Niskin bottle per row; own sample grain)"}
+    - {table: obs, shared: true, note: "core observation headline (env realm; 44 HPLC pigment types in ug/L, one set per analysing lab; QC flag in measurement_qual)"}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#d5ead2"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: EDI package `knb-lter-cce.316.1` (Goericke, Stukel, Dovel), entity
+*ChromatographyPigmentsCalCOFI* (`table_324.csv`; DataZoo dataset 316): 9,153
+rows, 60 columns, 81 CalCOFI cruises from 2002-03 to 2023-04. Fetched by
+`libs/download_hplc_pigments_calcofi.R`, revision and md5 pinned. Licence: CC0 1.0
+(the EML's `intellectualRights`).
+
+This is the **CalCOFI-cruise** HPLC table. The CCE Process-cruise HPLC table
+(EDI `knb-lter-cce.72`) is a separate holding (`cce-lter_hplc-pigments`), not
+ingested here.
+
+- **Provider**: `cce-lter`.
+- **Grain**: one row per HPLC analysis of a Niskin bottle; the sample is the
+  bottle, keyed `{studyName}-{Cast Number}-{Bottle Number}`. Seven bottles carry
+  two analyses with different values (replicates, Q03); both are published as
+  separate obs of the one sample, as in the TOC ingest.
+- **Two labs, two sets of measurement types.** Samples from 2002-2014 were run by
+  the Goericke Lab (SIO), from 2014 on by Horn Point Laboratory (UMCES); 31
+  bottles in 2014 were run by both. The provider's own comparison (EML methods)
+  finds some pigments comparable between labs and others not (neoxanthin and
+  prasinoxanthin run higher at UMCES; carotene is defined differently). So each
+  lab's columns get their own type, `hplc_{pigment}_sio` and
+  `hplc_{pigment}_umces` (44 types, `metadata/cce-lter/hplc-pigments-calcofi/pigment_columns.csv`),
+  the same way CTD sensor pairs are kept apart. Joining the comparable ones is a
+  `variable` crosswalk decision, not made here.
+- **Realm**: `env`, µg/L. The provider's `Quality Control flag` (0-3,
+  `metadata/measurement_qual.csv` code set `hplc-pigments-calcofi`) is carried on
+  every obs of the row as `measurement_qual`.
+- **Not published**: `Total chlorophyll b` and `Total Chlorophyll c` for both
+  labs (sums of published pigments; asserted), `Gyroxanthin diester (UMCES)`
+  (empty), `Associated Bottle Number` (Q05). `Total chlorophyll a` **is**
+  published: it is the provider's headline biomass value and the basis of its QC
+  flags, and the UMCES total differs from the sum of its parts by rounding.
+- **Held out** (each counted and asserted below):
+  - 2 rows: one bottle listed at two depths (2005-11 cast 25 bottle 20, 1 m vs
+    2 m), the same conflict as `cce-lter_poc-pon` Q02 (Q01).
+  - 8 rows: two bottles each listed four times, two sets of values crossed with QC
+    flags 0 and 3, so which flag belongs to which value is unknown (Q02).
+  - 1 value: `Carotene (Goericke_SIO)` = 10,575 µg/L on 2013-11 cast 41 bottle
+    19 (QC flag 2; the next-highest is 0.64 µg/L). The rest of that row is
+    published (Q04).
+- **Cruise key**: from the ship code in `studyName` (translated to NODC through
+  `metadata/ship_renames.csv`, including CCE-LTER's `33SH` for the 2021-05 Bell
+  M. Shimada cruise), the sample time and each cruise's designated month, by
+  `derive_cruise_key_on_casts()`. This table has no `Cruise` column, so the
+  designation comes from `cruise_designation.csv` (the same cruises' `Cruise`
+  column in the POC/PON and TOC tables, or the SWFSC cruise for the 11 those
+  tables lack). Without it, 701 samples on cruises with no date span fell back
+  to the sample's own month, and 20 on the 2023-03-25 Shimada cruise were keyed
+  to a cruise that does not exist (2023-03-3322 rather than 2023-04-3322).
+
+```{mermaid}
+graph LR
+  A[EDI knb-lter-cce.316.1<br/>table_324.csv, 9,153 rows] --> B[hold out conflicting depth<br/>and flag-crossed rows]
+  B --> C[hplc_sample<br/>one row per bottle]
+  B --> D[hplc_measurement<br/>long: 44 pigment x lab types<br/>+ QC flag]
+  C -.ship code + time.-> E[(cruise_key)]
+  C --> G[[core: sample]]
+  D --> H[[core: obs, realm=env]]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+cc             <- read_calcofi_meta(here("ingest_cce-lter_hplc-pigments-calcofi.qmd"))
+provider       <- cc$provider
+dataset        <- cc$dataset
+tables_owned   <- cc$tables_owned
+ds_key         <- as.character(glue("{provider}_{dataset}"))
+dir_label      <- ds_key
+dir_parquet    <- here(glue("data/parquet/{dir_label}"))
+dir_stage      <- cc_stage_path("parquet", dir_label, create = TRUE)
+dir_src        <- cc_stage_path("source", dir_label, create = TRUE)
+db_path        <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_meta       <- here(glue("metadata/{provider}/{dataset}"))
+publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
+
+# source column -> measurement_type, one row per pigment column
+d_pig <- read_csv(file.path(dir_meta, "pigment_columns.csv"),
+                  col_types = cols(.default = "c", position = "i", published = "l"))
+d_pub <- d_pig |> filter(published)
+
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
+stopifnot(
+  "44 published pigment columns" = nrow(d_pub) == 44,
+  "every published pigment type is pre-registered" =
+    all(d_pub$measurement_type %in% d_meas_type$measurement_type))
+
+d_qual <- read_csv(here("metadata/measurement_qual.csv"), col_types = cols(.default = "c")) |>
+  filter(code_set == "hplc-pigments-calcofi")
+stopifnot("QC flag codes 0-3 are registered" = setequal(d_qual$qual_code, as.character(0:3)))
+
+if (overwrite) {
+  if (file_exists(db_path)) file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp"))) dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+```
+
+## Read Source Data
+
+Pulled from EDI by `libs/download_hplc_pigments_calcofi.R` (package
+`knb-lter-cce.316.1`, entity *ChromatographyPigmentsCalCOFI*), revision 1 with the
+EML's md5 asserted. Bulk input lives under the stage dir.
+
+The real headers carry unit suffixes with non-ASCII characters (`Latitude (º)`,
+`Fucoxanthin (UMCES) (µg/L)`). They are checked against the expected header
+(written with `\u` escapes, the pigment part built from `pigment_columns.csv`)
+and then renamed **by position**.
+
+```{r}
+#| label: read-source
+source(here("libs/download_hplc_pigments_calcofi.R"))
+downloaded <- overwrite_all || !file_exists(file.path(dir_src, "data.csv"))
+src_csv <- download_hplc_pigments_calcofi(dir_src, overwrite = overwrite_all)
+stopifnot("HPLC data.csv not found" = file_exists(src_csv))
+src_stamp <- stamp_source_access(files = src_csv) |>
+  mutate(source = "https://doi.org/10.6073/pasta/99e2bad73df5fd4890237d31415820b8",
+         method = if (downloaded) "download" else "file_mtime")
+
+if (publish_to_gcs) {
+  sync_to_gcs(
+    local_dir  = dir_src,
+    gcs_prefix = glue("archive/{provider}/{dataset}"),
+    bucket     = "calcofi-files-public",
+    exclude    = c(".DS_Store", "*.tmp", "*.gdoc"))
+} else {
+  cat("CALCOFI_SKIP_GCS set -- source NOT archived to gs://calcofi-files-public\n")
+}
+
+d_raw <- read_csv(src_csv, col_types = cols(.default = "c"), na = character(),
+                  locale = locale(encoding = "UTF-8"))
+
+hdr_meta_expected <- c(
+  "studyName", "Datetime GMT", "Latitude (º)", "Longitude (º)",
+  "Line", "Station", "Cast Number", "Bottle Number", "Associated Bottle Number",
+  "Depth (m)", "Quality Control flag")
+hdr_meta_new <- c(
+  "study_name", "datetime_gmt", "latitude", "longitude",
+  "line", "station", "cast_number", "bottle_number", "associated_bottle_number",
+  "depth_m", "qc_flag")
+pig_col <- paste0("pig_", d_pig$position)   # positional names for the 49 pigment columns
+
+cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, {ncol(d_raw)} columns"), "\n")
+stopifnot(
+  "expected 9,153 rows x 60 columns (EDI revision 1, checked 2026-10-06)" =
+    nrow(d_raw) == 9153 && ncol(d_raw) == 60,
+  "source header changed: re-check pigment_columns.csv before renaming by position" =
+    identical(names(d_raw),
+              c(hdr_meta_expected, paste0(d_pig$source_column, " (µg/L)"))),
+  "pigment_columns.csv positions follow the header" =
+    identical(d_pig$position, 12:60))
+names(d_raw) <- c(hdr_meta_new, pig_col)
+```
+
+## Clean, Type-Cast
+
+```{r}
+#| label: clean-cast
+num <- function(x) suppressWarnings(as.numeric(if_else(x == "", NA_character_, x)))
+
+stopifnot(
+  "no exact duplicate rows" = !anyDuplicated(d_raw),
+  "no -999 sentinel" = !any(as.matrix(d_raw) == "-999"),
+  "every pigment cell is blank or a positive number" =
+    all(vapply(pig_col, function(p) {
+      v <- num(d_raw[[p]]); all(is.na(v) == (d_raw[[p]] == "")) && all(v[!is.na(v)] > 0)
+    }, logical(1))),
+  "Gyroxanthin diester (UMCES) is empty in this revision" =
+    all(d_raw[[pig_col[d_pig$source_column == "Gyroxanthin diester (UMCES)"]]] == ""))
+
+d_row <- d_raw |>
+  mutate(
+    row_id             = row_number(),
+    datetime_start_utc = suppressWarnings(ymd_hms(datetime_gmt, tz = "UTC")),
+    across(c(latitude, longitude, line, station, depth_m), num),
+    across(c(cast_number, bottle_number, associated_bottle_number), ~ suppressWarnings(as.integer(.x))),
+    across(all_of(pig_col), num),
+    site_key      = normalize_site_key(sprintf("%.1f %.1f", line, station)),
+    # the source's own natural key; '-' not ':' so the id stays one token
+    sample_key_id = paste(study_name, cast_number, bottle_number, sep = "-")) |>
+  select(-datetime_gmt)
+
+stopifnot(
+  "every row parses a datetime, position, line/station, cast, bottle and depth" =
+    !anyNA(d_row$datetime_start_utc) && !anyNA(d_row$latitude) &&
+    !anyNA(d_row$longitude) && !anyNA(d_row$site_key) &&
+    !anyNA(d_row$cast_number) && !anyNA(d_row$bottle_number) && !anyNA(d_row$depth_m),
+  "QC flag is a registered code on every row" = all(d_row$qc_flag %in% d_qual$qual_code))
+```
+
+### Keys listed more than once
+
+Ten bottles appear on more than one row. They fall in three groups, each counted
+and asserted:
+
+1. **Conflicting depth** (1 bottle, 2 rows): 2005-11-04-C-32NM cast 25 bottle 20,
+   at 1 m and 2 m with identical values. Held out (Q01).
+2. **Flag-crossed** (2 bottles, 8 rows): each listed four times, two sets of
+   values each paired with QC flag 0 and with flag 3. Held out (Q02).
+3. **Replicates** (7 bottles, 14 rows): two rows that agree on time, position,
+   depth, associated bottle and QC flag but differ in pigment values. Both kept
+   as obs of the one sample (Q03).
+
+```{r}
+#| label: dup-keys
+key_meta <- d_row |>
+  group_by(sample_key_id) |>
+  summarize(
+    n_rows  = n(),
+    n_where = n_distinct(datetime_start_utc, latitude, longitude, depth_m, associated_bottle_number),
+    n_flag  = n_distinct(qc_flag),
+    .groups = "drop") |>
+  filter(n_rows > 1) |>
+  mutate(group = case_when(
+    n_where > 1 ~ "conflicting depth (Q01)",
+    n_flag  > 1 ~ "flag-crossed (Q02)",
+    .default    = "replicate (Q03)"))
+key_meta |> datatable(caption = "Bottles listed on more than one row", rownames = FALSE)
+
+stopifnot(
+  "1 conflicting-depth bottle: 2005-11-04-C-32NM-25-20" =
+    identical(key_meta$sample_key_id[key_meta$group == "conflicting depth (Q01)"],
+              "2005-11-04-C-32NM-25-20"),
+  "2 flag-crossed bottles, 4 rows each" =
+    sum(key_meta$group == "flag-crossed (Q02)") == 2 &&
+    all(key_meta$n_rows[key_meta$group == "flag-crossed (Q02)"] == 4),
+  "7 replicate bottles, 2 rows each" =
+    sum(key_meta$group == "replicate (Q03)") == 7 &&
+    all(key_meta$n_rows[key_meta$group == "replicate (Q03)"] == 2))
+
+hold_keys <- key_meta$sample_key_id[key_meta$group != "replicate (Q03)"]
+d_hold    <- d_row |> filter(sample_key_id %in% hold_keys)
+d_row     <- d_row |> filter(!sample_key_id %in% hold_keys)
+stopifnot("10 rows held out" = nrow(d_hold) == 10)
+
+d_sample <- d_row |>
+  distinct(sample_key_id, study_name, datetime_start_utc, latitude, longitude,
+           line, station, site_key, cast_number, bottle_number,
+           associated_bottle_number, depth_m) |>
+  arrange(study_name, cast_number, bottle_number) |>
+  mutate(sample_id = row_number())
+stopifnot(
+  "one sample per bottle (replicate rows agree on time, position and depth)" =
+    !anyDuplicated(d_sample$sample_key_id),
+  "9,136 samples from 9,143 rows" = nrow(d_sample) == 9136 && nrow(d_row) == 9143)
+d_row <- d_row |> left_join(d_sample |> select(sample_key_id, sample_id), by = "sample_key_id")
+
+cat(glue(
+  "9,153 rows read; {nrow(d_hold)} held out; {format(nrow(d_row), big.mark=',')} analyses ",
+  "of {format(nrow(d_sample), big.mark=',')} bottles on {n_distinct(d_sample$study_name)} cruises"), "\n")
+
+dbWriteTable(con, "hplc_sample", d_sample, overwrite = TRUE)
+```
+
+### Totals agree with their parts
+
+The provider defines `TChl a = Chl a + DVChl a + Chlide a` for both labs, and
+the total chl b and chl c columns as sums of their parts. Totals b and c are not
+published because they follow from published pigments; that is checked here. A
+blank part counts as 0 (the provider's own sums treat it so). UMCES values are
+rounded to 0.001 µg/L, so their sums agree to within rounding.
+
+```{r}
+#| label: totals-check
+pc <- function(src) d_row[[pig_col[d_pig$source_column == src]]]
+z  <- function(x) coalesce(x, 0)
+max_diff <- function(tot, parts) max(abs(tot - parts), na.rm = TRUE)
+d_tot <- tribble(
+  ~total, ~max_abs_diff,
+  "TChl a (SIO)",   max_diff(pc("Total chlorophyll a (Goericke_SIO)"),
+                             z(pc("Chlorophyll a (Goericke_SIO)")) + z(pc("Divinyl chlorophyll a (Goericke_SIO)")) + z(pc("Chlorophyllide a (Goericke_SIO)"))),
+  "TChl a (UMCES)", max_diff(pc("Total chlorophyll a (UMCES)"),
+                             z(pc("Chlorophyll a (UMCES)")) + z(pc("Divinyl chlorophyll a (UMCES)")) + z(pc("Chlorophyllide a (UMCES)"))),
+  "TChl b (SIO)",   max_diff(pc("Total chlorophyll b (Goericke_SIO)"), z(pc("Chlorophyll b (Goericke_SIO)"))),
+  "TChl b (UMCES)", max_diff(pc("Total Chlorophyll b (UMCES)"),
+                             z(pc("Chlorophyll b (UMCES)")) + z(pc("Divinyl Chlorophlyll b (UMCES)"))),
+  "TChl c (SIO)",   max_diff(pc("Total Chlorophyll c (Goericke_SIO)"),
+                             z(pc("Chlorophyll c (Goericke_SIO)")) + z(pc("Chlorophyll c 1 (Goericke_SIO)")) +
+                             z(pc("Chlorophyll c 2 (Goericke_SIO)")) + z(pc("Chlorophyll c 3 (Goericke_SIO)"))),
+  "TChl c (UMCES)", max_diff(pc("Total Chlorophyll c (UMCES)"),
+                             z(pc("Chlorophyll c 12 (UMCES)")) + z(pc("Chlorophyll c 3 (UMCES)"))))
+d_tot |> datatable(caption = "Largest |total - sum of parts| (ug/L)", rownames = FALSE)
+stopifnot(
+  "SIO totals equal the sum of their parts" =
+    all(d_tot$max_abs_diff[str_detect(d_tot$total, "SIO")] < 1e-9),
+  "UMCES totals equal the sum of their parts within rounding (0.0015 ug/L)" =
+    all(d_tot$max_abs_diff[str_detect(d_tot$total, "UMCES")] < 0.0015))
+```
+
+## Pivot Measurements to Long Format
+
+One row per (analysis, published pigment) with a value. The QC flag of the row
+becomes `measurement_qual`. The carotene value of 10,575 µg/L is held out here
+(Q04).
+
+```{r}
+#| label: pivot-long
+d_meas <- d_row |>
+  select(row_id, sample_id, qc_flag, all_of(paste0("pig_", d_pub$position))) |>
+  pivot_longer(starts_with("pig_"), names_to = "pig", values_to = "measurement_value",
+               values_drop_na = TRUE) |>
+  left_join(d_pub |> transmute(pig = paste0("pig_", position), measurement_type), by = "pig") |>
+  transmute(row_id, sample_id, measurement_type, measurement_value,
+            measurement_qual = qc_flag)
+
+carotene_hold <- d_meas |>
+  filter(measurement_type == "hplc_carotene_sio", measurement_value > 100)
+stopifnot("one carotene (SIO) value above 100 ug/L: 10,575 on 2013-11 cast 41 bottle 19 (Q04)" =
+            nrow(carotene_hold) == 1 &&
+            d_sample$sample_key_id[d_sample$sample_id == carotene_hold$sample_id] ==
+              "2013-11-08-C-32NM-41-19")
+d_meas <- d_meas |> anti_join(carotene_hold, by = c("row_id", "measurement_type")) |>
+  arrange(sample_id, measurement_type, row_id) |>
+  mutate(measurement_id = row_number(), .before = 1)
+
+dbWriteTable(con, "hplc_measurement", d_meas, overwrite = TRUE)
+
+d_n <- d_meas |> count(measurement_type, name = "n") |>
+  left_join(d_pub |> select(measurement_type, source_column), by = "measurement_type")
+d_n |> datatable(caption = "Rows per measurement_type", rownames = FALSE)
+stopifnot(
+  "every published pigment type has values" = nrow(d_n) == 44,
+  "154,459 pigment values (one held out)" = nrow(d_meas) == 154459)
+```
+
+## Resolve Ship and Cruise Keys
+
+Same as `cce-lter_poc-pon`: the trailing token of `studyName` is the ship code,
+translated to NODC by code through `metadata/ship_renames.csv` (CCE-LTER uses
+CalCOFI's own codes 325S, 33SR, 33RL, 31OS, 32BH, 33SH). This table has no
+`Cruise` designation column, so the cruise's designated month comes from
+`metadata/cce-lter/hplc-pigments-calcofi/cruise_designation.csv`: the `Cruise`
+column the POC/PON (EDI 54) and TOC (EDI 253) tables give the same `studyName`,
+or, for the 11 cruises neither has, the SWFSC cruise whose dates hold it. A
+sample is keyed by the cruise whose dates hold it (span), else by that
+designation; never by its own month, which split the 2023-03-25 Shimada cruise
+across two months on the first render.
+
+```{r}
+#| label: resolve-keys
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",  # public GCS copy when not staged locally
+  tables = c("ship", "cruise"), as_view = TRUE)
+
+dbExecute(con, "ALTER TABLE hplc_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
+dbExecute(con, "UPDATE hplc_sample SET ship_code = regexp_extract(study_name, '[0-9A-Z]+$')")
+
+d_ship_xw <- read_csv(here("metadata/ship_renames.csv"), col_types = cols(.default = "c")) |>
+  distinct(csv_code, csv_code_new) |>
+  filter(csv_code != csv_code_new)
+stopifnot("each ship code in ship_renames.csv maps to one NODC code" =
+            !anyDuplicated(d_ship_xw$csv_code))
+dbWriteTable(con, "_ship_code_xw", as.data.frame(d_ship_xw), overwrite = TRUE)
+dbGetQuery(con, "
+  SELECT s.ship_code AS source_code, x.csv_code_new AS nodc_code, COUNT(*) AS n
+  FROM hplc_sample s JOIN _ship_code_xw x ON s.ship_code = x.csv_code
+  GROUP BY 1, 2 ORDER BY 1") |>
+  datatable(caption = "Ship codes translated to NODC (metadata/ship_renames.csv)", rownames = FALSE)
+dbExecute(con, "
+  UPDATE hplc_sample SET ship_code = x.csv_code_new
+  FROM _ship_code_xw x WHERE hplc_sample.ship_code = x.csv_code")
+
+d_cruise_des <- read_csv(file.path(dir_meta, "cruise_designation.csv"),
+                         col_types = cols(.default = "c"))
+stopifnot(
+  "every studyName has a designated cruise month" =
+    setequal(d_cruise_des$study_name, unique(d_sample$study_name)),
+  "cruise_ym is YYYYMM" = all(str_detect(d_cruise_des$cruise_ym, "^\\d{4}(0[1-9]|1[0-2])$")))
+dbWriteTable(con, "_cruise_des", as.data.frame(d_cruise_des), overwrite = TRUE)
+dbExecute(con, "ALTER TABLE hplc_sample ADD COLUMN IF NOT EXISTS cruise_ym VARCHAR")
+dbExecute(con, "
+  UPDATE hplc_sample SET cruise_ym = d.cruise_ym
+  FROM _cruise_des d WHERE hplc_sample.study_name = d.study_name")
+
+cruise_key_result <- derive_cruise_key_on_casts(
+  con, table_name = "hplc_sample", datetime_col = "datetime_start_utc",
+  cruise_ym_col = "cruise_ym")
+cruise_key_result$key_stats |>
+  datatable(caption = "cruise_key resolution: span > source designation > month")
+stopifnot("no sample is keyed by its own month (every cruise has a designation)" =
+            !"month" %in% cruise_key_result$key_stats$method)
+
+n_ck  <- dbGetQuery(con, "SELECT COUNT(*) FROM hplc_sample WHERE cruise_key IS NOT NULL")[[1]]
+n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM hplc_sample")[[1]]
+cat(glue("cruise_key match: {n_ck}/{n_all} ({round(100*n_ck/n_all,1)}%)"), "\n")
+stopifnot("every sample resolves a cruise_key (an unmatched ship code needs a row in metadata/ship_renames.csv)" =
+            n_ck == n_all)
+dbGetQuery(con, "
+  SELECT study_name, cruise_key, COUNT(*) AS n FROM hplc_sample
+  GROUP BY 1, 2 ORDER BY 1") |>
+  datatable(caption = "studyName -> cruise_key", rownames = FALSE)
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+# spatial last: nothing above has to UPDATE a table that carries geometry
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",
+  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+add_point_geom(con, "hplc_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "hplc_sample") |> datatable(caption = "Grid assignment")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+this_provider <- provider; this_dataset <- dataset
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot(nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+```
+
+## Schema Documentation
+
+Source shape (what the notebook wrangles):
+
+```{r}
+#| label: schema
+hplc_rels <- list(
+  primary_keys = list(
+    hplc_sample      = "sample_id",
+    hplc_measurement = "measurement_id",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "hplc_measurement", column = "sample_id",
+         ref_table = "hplc_sample", ref_column = "sample_id"),
+    list(table = "hplc_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(
+  con, tables = c("hplc_sample", "hplc_measurement", "measurement_type", "dataset"),
+  rels = hplc_rels,
+  colors = list(lightblue = c("hplc_sample", "hplc_measurement"),
+                lightyellow = "measurement_type", white = "dataset"))
+```
+
+Source to core (what a consumer sees):
+
+| source | core | transform |
+|---|---|---|
+| `hplc_sample` | `sample` (`bottle`) | one row per bottle; key `cce-lter_hplc-pigments-calcofi:bottle:{studyName}-{Cast Number}-{Bottle Number}`; `depth_min_m = depth_max_m = Depth (m)`; time = `Datetime GMT`; `cruise_key` from ship code + time + designated month (`cruise_designation.csv`) |
+| 44 pigment columns (`pigment_columns.csv`) | `obs` `hplc_{pigment}_{sio,umces}` | verbatim, µg/L; one obs per analysis, so a replicate bottle has two of each |
+| `Quality Control flag` | `obs.measurement_qual` | verbatim code 0-3 (`measurement_qual.csv`, code set `hplc-pigments-calcofi`) |
+| `Total chlorophyll b`, `Total Chlorophyll c` (both labs) | -- | **not published**: sums of published pigments (asserted) |
+| `Gyroxanthin diester (UMCES)` | -- | **not published**: empty |
+| `Associated Bottle Number` | -- | **not published** (Q05) |
+| 10 rows (Q01, Q02); 1 carotene value (Q04) | -- | held out |
+
+## Check Declared Bounds
+
+Every pigment type carries `valid_min = 0` (every value is positive, asserted).
+No upper bound is declared.
+
+```{r}
+#| label: bounds-check
+bounds_pre <- check_measurement_bounds(con, "hplc_measurement", mt = d_meas_type)
+bounds_datatable(bounds_pre)
+
+bounds_post <- check_measurement_bounds(
+  con, "hplc_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "hplc_measurement must hold no value outside a DECLARED bound" =
+    sum(bounds_post$status == "out_of_range") == 0)
+```
+
+## Enforce Column Types
+
+```{r}
+#| label: enforce-types
+enforce_column_types(con)
+```
+
+## Data Preview
+
+```{r}
+#| label: preview-sample
+cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='hplc_sample' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM hplc_sample LIMIT 200")) |>
+  datatable(caption = "hplc_sample -- first 200 rows", rownames = FALSE, filter = "top")
+```
+
+```{r}
+#| label: preview-measurement
+dbGetQuery(con, "SELECT * FROM hplc_measurement LIMIT 200") |>
+  datatable(caption = "hplc_measurement -- first 200 rows", rownames = FALSE, filter = "top")
+```
+
+## Emit Core Tables
+
+```{r}
+#| label: emit_core
+append_sample(con, sample_arm_self(
+  ds_key, "hplc_sample", "sample_key_id", "bottle",
+  dt_col = "datetime_start_utc", site_expr = "site_key",
+  depth_min = "depth_m", depth_max = "depth_m"))
+
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'bottle', 's.sample_key_id')},
+         s.grid_key, s.cruise_key, s.latitude, s.longitude,
+         CAST(s.datetime_start_utc AS TIMESTAMP), s.depth_m, s.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
+         CAST(m.measurement_qual AS VARCHAR), NULL::DOUBLE
+  FROM hplc_measurement m
+  JOIN hplc_sample s USING (sample_id)"))
+
+q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+core <- list(
+  sample = q1("SELECT COUNT(*) FROM sample"),
+  obs    = q1("SELECT COUNT(*) FROM obs"))
+cat(glue("core projection -- sample={core$sample} obs={core$obs}"), "\n")
+
+src_total <- q1("SELECT SUM(measurement_value) FROM hplc_measurement")
+obs_total <- q1(glue("SELECT SUM(measurement_value) FROM obs WHERE dataset_key = '{ds_key}'"))
+d_qual_n  <- dbGetQuery(con, glue("
+  SELECT measurement_qual, COUNT(*) AS n FROM obs WHERE dataset_key = '{ds_key}' GROUP BY 1 ORDER BY 1"))
+d_qual_n |> datatable(caption = "obs per QC flag (measurement_qual)", rownames = FALSE)
+stopifnot(
+  "one sample per bottle" = core$sample == nrow(d_sample),
+  "obs is one row per measurement" = core$obs == nrow(d_meas),
+  "obs value total equals the source" = isTRUE(all.equal(obs_total, src_total)),
+  "only the 44 pigment types are emitted" =
+    setequal(dbGetQuery(con, glue("SELECT DISTINCT measurement_type FROM obs
+                                   WHERE dataset_key = '{ds_key}'"))$measurement_type,
+             d_pub$measurement_type),
+  "every obs carries a registered QC flag" =
+    all(d_qual_n$measurement_qual %in% d_qual$qual_code),
+  "sample_key is unique" =
+    q1(glue("SELECT COUNT(*) - COUNT(DISTINCT sample_key) FROM sample
+             WHERE dataset_key = '{ds_key}'")) == 0,
+  "every obs.sample_key resolves in sample" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+        WHERE s.sample_key IS NULL") == 0,
+  "every obs.measurement_type resolves in measurement_type" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN measurement_type t USING (measurement_type)
+        WHERE t.measurement_type IS NULL") == 0)
+
+# serve the per-dataset name as a VIEW over the core
+invisible(dbExecute(con, "DROP TABLE IF EXISTS hplc_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE hplc_measurement RENAME TO hplc_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW hplc_measurement AS
+   SELECT o.obs_id AS measurement_id,
+          o.sample_key,
+          substr(o.sample_key, length('{ds_key}:bottle:') + 1) AS sample_key_id,
+          o.measurement_type, o.measurement_value, o.measurement_qual
+   FROM obs o WHERE o.dataset_key = '{ds_key}'")))
+```
+
+### Declared NULLs
+
+```{r}
+#| label: validate
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("validate_for_release:", ifelse(results$passed, "PASSED",
+    "reported findings -- reconciled against the declared NULLs below"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+
+n_null <- function(col) q1(glue(
+  "SELECT COUNT(*) FROM sample WHERE dataset_key = '{ds_key}' AND {col} IS NULL"))
+nullable <- tribble(
+  ~table,   ~column,             ~n,                          ~reason,
+  "sample", "parent_sample_key", n_null("parent_sample_key"), "single-level dataset: every sample is a root",
+  "sample", "grid_key",          n_null("grid_key"),          "position outside the CalCOFI grid cells (none on the first render, 2026-10-06; pinned below)")
+nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
+
+stopifnot(
+  "every sample is a root" = nullable$n[nullable$column == "parent_sample_key"] == nrow(d_sample),
+  "no sample lacks a time, site_key, cruise_key or depth" =
+    n_null("datetime") == 0 && n_null("site_key") == 0 &&
+    n_null("cruise_key") == 0 && n_null("depth_max_m") == 0)
+# ratchet: the first render (2026-10-06) put every sample in a grid cell
+stopifnot("every sample falls in a CalCOFI grid cell (first render: 0 NULL)" =
+            n_null("grid_key") == 0)
+```
+
+### Core ERD
+
+```{r}
+#| label: erd-core
+core_tbls <- core_output_tables(con)
+cc_erd(con, tables = core_tbls, rels = core_relationships(core_tbls))
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+dir_create(dir_parquet)
+mismatches <- list(cruise_keys = collect_cruise_key_mismatches(con, "hplc_sample"))
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+parquet_stats <- write_parquet_outputs(
+  con = con, output_dir = dir_parquet,
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
+  strip_provenance = FALSE, mismatches = mismatches)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+d_tbls_rd <- read_csv(file.path(dir_meta, "tbls_redefine.csv"))
+d_flds_rd <- read_csv(file.path(dir_meta, "flds_redefine.csv"))
+metadata_path <- build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           file.path(dir_meta, "metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned,
+  sources = src_stamp)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet,
+              gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set -- skipping the upload (local verification run)\n")
+```
+
+## Questions for Data Providers
+
+Follow-up questions for CCE-LTER (Ralf Goericke, Mike Stukel), ranked. None is a
+blocker: what is published is the source's own µg/L values with its own QC flag,
+and the rows the questions are about are held out.
+
+```{r}
+#| label: provider-questions
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the cce-lter hplc-pigments-calcofi data providers (ranked)")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
+```
