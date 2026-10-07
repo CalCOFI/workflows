@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset, staged not released: `cce-lter_chl-size-fractionated`, size-fractionated chlorophyll a, 1994–1996
+
+`ingest_cce-lter_chl-size-fractionated.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.249.3`
+(Marine Life Research Group, M. Mullin; doi:10.6073/pasta/02183db3ad041992304d26757f1b25f9;
+CalCOFI/workflows#84): 422 station occupations on 12 CalCOFI cruises, each a chlorophyll a value
+integrated over 0–100 m, total and ≥ 8 µm. The source gives only the cruise and the station, with the
+line rounded to a whole number (`087.0` for 86.7), so `station_crosswalk.csv` maps each to its
+official station and the time and position come from that station's `calcofi_bottle` cast. It is
+**held out of the release** (`in_release: false`) until the provider confirms that cast is the right
+one (Q01).
+
+What ships is registry content: `measurement_type` gains `chl_a_int_100m` and
+`chl_a_gt8um_int_100m` (mg/m², `valid_min = 0`).
+
 # v2026.10.06
 
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline
