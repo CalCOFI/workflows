@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset, staged not released: `swfsc_ctd-noaa`, NOAA's additional CTD casts on CalCOFI cruises, 2002–2014
+
+`ingest_swfsc_ctd-noaa.qmd` ingests the NOAA SWFSC ERDDAP table `erdCalCOFINOAAhydros`
+(CalCOFI/workflows#84): 886 CTD casts with 27,791 `obs` of temperature, salinity and dissolved oxygen
+at standard depths. The source says its oxygen and salinity are mostly uncalibrated, so the values are
+filed under calcofi_ctd-cast's uncorrected sensor-1 types (`temperature_1`, `salinity_1`,
+`oxygen_ml_l_1`). 349 casts are held out because they are the same casts CalCOFI already publishes
+calibrated (a `calcofi_bottle` or `calcofi_ctd-cast` cast at the same station within 6 h; Q01). It is
+**held out of the release** (`in_release: false`) pending the provider's answers on suspect values
+(Q02) and the citation (Q04).
+
+What ships is registry content only: the `_source_datasets` of `temperature_1`, `salinity_1` and
+`oxygen_ml_l_1` now also name `swfsc_ctd-noaa`.
+
 # v2026.10.06
 
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline

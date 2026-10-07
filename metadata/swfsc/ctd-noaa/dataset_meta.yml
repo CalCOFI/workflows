@@ -1,28 +1,22 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: swfsc
-
-# source: WS-R1 2026-09-05
-dataset: ctd-noaa
-
-# source: caloos-sheet row 10, 2026-09-05
-dataset_name: CalCOFI Additional CTD Hydrographic Cast Data-NOAA SWFSC
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "NOAA additional CTD casts"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Physical Oceanography
-
-# source: caloos-sheet row 10, 2026-09-05
-status: external
+# descriptive metadata for swfsc_ctd-noaa -- provider-editable (Google Sheet tab
+# `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys
+# (dataset_name, dataset_name_short, category, color, tables) moved to
+# ingest_swfsc_ctd-noaa.qmd's calcofi.dataset_meta YAML block on 2026-10-06 when
+# this holding (WS-R1 2026-09-05, CalOOS intake) became an active ingest
+# (CalCOFI/workflows#84 holdings triage). `status`/`module`/`next_step`/
+# `priority_caloos` (holdings-tracker-only fields) were dropped for the same
+# reason -- pipeline stage now lives in metadata/dataset_status.csv.
 
 # source: WS-R1 2026-09-05 default
 visibility: public
 
-# source: caloos-sheet row 10, 2026-09-05
-priority_caloos: ERDDAP
-
-# source: caloos-sheet row 10, 2026-09-05
-module: CalCOFI Additional CTD Hydrographic Cast Data-NOAA SWFSC
+# source: condensed from `abstract` below for the calcofi.io card/table, 2026-10-06
+description: >
+  CTD temperature, salinity and dissolved oxygen at standard depths (0 to
+  1,000 m) from NOAA SWFSC casts on CalCOFI and related NOAA cruises,
+  2002-2014, extending north to Oregon, Washington and British Columbia.
+  Salinity and oxygen are mostly not calibrated against bottle samples. Casts
+  that CalCOFI already holds in calibrated form are not repeated here.
 
 # source: caloos-sheet row 10, 2026-09-05
 abstract: CalCOFI Additional CTD Hydrographic Cast Data contains temperature, salinity,
@@ -39,7 +33,15 @@ abstract: CalCOFI Additional CTD Hydrographic Cast Data contains temperature, sa
   This dataset is best used as a supplementary record of additional NOAA CTD casts
   outside the primary SIO hydrographic time series.
 
-# source: caloos-sheet row 10, 2026-09-05
+# source: ERDDAP erdCalCOFINOAAhydros .das summary + source inspection, 2026-10-06
+methods_md: >
+  CTD casts by NOAA SWFSC on CalCOFI and related NOAA cruises (ships New
+  Horizon, Robert G. Sproul, David Starr Jordan, FRosti, Oscar Dyson, Miller
+  Freeman, Bell M. Shimada, Ocean Starr). Values are reported at standard
+  depths from 0 to 1,000 m. Per the provider, oxygen and salinity are mostly
+  not calibrated against bottle samples.
+
+# source: caloos-sheet row 10, 2026-09-05; ERDDAP publisher_name/publisher_email
 creators:
 - name: Ed Weber
   organization: NOAA SWFSC
@@ -56,16 +58,34 @@ keywords:
 - Dissolved Oxygen
 - CalCOFI Network
 
-# source: caloos-sheet row 10, 2026-09-05
-quality_control_md: 'QC flags present: No.'
+# source: caloos-sheet row 10, 2026-09-05; source inspection 2026-10-06
+quality_control_md: >-
+  QC flags present: No. Salinity and oxygen are mostly uncalibrated (ERDDAP
+  summary). Some values look like sensor artefacts (surface salinity of 22-24
+  PSU offshore; oxygen of 12-13 ml/L at 6 degC on 2012-04) and are published
+  pending the provider's answer (Q02).
 
 # source: caloos-sheet row 10, 2026-09-05
 maintenance: ongoing
 
+# no formal author/year/title citation or DOI is stated in the ERDDAP .das --
+# left empty; see metadata/swfsc/ctd-noaa/questions.csv Q04 (proposed to NOAA
+# SWFSC / Ed Weber), as for swfsc_cufes Q06
+citation_main: ""
+
+# source: https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFINOAAhydros.das,
+# checked 2026-10-06 -- `license` global: "The data may be used and redistributed
+# for free but is not intended for legal use..." (the same NOAA ERD disclaimer as
+# erdCalCOFIcufes), not an SPDX license
+license: custom
+license_url: https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFINOAAhydros.das
+
+# source: ERDDAP .das publisher_name, checked 2026-10-06
+pi_names: Ed Weber
+
 # source: caloos-sheet row 10, 2026-09-05
 link_data_source: https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFINOAAhydros.html
 
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. erdCalCOFINOAAhydros is NOT a mirror of calcofi_ctd-cast (uncalibrated, per
-  its own abstract) -- a holding candidate
+# source: ERDDAP .das infoUrl, checked 2026-10-06
+link_others:
+  - https://oceanview.pfeg.noaa.gov/CalCOFI/calcofi_info.html
