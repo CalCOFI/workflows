@@ -265,9 +265,9 @@ Rscript scripts/build_workflows_index.R
 - **Deploy** (`deploy-consumers`): the per-app refresh after a release is
   promoted, ending with the hosted consumers — db-viz-station, ctd-transects,
   calcofi.io (CalCOFI.github.io) and the docs book — dispatched on GitHub Actions.
-  Step 6b fails the script unless calcofi.io shows the promoted version; the
-  species and measurement media (step 7) are a printed manual step, never run by
-  the script. `libs/release_content_gaps.R` reports, never gates, the measurement
+  Step 6b fails the script unless calcofi.io shows the promoted version; step 7
+  fetches the species and measurement faces whenever the promoted release has a
+  key their sidecars lack (`media_due.py`), and only then. `libs/release_content_gaps.R` reports, never gates, the measurement
   keys with no face or why and the datasets with no citation, licence or DOI.
 - **Publishers** (`publish-template`): every `publish_to-*.qmd` depends on
   `test_release` and rebuilds a dataset only when its input fingerprint changed
