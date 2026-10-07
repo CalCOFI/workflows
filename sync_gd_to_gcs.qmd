@@ -6,25 +6,37 @@ editor_options:
 
 ## Overview
 
-Mirrors the entire Google Drive `data-public/` folder to
-`gs://calcofi-files-public/_sync/` using `rclone`. This transfers
-directly between cloud providers (GD API → GCS API) without needing
-files cached on the local machine.
+Mirrors `data-public/` in the **CalCOFI Data Folder** (the UCSD-controlled
+Shared Drive folder `1KYo8-WiWpdYcvHU8CBPvPhJdJdOym0oW`, the one place source
+files are put for ingestion) to `gs://calcofi-files-public/_sync/` using
+`rclone`. This transfers directly between cloud providers (GD API → GCS API)
+without needing files cached on the local machine.
 
-This is a standalone utility — not a pipeline target. Run manually
-or schedule as a cron job for daily backup.
+The scheduled copy is the server's nightly `CalCOFI/server`
+`rclone/gdrive_to_gcs.sh` (02:00 UTC); this notebook runs the same sync by hand,
+with the same flags, when a new file should not wait for the night. It is a
+standalone utility — not a pipeline target.
+
+The personal `My Drive/projects/calcofi/data-public` folder is retired
+(2026-10-06): its files were copied into the CalCOFI Data Folder and its folders
+hold only a pointer to the new location. Never sync from it — `rclone sync` from
+an emptied folder would delete the whole mirror.
 
 **Two-tier sync**:
 
 - `calcofi-files-public/_sync/` — living mirror of GD (this notebook).
-  Deletes stale GCS files so it always matches GD.
+  A file changed or deleted in GD is moved to
+  `calcofi-files-public/archive/{timestamp}/` (`--backup-dir`), so the mirror
+  matches GD without losing the old version.
 - `calcofi-files-public/archive/` — immutable timestamped snapshots
   (created by ingest QMDs via `sync_to_gcs(archive = TRUE)`).
   Nothing is lost permanently.
 
 **Prerequisites**: `rclone` configured with remotes:
 
-- `gdrive-ecoquants` — Google Drive (or `gdrive-server` on server)
+- `gdrive-ecoquants` — Google Drive, as a user with access to the CalCOFI
+  Data Folder (the server uses `gdrive-calcofi`, the calcofi-admin service
+  account with `root_folder_id` set)
 - `gcs-calcofi` — Google Cloud Storage
 
 Check with `rclone config` or `rclone listremotes`.
@@ -38,7 +50,11 @@ All sync commands below exclude these files:
 | `.DS_Store` | macOS metadata |
 | `*.tmp` | temporary files |
 | `~$*` | Office lock files |
-| `*.gdoc`, `*.gsheet`, `*.gslides` | Google Docs shortcuts (not real files) |
+| `calcofi/ctd-cast/download/*/**` | unpacked per-cast folders; GCS mirrors the zips |
+| `calcofi/genomics/**` | raw eDNA FASTQ reads (~46 GB), read by no ingest |
+
+Google Sheets export as `.csv` (`--drive-export-formats csv`); a shortcut whose
+target the account cannot read is skipped (`--drive-skip-dangling-shortcuts`).
 
 ## Setup
 
@@ -84,26 +100,30 @@ dt_head_tail <- function(x, what, n = DT_N) {
             options = list(pageLength = 10, scrollX = TRUE, dom = "tip"))
 }
 
-# rclone remote paths — override via env vars for server deployment
-# e.g. CALCOFI_GD_REMOTE="gdrive-server:projects/calcofi/data-public"
+# rclone remote paths — override via env vars
+# source: data-public in the CalCOFI Data Folder (Shared Drive folder id below)
 gd_remote <- Sys.getenv(
   "CALCOFI_GD_REMOTE",
-  "gdrive-ecoquants:projects/calcofi/data-public"
+  "gdrive-ecoquants,root_folder_id=1KYo8-WiWpdYcvHU8CBPvPhJdJdOym0oW:data-public"
 )
 gcs_remote <- Sys.getenv(
   "CALCOFI_GCS_REMOTE",
   "gcs-calcofi:calcofi-files-public/_sync"
 )
 
-# shared exclude flags for all rclone commands
+# shared flags for all rclone commands, as in server rclone/gdrive_to_gcs.sh
 rclone_excludes <- c(
+  "--checksum",
+  "--drive-export-formats", "csv",
+  "--drive-skip-dangling-shortcuts",
   "--exclude", ".DS_Store",
   "--exclude", "*.tmp",
-  "--exclude", "~$*",
-  "--exclude", "*.gdoc",
-  "--exclude", "*.gsheet",
-  "--exclude", "*.gslides"
+  "--exclude", "~*",
+  "--exclude", "calcofi/ctd-cast/download/*/**",
+  "--exclude", "calcofi/genomics/**"
 )
+gcs_archive <- sub(
+  "/_sync$", glue("/archive/{format(Sys.time(), '%Y-%m-%d_%H%M%S')}"), gcs_remote)
 
 # local log directory
 log_dir <- here::here("data/logs")
@@ -137,29 +157,9 @@ dt_head_tail(actions, "rclone dry-run actions")
 ## Sync
 
 Run the actual sync. `rclone sync` makes the destination match the
-source — uploads new/changed files and deletes files in GCS that no
-longer exist in GD.
-
-**Initial sync**: The first run transfers all files (~8 GB) and can
-take several hours. For a large initial sync, run directly from the
-terminal instead of this notebook:
-
-```bash
-# run in background with progress logging
-rclone sync \
-  gdrive-ecoquants:projects/calcofi/data-public \
-  gcs-calcofi:calcofi-files-public/_sync \
-  --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
-  --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
-  --progress --stats 30s -v \
-  --log-file data/logs/sync_gd_to_gcs_$(date +%Y-%m-%d_%H%M%S).log &
-
-# monitor progress
-tail -f data/logs/sync_gd_to_gcs_*.log
-```
-
-**Incremental sync**: Subsequent runs only transfer changed files
-and complete in seconds to minutes. These run fine in this notebook.
+source — uploads new/changed files and moves files that changed or no longer
+exist in GD into `archive/{timestamp}/`. The mirror is already full, so a run
+transfers only what changed and takes seconds to minutes.
 
 ```{r}
 #| label: sync
@@ -170,6 +170,7 @@ sync_out <- system2(
   "rclone",
   c("sync", gd_remote, gcs_remote,
     rclone_excludes,
+    "--backup-dir", gcs_archive,
     "--log-level", "INFO",
     "--stats-one-line",
     "-v"),
@@ -213,23 +214,8 @@ cat(glue("\n{length(logs)} total sync logs in {log_dir}"), "\n")
 
 ## Server Cron
 
-To run this daily on a server, schedule via cron or systemd timer:
-
-```bash
-# crontab -e
-0 2 * * * cd /path/to/workflows && \
-  rclone sync \
-    gdrive-server:projects/calcofi/data-public \
-    gcs-calcofi:calcofi-files-public/_sync \
-    --exclude ".DS_Store" --exclude "*.tmp" --exclude "~\$*" \
-    --exclude "*.gdoc" --exclude "*.gsheet" --exclude "*.gslides" \
-    --stats-one-line -v \
-    --log-file data/logs/sync_gd_to_gcs_$(date +\%Y-\%m-\%d_\%H\%M\%S).log
-```
-
-Or render the full notebook for an HTML report:
-
-```bash
-CALCOFI_GD_REMOTE="gdrive-server:projects/calcofi/data-public" \
-  Rscript -e "quarto::quarto_render('sync_gd_to_gcs.qmd')"
-```
+The daily run is the `rclone` container in `CalCOFI/server`:
+`rclone/gdrive_to_gcs.sh public`, scheduled by busybox `crond` at 02:00 UTC and
+logged to `/share/logs/gdrive_to_gcs` on the VM. It writes a manifest of the
+mirror to `calcofi-files-public/manifests/` after each run. Change the flags
+there and here together.

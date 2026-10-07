@@ -1930,7 +1930,8 @@ ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
 # station (sample.site_key since 4.8.0 — the inshore grid cells then held 2–4 stations, so the cell blended them;
 # the grid rebuilt in #130 has one official station per cell, and the climatology stays on the station;
-# grid_key rides along as the station's modal cell) x calendar month x 10 m depth_bin x measurement type over
+# grid_key rides along as the station's modal cell) x the cruise's month (cruise_key's MM, not the cast's date, since
+# calcofi4db 4.22.0: CalCOFI 2607 worked line 93.3 inshore on 30 June) x 10 m depth_bin x measurement type over
 # 1993-2013, >= 5 cruises per cell (3 until v2026.09.06), the window
 # stamped on every row. ctd-transects, the Explorer's Sections lens and calcofi4r::cc_climatology() subtract this
 # table — each used to compute its own, and by 2026-08-31 the three had drifted (all-months pooling; 5 m bins over
@@ -2749,7 +2750,7 @@ if (file.exists(meta_json_path)) {
   # carries, per key, the five registries CalCOFI authors under metadata/ —
   # measurement_{face,chem,method,scale,why}.csv, the page's WHAT / HOW / WHY — and `anomaly`,
   # the yearly departure from the release's own `climatology` per depth band (obs_env joined on
-  # dataset_key, measurement_type, site_key, calendar month and 10 m bin; qual_ok only, because a
+  # dataset_key, measurement_type, site_key, the cruise's month and 10 m bin; qual_ok only, because a
   # provider's flag outranks a bound in anything derived; the mean per cruise, then per year; a
   # unified key merges its series first). `observed{}` is now computed inside qual_ok as well as
   # inside the declared bounds and `n_flagged` (n_values - qual_ok_n) rides beside it, so the

@@ -1,0 +1,110 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "sio_cetacean-sightings",
+  "title": "CalCOFI Cetacean Visual Line-Transect Sightings",
+  "description": "Cetacean (whale, dolphin, porpoise) sightings and on-effort visual line-transect survey segments from quarterly CalCOFI cruises, 2004-2022 (effort through 2021). Curated by the Scripps Whale Acoustics Lab (Hildebrand / Baumann-Pickering) and staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app). The same cruises also carry the Farallon Institute's seabird and marine mammal survey (farallon_bird-mammal), run by an independent observer team: both datasets are kept, so a cetacean group seen by both teams appears once in each, and summing the two counts the same animals twice. The behaviour codes (primary and other behaviour) are held back: they are bare numeric codes with no codebook yet (Q03), so no behaviour rows are published until the lab supplies one; they remain in the archived source.\n",
+  "keywords": ["EARTH SCIENCE > BIOLOGICAL CLASSIFICATION > ANIMALS/VERTEBRATES > MAMMALS", "Marine Turtles, Birds, and Mammals"],
+  "license": "custom",
+  "providers": [
+    {
+      "name": "Scripps Institution of Oceanography, UC San Diego",
+      "roles": ["producer", "licensor"],
+      "url": "https://scripps.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-125.731, 29.8267, -117.2218, 44.4128]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2004-01-01T00:00:00Z",
+          "2022-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:doi": "10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb",
+  "sci:citation": "CalCOFI - Scripps Institution of Oceanography and J. Hildebrand. 2017. Index of visual monitoring, location, species behavior, and identification of cetaceans from CalCOFI cruises in the California Current System, 2005-2015 (ongoing). ver 2. Environmental Data Initiative. https://doi.org/10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "obs_attribute",
+      "description": "Sub-occurrence attribution: the breakdown *within* an `obs` headline row. Covers numeric frequency distributions (length bins, stage numbers) and categorical breakdowns (seabird behavior). Counts here sum to the headline where the source is internally consistent."
+    },
+    {
+      "name": "sample_measurement",
+      "description": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "taxon_group",
+      "description": "Portable groupings of taxa (phytoplankton functional groups, seabirds, marine mammals). Many taxa per group; a taxon may belong to several."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Seabirds & Marine Mammals"],
+    "calcofi:variables": ["group_size", "count", "Seabirds & Marine Mammals"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/sio_cetacean-sightings/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/sio_cetacean-sightings/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-cce.262.2",
+      "type": "text/html",
+      "title": "Custom terms stated by the provider"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb",
+      "type": "text/html"
+    }
+  ]
+}
