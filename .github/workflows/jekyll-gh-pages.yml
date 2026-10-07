@@ -72,6 +72,12 @@ jobs:
       # head/header snippets a fresh render includes; idempotent, marker-guarded
       - name: Inject brand chrome into rendered notebooks
         run: Rscript scripts/brand_inject_html.R
+      # CARTO's raster basemaps (mapview's default Positron / Dark Matter, CartoDB.*
+      # providers) draw "API KEY REQUIRED" since Sep 2026; pages rendered without
+      # calcofi4r::cc_vector_basemap_page() get the shim that draws them from CARTO's
+      # vector tiles (_output/libs/cc-vector-basemap/); idempotent, marker-guarded
+      - name: Draw CARTO basemaps as vector tiles in rendered notebooks
+        run: Rscript scripts/vector_basemap_inject_html.R
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Build with Jekyll
