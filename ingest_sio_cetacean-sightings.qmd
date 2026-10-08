@@ -51,7 +51,7 @@ editor_options:
 Acoustics Lab (Hildebrand / Baumann-Pickering), worked up by Michaela Alksne for
 a density-estimation manuscript (pending), shared by Simone Baumann-Pickering on
 2026-10-07 and saved to the CalCOFI Data Folder
-(`data-public/sio/cetacean-sightings/`):
+(`data-private/sio/cetacean-sightings/`, held while the lab reviews it):
 
 - `CalCOFI_sightings_on_effort.xlsx` — one row per on-effort sighting, with the
   sighting conditions (Beaufort, swell, visibility, glare, cloud), the observer,
@@ -121,8 +121,12 @@ dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 dir_meta     <- here(glue("metadata/{provider}/{dataset}"))
-# the lab's files, as saved to the CalCOFI Data Folder (dir_data, libs/ingest.R)
-dir_src      <- path_expand(glue("{dir_data}/{provider}/{dataset}"))
+# the lab's files sit in data-private, beside data-public in the CalCOFI Data
+# Folder, while the dataset is held: a sync of data-public to GCS publishes
+# whatever it holds (Ben, 2026-10-08). CALCOFI_DATA_PRIVATE_DIR overrides
+dir_data_private <- Sys.getenv(
+  "CALCOFI_DATA_PRIVATE_DIR", file.path(dirname(path_expand(dir_data)), "data-private"))
+dir_src      <- path_expand(glue("{dir_data_private}/{provider}/{dataset}"))
 # GCS uploads (source archive + parquet mirror) both target world-readable
 # buckets, so they run only for a released dataset: `in_release: false` (held
 # until the lab signs off) keeps everything local. CALCOFI_SKIP_GCS=1 also skips
@@ -153,7 +157,7 @@ stopifnot("a source file is missing" = all(file_exists(src_files)))
 # when the bytes were saved (file mtime); recorded by their place in the Data
 # Folder, not by this machine's path to it
 src_stamp <- stamp_source_access(files = unname(src_files)) |>
-  mutate(source = as.character(glue("data-public/{provider}/{dataset}/{basename(src_files)}")))
+  mutate(source = as.character(glue("data-private/{provider}/{dataset}/{basename(src_files)}")))
 
 if (publish_to_gcs) {
   sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
