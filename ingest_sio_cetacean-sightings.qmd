@@ -8,26 +8,29 @@ calcofi:
   output: data/parquet/sio_cetacean-sightings/manifest.json
   provider: sio
   dataset: cetacean-sightings
-  # held out of the release (Ben, 2026-10-08): the Scripps Whale Acoustics Lab
-  # (Simone Baumann-Pickering, 2026-10-07) asked that marine mammal data wait for
-  # Michaela Alksne's QA/QC'd product and their review; marmam-app's copy is
-  # exploratory. Released only when the lab signs off.
-  in_release: false
   workflow_url: https://calcofi.io/workflows/ingest_sio_cetacean-sightings.html
   questions_file: metadata/sio/cetacean-sightings/questions.csv
+  # HELD (Ben, 2026-10-08): staged, never released or uploaded, until the
+  # Scripps Whale Acoustics Lab reviews and signs off (Simone Baumann-Pickering,
+  # 2026-10-07). The source is Michaela Alksne's QA/QC'd on-effort product, the
+  # basis of a density-estimation manuscript still pending; the earlier
+  # marmam-app copy was exploratory and must not be used. `in_release: false`
+  # keeps it out of every release; the notebook also skips every GCS upload
+  # while it is set (publish_to_gcs below).
+  in_release: false
   dataset_meta:
     dataset_name: CalCOFI Cetacean Visual Line-Transect Sightings
     dataset_name_short: "Cetacean sightings"
     category: "Seabirds & Marine Mammals"
     color: "#5b7fa6"
-  # publishes the consolidated core: the effort / sighting / species source shape
+  # publishes the consolidated core: the segment / sighting / species source shape
   # is wrangled here and projected into sample / obs / obs_attribute /
   # sample_measurement + the taxa refs.
   tables_owned:
-    - {table: sample, shared: true, note: "core event dimension (transect segment + sighting)"}
+    - {table: sample, shared: true, note: "core event dimension (effort segment + sighting)"}
     - {table: obs, shared: true, note: "core occurrence headline (group_size per counted sighting)"}
-    - {table: obs_attribute, shared: true, note: "effort status, group size min/max, calves per counted sighting (behaviour held, Q03)"}
-    - {table: sample_measurement, shared: true, note: "transect_length per effort segment"}
+    - {table: obs_attribute, shared: true, note: "transect status, group size min/max, calves per counted sighting (behaviour held, Q03)"}
+    - {table: sample_measurement, shared: true, note: "transect_length per on-transect effort segment"}
     - {table: taxon, shared: true, note: "shared taxa reference (cetaceans, worms:)"}
     - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
     - {table: taxon_group, shared: true, note: "calcofi:marine_mammals"}
@@ -40,47 +43,54 @@ editor_options:
 
 ## Overview
 
-**Source**: the curated cetacean visual-survey files in
-[CalCOFI/marmam-app](https://github.com/CalCOFI/marmam-app) (`data/whale_visual_data/`),
-read from a **pinned commit** so a run reads bytes it can name:
+> **Held, not released.** This dataset is staged only (`in_release: false`) and
+> nothing from it is uploaded, until the Scripps Whale Acoustics Lab reviews and
+> signs off (Simone Baumann-Pickering, 2026-10-07).
 
-- `CalCOFI_2004-2022_CombinedSightings.csv` — one row per sighting, 67 cruises
-  2004-07 → 2022-11 (6,107 rows).
-- `CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA.csv` — on-effort,
-  on-transect survey segments, 2004 → 2021 (1,988 rows, 8 of them placeholder
-  rows for cruises with no effort).
-- `data/CalCOFI_species_codes.csv` — the 34 species codes.
+**Source**: the QA/QC'd on-effort visual-survey product of the Scripps Whale
+Acoustics Lab (Hildebrand / Baumann-Pickering), worked up by Michaela Alksne for
+a density-estimation manuscript (pending), shared by Simone Baumann-Pickering on
+2026-10-07 and saved to the CalCOFI Data Folder
+(`data-public/sio/cetacean-sightings/`):
 
-Both CSVs are **Latin-1**, not UTF-8 (a `°` in a comment breaks a UTF-8 read).
-The app's derived `whale.csv` / `transect.csv` are **not** read: they drop rows
-and rename cruises for display. The raw CountCOFI event log for 2023-11
-(`new-marine-mammal-data/CC-202311.txt`) is not ingested either (Q08).
+- `CalCOFI_sightings_on_effort.xlsx` — one row per on-effort sighting, with the
+  sighting conditions (Beaufort, swell, visibility, glare, cloud), the observer,
+  the reticle / distance measurements and the computed perpendicular distance.
+- `CalCOFI_segments_on_effort.xlsx` — the on-effort survey segments: start / end
+  position and time, the on/off-transect flag and the segment length.
+- `CalCOFI_sighting_codes.csv` — the lab's species-code list (Latin-1, with
+  non-breaking spaces).
 
-This is the dataset the catalog held as the `sio_cetacean-sightings` holding
-(EDI `knb-lter-cce.262`, 2005–2015); the marmam-app files are the lab's wider,
-curated 2004–2022 version of it (Q02). It ships under the EDI package's
-`custom` terms as recorded (Q01 and Q02 stay open with the lab).
+The row counts are asserted in [Read Source Data]. The two workbooks are
+**on-effort only**: every sighting carries a segment id, and the segment ids are
+unique across cruises, so a sighting joins its segment on the id alone.
 
-**Behaviour is held back.** The three behaviour columns are bare numeric codes
-(`1`, `34`, `31`) with no codebook, and the same `behavior` measurement type
+They replace the CSVs in the CalCOFI marine mammal Shiny app repository
+(CalCOFI/marmam-app) this ingest read until 2026-10-07: the lab calls the app's
+copy exploratory, and it is no longer read. The marmam-app copy also carried
+off-effort sightings, which this product does not; it adds 2022-2025 effort and
+2023-2025 sightings the app never had.
+
+**Behaviour is held back.** The two behaviour columns are bare numeric codes
+(`1`, `34`, `2, 5, 8`) with no codebook, and the same `behavior` measurement type
 carries words (Flying, Feeding) for `farallon_bird-mammal`, so a consumer
 grouping by `behavior` would get codes beside labels. The code path stays below,
 gated by `publish_behavior <- FALSE`; it is switched on when the lab supplies
-the codebook (Q03; Ben, 2026-10-04). The columns remain in the archived source.
+the codebook (Q03; Ben, 2026-10-04).
 
 - **Provider**: `sio` (Scripps Whale Acoustics Lab, Hildebrand / Baumann-Pickering)
-- **Grain**: a sighting, optionally inside an effort segment (`segment_id`, NULL
-  when off effort / off transect)
+- **Grain**: a sighting inside an on-effort segment (`segment_id`)
 - **Taxonomy**: species codes declared with `append_dataset_taxon()` from
-  `metadata/sio/cetacean-sightings/species_codes.csv` and resolved against WoRMS;
+  `metadata/sio/cetacean-sightings/species_codes.csv` (reconciled against the
+  lab's code list, whose common names it carries) and resolved against WoRMS;
   the unidentified classes and the two synonyms are keyed by
   `metadata/taxon_override.csv`.
 
 ```{mermaid}
 graph LR
-  E[Effort CSV] --> SG[cetacean_segment<br/>effort segment]
-  S[Sightings CSV] --> SI[cetacean_sighting<br/>one row per sighting]
-  C[species_codes] --> SP[cetacean_species]
+  E[Segments workbook] --> SG[cetacean_segment<br/>on-effort segment]
+  S[Sightings workbook] --> SI[cetacean_sighting<br/>one row per sighting]
+  C[lab code list +<br/>species_codes.csv] --> SP[cetacean_species]
   SI -.segment_id.-> SG
   SI -.species_code.-> SP
 ```
@@ -96,7 +106,7 @@ devtools::load_all(here::here("../calcofi4r"))
 librarian::shelf(
   CalCOFI/calcofi4db, CalCOFI/calcofi4r,
   DBI, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr,
-  lubridate, purrr, readr, sf, stringr, tibble, tidyr, quiet = T)
+  lubridate, purrr, readr, readxl, sf, stringr, tibble, tidyr, quiet = T)
 options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 source(here("libs/ingest.R"))
@@ -111,13 +121,14 @@ dir_parquet  <- here(glue("data/parquet/{dir_label}"))
 dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
 db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 dir_meta     <- here(glue("metadata/{provider}/{dataset}"))
-# downloads land here first (gitignored; archived to GCS below); a re-run reuses
-# them, `overwrite_all` (libs/ingest.R) refetches
-dir_dl       <- here(glue("data/cache/{dir_label}")); dir_create(dir_dl)
-# GCS uploads (source archive + parquet mirror). Set CALCOFI_SKIP_GCS=1 to render
-# without publishing -- a review render, or an account without write access to
-# gs://calcofi-files-public / gs://calcofi-db.
-publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
+# the lab's files, as saved to the CalCOFI Data Folder (dir_data, libs/ingest.R)
+dir_src      <- path_expand(glue("{dir_data}/{provider}/{dataset}"))
+# GCS uploads (source archive + parquet mirror) both target world-readable
+# buckets, so they run only for a released dataset: `in_release: false` (held
+# until the lab signs off) keeps everything local. CALCOFI_SKIP_GCS=1 also skips
+# them for a review render of a released dataset.
+in_release     <- isTRUE(cc$in_release %||% TRUE)
+publish_to_gcs <- in_release && Sys.getenv("CALCOFI_SKIP_GCS") == ""
 
 if (overwrite) {
   if (file_exists(db_path))                 file_delete(db_path)
@@ -133,51 +144,41 @@ load_duckdb_extension(con, "spatial")
 ```{r}
 #| label: read-source
 
-# CalCOFI/marmam-app at a pinned commit: the repository is a Shiny app whose
-# data/ folder is edited by hand, so `main` is a moving target. Bump the SHA
-# deliberately (and re-check the counts asserted below) to take new data.
-src_sha  <- "7bc0e18d7cb0ac7ba58d7bc4d47e57c50bd9bc80"
-src_base <- glue("https://raw.githubusercontent.com/CalCOFI/marmam-app/{src_sha}/data")
-src_paths <- c(
-  sightings = "whale_visual_data/CalCOFI_2004-2022_CombinedSightings.csv",
-  effort    = "whale_visual_data/CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA.csv",
-  species   = "CalCOFI_species_codes.csv")
-src_urls  <- setNames(as.character(glue("{src_base}/{src_paths}")), names(src_paths))
-src_files <- setNames(file.path(dir_dl, basename(src_paths)), names(src_paths))
-downloaded <- character()
-for (k in names(src_paths)) {
-  if (overwrite_all || !file_exists(src_files[[k]])) {
-    download.file(src_urls[[k]], src_files[[k]], quiet = TRUE, mode = "wb")
-    downloaded <- c(downloaded, k)
-  }
-}
-# when the bytes came down (the cached file's mtime), recorded against the URL
+stopifnot("source dir not found" = dir_exists(dir_src))
+src_files <- c(
+  sightings = file.path(dir_src, "CalCOFI_sightings_on_effort.xlsx"),
+  segments  = file.path(dir_src, "CalCOFI_segments_on_effort.xlsx"),
+  species   = file.path(dir_src, "CalCOFI_sighting_codes.csv"))
+stopifnot("a source file is missing" = all(file_exists(src_files)))
+# when the bytes were saved (file mtime); recorded by their place in the Data
+# Folder, not by this machine's path to it
 src_stamp <- stamp_source_access(files = unname(src_files)) |>
-  mutate(source = unname(src_urls),
-         method = ifelse(names(src_files) %in% downloaded, "download", "file_mtime"))
-cat(glue("marmam-app@{substr(src_sha, 1, 7)}: {length(downloaded)} file(s) downloaded, ",
-         "{length(src_paths) - length(downloaded)} reused from {dir_dl}"), "\n")
+  mutate(source = as.character(glue("data-public/{provider}/{dataset}/{basename(src_files)}")))
 
 if (publish_to_gcs) {
-  sync_to_gcs(local_dir = dir_dl, gcs_prefix = glue("archive/{provider}/{dataset}"),
-              bucket = "calcofi-files-public")
+  sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
+              bucket = "calcofi-files-public", exclude = c(".DS_Store", "*.tmp"))
 } else {
-  cat("CALCOFI_SKIP_GCS set -- sources NOT archived to gs://calcofi-files-public\n")
+  cat("held (in_release: false) or CALCOFI_SKIP_GCS set -- sources NOT archived to gs://calcofi-files-public\n")
 }
 
-# Latin-1: a degree sign in a comment is byte 0xB0, which a UTF-8 read rejects
-latin1 <- locale(encoding = "latin1")
-d_si_raw <- read_csv(src_files[["sightings"]], col_types = cols(.default = "c"), locale = latin1)
-d_ef_raw <- read_csv(src_files[["effort"]],    col_types = cols(.default = "c"), locale = latin1)
-d_sp_raw <- read_csv(src_files[["species"]],   col_types = cols(.default = "c"))
+# every cell as text, so nothing is coerced before it is looked at; the
+# workbooks write the literal "NA" for a blank in several columns
+xlsx_na  <- c("", "NA")
+d_si_raw <- read_excel(src_files[["sightings"]], sheet = "Sheet1", col_types = "text", na = xlsx_na)
+d_sg_raw <- read_excel(src_files[["segments"]],  sheet = "Sheet1", col_types = "text", na = xlsx_na)
+# Latin-1, CR CR LF line ends, and a non-breaking space (0xA0) around one name
+d_sp_raw <- read_csv(src_files[["species"]], col_types = cols(.default = "c"),
+                     locale = locale(encoding = "latin1")) |>
+  setNames(c("lab_code", "lab_common_name")) |>
+  mutate(across(everything(), \(x) str_squish(str_replace_all(x, " ", " "))))
 
-# the counts profiled at this commit (2026-09-27); a changed file must be looked
-# at, not absorbed
+# the counts profiled on 2026-10-08; a changed file must be looked at, not absorbed
 stopifnot(
-  "sightings row count changed at this commit" = nrow(d_si_raw) == 6107L,
-  "effort row count changed at this commit"    = nrow(d_ef_raw) == 1988L,
-  "species row count changed at this commit"   = nrow(d_sp_raw) == 34L)
-cat(glue("sightings {nrow(d_si_raw)}, effort rows {nrow(d_ef_raw)}, species codes {nrow(d_sp_raw)}"), "\n")
+  "sightings row count changed" = nrow(d_si_raw) == 4961L && ncol(d_si_raw) == 53L,
+  "segments row count changed"  = nrow(d_sg_raw) == 3165L && ncol(d_sg_raw) == 12L,
+  "species code count changed"  = nrow(d_sp_raw) == 34L)
+cat(glue("sightings {nrow(d_si_raw)}, segments {nrow(d_sg_raw)}, lab species codes {nrow(d_sp_raw)}"), "\n")
 ```
 
 ## Build Species Vocabulary
@@ -185,21 +186,28 @@ cat(glue("sightings {nrow(d_si_raw)}, effort rows {nrow(d_ef_raw)}, species code
 ```{r}
 #| label: species
 
-# the source list gives code, common name and suborder; the scientific name each
-# code resolves from is authored once in species_codes.csv (unidentified classes
-# name their rank's taxon; Oth names none and is excluded below)
+# species_codes.csv is the vocabulary: its `species_code` is the key the
+# taxon_override.csv rows and ingest_sio_cetacean-edna.qmd use (mixed case, as
+# the first delivery wrote it); `lab_code` is the code in the lab's list. The
+# 2026-10 sightings write the codes upper-case, so a sighting is matched to the
+# vocabulary case-insensitively (UBW, which the lab's list spells UWB, included).
+# The lab's list is authoritative for the common name.
 d_species_meta <- read_csv(file.path(dir_meta, "species_codes.csv"), col_types = cols(.default = "c"))
-d_species <- d_sp_raw |>
-  transmute(species_code = speciesCode, common_name = str_trim(speciesName),
-            suborder = taxonomy) |>
-  left_join(d_species_meta |> select(species_code, scientific_name), by = "species_code")
+d_species <- d_species_meta |>
+  select(species_code, lab_code, suborder, scientific_name, common_name_meta = common_name) |>
+  left_join(d_sp_raw, by = "lab_code") |>
+  mutate(common_name = coalesce(lab_common_name, common_name_meta)) |>
+  select(species_code, lab_code, common_name, suborder, scientific_name)
 stopifnot(
-  "species_code must be unique" = !anyDuplicated(d_species$species_code),
-  "every source code must be in species_codes.csv" =
-    setequal(d_species$species_code, d_species_meta$species_code))
+  "species_code must be unique, case-insensitively" = !anyDuplicated(toupper(d_species$species_code)),
+  "every code in the lab's list is in species_codes.csv" =
+    setequal(na.omit(d_species$lab_code), d_sp_raw$lab_code),
+  "species_codes.csv carries the lab's common names" =
+    with(d_species_meta, all(is.na(lab_code) | lab_common_name ==
+                               d_sp_raw$lab_common_name[match(lab_code, d_sp_raw$lab_code)])))
 dbWriteTable(con, "cetacean_species", d_species, overwrite = TRUE)
-cat(glue("cetacean_species: {nrow(d_species)} codes, ",
-         "{sum(is.na(d_species$scientific_name))} without a taxon (Oth)"), "\n")
+cat(glue("cetacean_species: {nrow(d_species)} codes ({sum(!is.na(d_species$lab_code))} in the lab's list), ",
+         "{sum(is.na(d_species$scientific_name))} without a taxon"), "\n")
 ```
 
 ## Build Effort Segment Table
@@ -207,64 +215,72 @@ cat(glue("cetacean_species: {nrow(d_species)} codes, ",
 ```{r}
 #| label: segment
 
-# local clock time -> UTC (Q04). EDI knb-lter-cce.262.2 records each 2005-2015
+# Excel stores a date-time as days since 1899-12-30; the workbooks hold local
+# Pacific clock time (Q04), read here as a clock reading (tagged UTC, not yet
+# converted)
+xl_clock <- function(x) as.POSIXct(round(as.numeric(x) * 86400), origin = "1899-12-30", tz = "UTC")
+# clock time -> UTC (Q04). EDI knb-lter-cce.262.2 records each 2005-2015
 # cruise's own GMT offset: most kept Pacific standard time (UTC-8) all year, even
 # in summer; a few used PDT (UTC-7). Those cruises take their recorded offset
-# (cruise_utc_offset.csv); the rest are read as America/Los_Angeles, daylight
-# saving applied.
+# (cruise_utc_offset.csv, keyed by this file's cruise label); the rest are read
+# as America/Los_Angeles, daylight saving applied.
 d_utc_offset <- read_csv(file.path(dir_meta, "cruise_utc_offset.csv"),
                          col_types = cols(utc_offset_h = "i", .default = "c"))
 stopifnot("an offset is 7 or 8 h" = all(d_utc_offset$utc_offset_h %in% 7:8),
           "one offset per label"  = !anyDuplicated(d_utc_offset$cruise_label))
-local_to_utc <- function(x, label) {
+local_to_utc <- function(clock, label) {
   off <- d_utc_offset$utc_offset_h[match(label, d_utc_offset$cruise_label)]
-  la  <- with_tz(suppressWarnings(mdy_hm(x, tz = "America/Los_Angeles")), "UTC")
-  fix <- suppressWarnings(mdy_hm(x, tz = "UTC")) + hours(off)
-  if_else(is.na(off), la, fix)
+  la  <- with_tz(force_tz(clock, "America/Los_Angeles"), "UTC")
+  if_else(is.na(off), la, clock + hours(off))
 }
 num <- function(x) suppressWarnings(as.numeric(x))
+fmt_clock <- function(x) format(x, "%Y-%m-%d %H:%M:%S")
 
-# the eight rows with no Segment.ID are per-cruise placeholders (length 0, no
-# position): a cruise listed with no on-effort survey. Kept as a list, not a
-# segment (Q07).
-d_no_effort <- d_ef_raw |> filter(is.na(Segment.ID)) |> distinct(Cruise)
-d_segment <- d_ef_raw |>
-  filter(!is.na(Segment.ID)) |>
+d_segment <- d_sg_raw |>
+  mutate(start_clock = xl_clock(StartDateTimeLocal), end_clock = xl_clock(EndDateTimeLocal)) |>
   transmute(
-    segment_id           = as.integer(num(Segment.ID)),
-    cruise_label_effort  = Cruise,
-    # CC2004-07 -> CC0407, the label the sightings carry
-    cruise_label         = str_replace(Cruise, "^CC\\d{2}(\\d{2})-(\\d{2})$", "CC\\1\\2"),
-    season               = str_trim(Season),
-    datetime_start_local = StartDateTimeLocal,
-    datetime_end_local   = EndDateTimeLocal,
-    datetime_start_utc   = local_to_utc(StartDateTimeLocal, cruise_label),
-    datetime_end_utc     = local_to_utc(EndDateTimeLocal, cruise_label),
+    segment_id           = as.integer(num(SegmentID)),
+    # the effort file's cruise label (CCYYYY-MM) is the canonical one: the
+    # sightings take it from their segment
+    cruise_label         = Cruise,
+    season               = str_to_lower(str_trim(Season)),
+    year                 = as.integer(Year),
+    datetime_start_local = fmt_clock(start_clock),
+    datetime_end_local   = fmt_clock(end_clock),
+    datetime_start_utc   = local_to_utc(start_clock, cruise_label),
+    datetime_end_utc     = local_to_utc(end_clock, cruise_label),
     latitude_start       = num(StartLat),  longitude_start = num(StartLon),
     latitude_end         = num(EndLat),    longitude_end   = num(EndLon),
     # the core carries one point per event: the segment midpoint
     latitude             = (latitude_start  + latitude_end)  / 2,
     longitude            = (longitude_start + longitude_end) / 2,
-    comment              = Comment.ST,
-    analyst_comment      = AG.Comment,
-    station_from         = From.Station,
-    station_to           = To.Station,
-    segment_length_km    = num(Segment.length..km.),
-    transect_number      = as.integer(num(Transect)),
-    transect_length_km   = num(Transect.Length),
-    line                 = num(ccLine),
-    line_length_km       = num(ccLineLength))
+    # ON = on effort and on transect; OFF = on effort, off transect
+    transect_flag        = str_to_upper(str_trim(TransectFlag)),
+    segment_length_km    = num(SegmentLength_km))
+
+# a segment whose start is more than two months from its cruise label's month:
+# segment 2886 is labelled CC2022-04 and dated 2022-11-05 (the first day of
+# CC2022-11). Kept, but given no cruise_key below (it would take April's).
+label_month <- ymd(paste0(str_sub(d_segment$cruise_label, 3, 9), "-01"))
+d_segment <- d_segment |>
+  mutate(misdated = abs(as.numeric(difftime(as.Date(datetime_start_local), label_month, units = "days"))) > 62)
 
 stopifnot(
-  "segment_id must be unique"            = !anyDuplicated(d_segment$segment_id),
-  "every segment needs a start time"     = !anyNA(d_segment$datetime_start_utc),
-  "every segment needs a midpoint"       = !anyNA(d_segment$latitude) && !anyNA(d_segment$longitude),
-  "cruise_label must parse to CCYYMM"    = all(str_detect(d_segment$cruise_label, "^CC\\d{4}$")))
+  "segment_id must be unique"                = !anyDuplicated(d_segment$segment_id),
+  "every segment needs a start and end time" = !anyNA(d_segment$datetime_start_utc) && !anyNA(d_segment$datetime_end_utc),
+  "no segment ends before it starts"         = all(d_segment$datetime_end_utc >= d_segment$datetime_start_utc),
+  "every segment needs a midpoint"           = !anyNA(d_segment$latitude) && !anyNA(d_segment$longitude),
+  "cruise_label must be CCYYYY-MM"           = all(str_detect(d_segment$cruise_label, "^CC\\d{4}-\\d{2}$")),
+  "Year is the start's year"                 = all(d_segment$year == year(ymd_hms(d_segment$datetime_start_local))),
+  "transect_flag is ON or OFF"               = all(d_segment$transect_flag %in% c("ON", "OFF")),
+  "every segment has a length"               = !anyNA(d_segment$segment_length_km),
+  "only segment 2886 is dated away from its label (CC2022-04 on 2022-11-05)" =
+    identical(d_segment$segment_id[d_segment$misdated], 2886L))
 dbWriteTable(con, "cetacean_segment", d_segment, overwrite = TRUE)
 cat(glue("cetacean_segment: {nrow(d_segment)} segments over ",
-         "{n_distinct(d_segment$cruise_label)} cruises; ",
-         "{nrow(d_no_effort)} cruises listed with no effort: ",
-         "{paste(d_no_effort$Cruise, collapse = ', ')}"), "\n")
+         "{n_distinct(d_segment$cruise_label)} cruises, {min(d_segment$year)}-{max(d_segment$year)}; ",
+         "{sum(d_segment$transect_flag == 'ON')} on transect, {sum(d_segment$transect_flag == 'OFF')} off; ",
+         "{round(sum(d_segment$segment_length_km))} km"), "\n")
 ```
 
 ## Build Sighting Table
@@ -273,93 +289,143 @@ cat(glue("cetacean_segment: {nrow(d_segment)} segments over ",
 #| label: sighting
 
 d_sighting <- d_si_raw |>
-  mutate(sighting_id = row_number()) |>
+  mutate(sighting_id = row_number(),
+         clock       = xl_clock(Date_Time_Local_),
+         segment_id  = as.integer(num(segID_ON_Effort_MNA))) |>
+  left_join(d_segment |> select(segment_id, segment_label = cruise_label,
+                                effort_status = transect_flag), by = "segment_id") |>
   transmute(
     sighting_id,
-    cruise_label          = Cruise,
-    season                = str_trim(Season),
-    datetime_local        = DateTimeLocal,
-    # '#REF!' on 36 CC0501 rows parses to NA (Q06)
-    datetime_start_utc    = local_to_utc(DateTimeLocal, cruise_label),
+    # the sighting's own Cruise disagrees with its segment's on four cruises
+    # (202504SH / 202507SR / 202511SR for CC2025-03 / -07 / -11, and CC2007-04
+    # for CC2007-03): the segment's label wins, the sighting's is kept
+    cruise_label          = coalesce(segment_label, Cruise),
+    cruise_label_source   = Cruise,
+    unique_id             = str_squish(UniqueID),
+    # the survey code the UniqueID starts with (CC0407, CC2204SH, CC202504SH)
+    # and its CCYYMM form, the key of cruise_label_crosswalk.csv
+    survey_code           = str_extract(unique_id, "^[^_ ]+"),
+    survey_code6          = paste0("CC", str_sub(str_extract(survey_code, "\\d+"), -4)),
+    sighting_no           = SightingNo,
+    season                = str_to_lower(str_trim(Season)),
+    datetime_local        = fmt_clock(clock),
+    datetime_start_utc    = local_to_utc(clock, cruise_label),
+    date_local_check      = as.Date(xl_clock(Date_Local_)),
     latitude              = num(DecLat),
     longitude             = num(DecLong),
-    segment_id            = as.integer(num(`segID..NaN..Off.effort.and.or.off.transect..AG.`)),
+    segment_id,
     observer_port         = PortObs,
     observer_starboard    = StbdObs,
+    observer_initial      = InitObserver,
+    sighting_quality      = Quality,
+    visibility            = num(Visibility),
+    precipitation         = Precipitation,
+    cloud_pct             = num(Cloud_),
+    glare_bearing         = GlareBearing,
+    glare_bearing_1       = GlareBearing_1,
+    glare_quality         = GlareQuality_SL_M_SE_,
+    wind_dir_true         = num(WindDir_T_),
+    wind_speed            = num(WindSpd_T_),
+    beaufort              = num(Bft),
+    swell_ft              = num(Swell_ft_),
+    cue                   = Cue,
+    ship_heading_true     = num(ShipHeadingTru),
+    sighting_bearing_true = num(SightingBearingTru),
+    bino_reticle          = num(BinoReticle),
+    distance_m            = num(Distance_m_),
+    obs_height_m          = num(ObsHeight_m_),
+    port_or_starboard     = PortOrStarbord,
+    angle_formula         = num(AngleFormula),
+    dist_calc_m           = num(dist_calc_m_),
+    perp_dist_m           = num(perp_dist_m),
     group_size_best       = num(Best),
     group_size_min        = num(Min),
     group_size_max        = num(Max),
     calf_raw              = Calf,
-    # plain integers only; ND / nd / 0NA / UD / O / 1? / Juv stay NULL (Q09)
+    # plain integers only ("001" included); ND / nd / 0NA / UD / O / DN / N /
+    # 1? / Juv stay NULL (Q09)
     calf_count            = if_else(str_detect(str_trim(Calf), "^\\d+$"),
-                                    as.integer(str_trim(Calf)), NA_integer_),
-    species_code          = str_trim(Species1),
-    # only ever "100", on CC2111: not a second species (Q05)
+                                    suppressWarnings(as.integer(str_trim(Calf))), NA_integer_),
+    species_code_source   = str_trim(Species1),
+    # case-insensitive: the vocabulary's DC is the source's DC, its Ubw the source's UBW
+    species_code          = d_species$species_code[match(toupper(species_code_source),
+                                                         toupper(d_species$species_code))],
     species2_raw          = Species2,
-    effort_flag_original  = Original.Effort.Flag..ON.OFF.,
-    off_effort_code       = OffEffortCode,
-    transect_flag_original = OriginalTransect.ON.OFF.,
-    off_transect_code     = OffTransectCode,
-    effort_status         = str_to_upper(str_trim(Adjusted.both.On.Effort.and.On.Transect)),
+    sp1_percent           = num(sp1Percent),
+    sp2_percent           = num(sp2Percent),
+    effort_flag_original  = OriginalEffortFlag_ON_OFF_,
+    transect_flag_original = OriginalTransect_ON_OFF_,
+    # the segment's on/off-transect flag (every sighting here is on effort)
+    effort_status,
     behavior_primary      = PrimaryBehaviour,
     behavior_other1       = OtherBehaviour1,
-    behavior_other2       = OtherBehaviour2,
     comments              = Comments,
-    speed_over_ground_kn  = num(SOG..knots.),
-    analyst_comment       = AGComments)
-
-# one position is on land (Sonora, 32.31 N -112.70 E; the app drops the row):
-# keep the sighting, drop the position (Q11)
-on_land <- with(d_sighting, !is.na(longitude) & longitude > -114)
-d_sighting <- d_sighting |>
-  mutate(latitude  = if_else(on_land, NA_real_, latitude),
-         longitude = if_else(on_land, NA_real_, longitude))
-
-n_ref <- sum(d_si_raw$DateTimeLocal == "#REF!", na.rm = TRUE)
+    time_diff_min         = num(Time_Diff_minutes))
+n_seg_orphan <- sum(!d_sighting$segment_id %in% d_segment$segment_id)
+d_lbl_src <- d_sighting |> distinct(cruise_label_source, cruise_label)
+d_label   <- d_sighting |> distinct(cruise_label, survey_code6)
+d_in_seg  <- d_sighting |>
+  inner_join(d_segment |> select(segment_id, datetime_start_utc_seg = datetime_start_utc,
+                                 datetime_end_utc_seg = datetime_end_utc), by = "segment_id")
 stopifnot(
-  "only the '#REF!' rows may lack a UTC time (Q06)" =
-    sum(is.na(d_sighting$datetime_start_utc)) == n_ref,
-  "exactly one position is on land (Q11)" = sum(on_land) == 1L,
-  "effort_status is ON, OFF or NULL" =
-    all(d_sighting$effort_status %in% c("ON", "OFF", NA)),
-  "every species_code is in the vocabulary" =
-    all(d_sighting$species_code %in% d_species$species_code),
-  "Species2 is never a species code (Q05)" =
-    all(d_sighting$species2_raw %in% c("100", NA)))
+  "every sighting has a time"                       = !anyNA(d_sighting$datetime_start_utc),
+  "Date_Local_ is the day of Date_Time_Local_ (blank on 7 CC0911 / CC1008 rows)" =
+    all(is.na(d_sighting$date_local_check) | as.Date(ymd_hms(d_sighting$datetime_local)) == d_sighting$date_local_check) &&
+    sum(is.na(d_sighting$date_local_check)) == 7L,
+  "every sighting has a position"                   = !anyNA(d_sighting$latitude) && !anyNA(d_sighting$longitude),
+  "every position is off California (west of -117)" = all(d_sighting$longitude < -117),
+  "every sighting carries a segment id (on effort only)" = !anyNA(d_sighting$segment_id),
+  "only the 2 sightings on segment 419 (CC2006-07) lack their segment" =
+    n_seg_orphan == 2L && all(d_sighting$segment_id[!d_sighting$segment_id %in% d_segment$segment_id] == 419L),
+  "a sighting falls inside its segment's time span (+- 1 min)" =
+    all(d_in_seg$datetime_start_utc >= d_in_seg$datetime_start_utc_seg - 60 &
+        d_in_seg$datetime_start_utc <= d_in_seg$datetime_end_utc_seg + 60),
+  "each source cruise label maps to one effort label" = !anyDuplicated(d_lbl_src$cruise_label_source),
+  "each effort label has one survey code"           = !anyDuplicated(d_label$cruise_label),
+  "every effort label has sightings"                = all(d_segment$cruise_label %in% d_label$cruise_label),
+  "every species code is in the vocabulary"         = !anyNA(d_sighting$species_code),
+  "Species2 is always blank"                        = all(is.na(d_sighting$species2_raw)),
+  "every sighting has a Best group size"            = !anyNA(d_sighting$group_size_best),
+  "effort_status is ON or OFF wherever the segment exists" =
+    all(d_sighting$effort_status %in% c("ON", "OFF") | !d_sighting$segment_id %in% d_segment$segment_id))
+d_sighting <- d_sighting |> select(-date_local_check)
 dbWriteTable(con, "cetacean_sighting", d_sighting, overwrite = TRUE)
 
-# every segment_id a sighting carries must exist in the effort table
-n_seg_orphan <- dbGetQuery(con, "
-  SELECT COUNT(*) FROM cetacean_sighting s
-  LEFT JOIN cetacean_segment g USING (segment_id)
-  WHERE s.segment_id IS NOT NULL AND g.segment_id IS NULL")[[1]]
-cat(glue("cetacean_sighting: {nrow(d_sighting)} rows; {sum(!is.na(d_sighting$segment_id))} on a segment ",
-         "({n_seg_orphan} segment_id(s) not in the effort file); ",
-         "{n_ref} '#REF!' times; {sum(!is.na(d_sighting$calf_count))} with a calf count"), "\n")
+n_dup_uid <- sum(duplicated(d_sighting$unique_id) | duplicated(d_sighting$unique_id, fromLast = TRUE))
+cat(glue("cetacean_sighting: {nrow(d_sighting)} rows over {n_distinct(d_sighting$cruise_label)} cruises, ",
+         "{min(year(d_sighting$datetime_start_utc))}-{max(year(d_sighting$datetime_start_utc))}; ",
+         "{n_seg_orphan} on a segment_id not in the segments file; ",
+         "{n_dup_uid} rows share a UniqueID; {sum(!is.na(d_sighting$calf_count))} with a calf count; ",
+         "{sum(!is.na(d_sighting$perp_dist_m))} with a perpendicular distance"), "\n")
+d_lbl_src |> filter(cruise_label_source != cruise_label) |>
+  datatable(caption = "Sighting cruise labels the segments spell differently", rownames = FALSE)
 ```
 
-One sighting references a segment id (236) that is absent from the effort file
-(99.96% resolve). Those sightings keep their `segment_id` in the source table
-but get no parent `sample`, so the core never points at a sample that does not
-exist.
+Two sightings (CC2006-07) reference segment 419, which the segments file lacks.
+They keep their `segment_id` in the source table but get no parent `sample`, so
+the core never points at a sample that does not exist.
 
 ## Resolve cruise_key + Spatial
 
-The sightings carry a **survey label** (`CC0407`), not a cruise, and no ship. As
-for `farallon_bird-mammal`, `match_cruise_by_track()` matches each sighting to
-the nearest CalCOFI station occupied within a day (the `swfsc_ichthyo` sample
-track, whose `cruise_key`s are exactly the `cruise` reference's) and takes the
-**majority vote per label**. The effort segments (the ship's own track) vote the
-same way, and the two votes must agree wherever both exist; each fills the
-other's gaps: CC0501's sightings have no time (Q06) but its effort does, and the
-2022 surveys have sightings but no effort (Q07).
+The workbooks carry a **survey label** (`CC2004-07`), not a cruise, and no
+ship. As for `farallon_bird-mammal`, `match_cruise_by_track()` matches each
+sighting to the nearest CalCOFI station occupied within a day (the
+`swfsc_ichthyo` sample track, whose `cruise_key`s are exactly the `cruise`
+reference's) and takes the **majority vote per label**. The effort segments (the
+ship's own track) vote the same way, and the two votes must agree wherever both
+exist.
 
-Nine surveys ran on cruises `swfsc_ichthyo` has no tows for (Sally Ride,
-Oceanus and Bold Horizon cruises, 2016-2022). Their cruise comes from
-`cruise_label_crosswalk.csv`: the one cruise the release's CTD casts and bottles
-place on the same dates (Q14), checked here against the ship reference. The
-chunk below asserts that the crosswalk is used only where the ichthyo track has
-no occupation at all during a survey's dates, never to overrule a track match.
+The surveys on cruises `swfsc_ichthyo` has no tows for (Sally Ride, Oceanus,
+Bold Horizon, and every cruise after 2023-01) take their cruise from
+`cruise_label_crosswalk.csv`, keyed by the survey code (`CC1611`): the one
+cruise the release's CTD casts (and bottles) place on the same dates (Q14),
+checked here against the ship reference. That file is shared with
+`ingest_sio_cetacean-edna.qmd`, which re-checks that each key is its label's
+year-month plus the ship's NODC code, so two surveys whose designated cruise
+month differs from the survey code's are left unresolved (CC2023-03 on
+2023-04-3322 and CC2024-07 on 2024-08-33P4, by the CTD casts). The chunk below
+asserts that the crosswalk is used only where the ichthyo track has no
+occupation at all during a survey's dates, never to overrule a track match.
 
 ```{r}
 #| label: spatial-cruise
@@ -377,35 +443,40 @@ cruise_match <- match_cruise_by_track(
   datetime_col = "datetime_start_utc", lon_col = "longitude", lat_col = "latitude",
   ref_datetime_col = "datetime", group_col = "cruise_label", window_days = 1)
 
-# the effort segments vote on the same labels from the ship's own positions
+# the effort segments vote on the same labels from the ship's own positions (the
+# misdated segment 2886 is one vote of 25 on CC2022-04; no ichthyo station was
+# occupied within a day of it, so it casts none)
 seg_match <- match_cruise_by_track(
   con, "cetacean_segment", "cruise_track",
   datetime_col = "datetime_start_utc", lon_col = "longitude", lat_col = "latitude",
   ref_datetime_col = "datetime", group_col = "cruise_label", window_days = 1)
 
 # surveys on cruises with no ichthyo tows: the cruise the release's CTD casts and
-# bottles place on the same dates (Q14); each key must be the label's year-month
-# plus its ship's NODC code, so a typo in the crosswalk cannot slip through
+# bottles place on the same dates (Q14); each key must be the survey code's
+# year-month plus its ship's NODC code, so a typo in the crosswalk cannot slip
+# through (the same rule ingest_sio_cetacean-edna.qmd applies to this file)
 d_ship  <- dbGetQuery(con, glue(
   "SELECT ship_key, ship_nodc FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','ship.parquet')}')"))
 d_xwalk <- read_csv(file.path(dir_meta, "cruise_label_crosswalk.csv"), col_types = cols(.default = "c")) |>
+  rename(survey_code6 = cruise_label) |>
   left_join(d_ship, by = "ship_key") |>
-  mutate(minted = paste0("20", substr(cruise_label, 3, 4), "-", substr(cruise_label, 5, 6), "-", ship_nodc))
+  mutate(minted = paste0("20", substr(survey_code6, 3, 4), "-", substr(survey_code6, 5, 6), "-", ship_nodc))
 stopifnot(
   "every crosswalk ship is in the ship reference" = !anyNA(d_xwalk$ship_nodc),
-  "each crosswalk cruise_key is the label's year-month + its ship's NODC code" =
+  "each crosswalk cruise_key is the survey code's year-month + its ship's NODC code" =
     all(d_xwalk$minted == d_xwalk$cruise_key))
 
 d_labels <- dbGetQuery(con, "
   SELECT cruise_label FROM cetacean_sighting UNION SELECT cruise_label FROM cetacean_segment")
 grp <- d_labels |>
+  left_join(d_label, by = "cruise_label") |>
   left_join(cruise_match$groups |> select(cruise_label, sighting_key = cruise_key,
                                           sighting_votes = votes, sighting_share = share),
             by = "cruise_label") |>
   left_join(seg_match$groups |> select(cruise_label, segment_key = cruise_key,
                                        segment_votes = votes, segment_share = share),
             by = "cruise_label") |>
-  left_join(d_xwalk |> select(cruise_label, crosswalk_key = cruise_key), by = "cruise_label") |>
+  left_join(d_xwalk |> select(survey_code6, crosswalk_key = cruise_key), by = "survey_code6") |>
   mutate(
     cruise_key = coalesce(sighting_key, segment_key, crosswalk_key),
     cruise_key_method = case_when(
@@ -419,13 +490,13 @@ stopifnot(
   "the crosswalk only fills labels the track cannot resolve" =
     with(grp, all(is.na(crosswalk_key) | (is.na(sighting_key) & is.na(segment_key)))))
 
-# each fills the other's gaps (CC0501 sightings from its effort; 2022 effort-less
-# labels from their sightings; the Q14 surveys from the crosswalk)
+# each fills the other's gaps; the misdated segment keeps a NULL cruise_key
 dbWriteTable(con, "_label_ck", grp |> select(cruise_label, cruise_key), overwrite = TRUE)
 for (tbl in c("cetacean_sighting", "cetacean_segment"))
   dbExecute(con, glue("
     UPDATE {tbl} t SET cruise_key = l.cruise_key FROM _label_ck l
     WHERE t.cruise_key IS NULL AND l.cruise_key IS NOT NULL AND l.cruise_label = t.cruise_label"))
+dbExecute(con, "UPDATE cetacean_segment SET cruise_key = NULL WHERE misdated")
 dbExecute(con, "DROP TABLE _label_ck")
 
 # spatial last: nothing above has to UPDATE a table that carries geometry
@@ -466,7 +537,7 @@ d_unres_track <- dbGetQuery(con, "
            MIN(datetime_start_utc) :: DATE AS dmin,
            MAX(datetime_start_utc) :: DATE AS dmax
     FROM (SELECT cruise_label, datetime_start_utc FROM cetacean_sighting
-          UNION ALL SELECT cruise_label, datetime_start_utc FROM cetacean_segment)
+          UNION ALL SELECT cruise_label, datetime_start_utc FROM cetacean_segment WHERE NOT misdated)
     GROUP BY 1)
   SELECT l.cruise_label, COUNT(*) AS n_track
   FROM lab l JOIN cruise_track t ON t.datetime :: DATE BETWEEN l.dmin - 1 AND l.dmax + 1
@@ -477,6 +548,8 @@ stopifnot(
   "a crosswalk or unresolved label has no ichthyo occupation during its dates (Q14)" =
     nrow(d_unres_track) == 0,
   "every cruise label must resolve to a distinct cruise_key" = length(dupe) == 0,
+  "only CC2023-03 and CC2024-07 are unresolved (their cruise month is not the survey code's)" =
+    setequal(unresolved_labels, c("CC2023-03", "CC2024-07")),
   "a track-resolved cruise_key exists in the track (no dangling FK)" =
     dbGetQuery(con, glue("
       SELECT COUNT(*) FROM cetacean_sighting WHERE cruise_key IS NOT NULL
@@ -484,7 +557,7 @@ stopifnot(
         AND cruise_key NOT IN (SELECT cruise_key FROM cruise_track)"))[[1]] == 0)
 cat(glue(
   "{sum(!is.na(grp$cruise_key))}/{nrow(grp)} labels resolved ({length(xwalk_labels)} by the crosswalk); unresolved: ",
-  "{paste(grp$cruise_label[is.na(grp$cruise_key)], collapse = ', ')}; ",
+  "{paste(unresolved_labels, collapse = ', ')}; ",
   "{n_seg_null} segment(s) without a cruise_key"), "\n")
 ```
 
@@ -539,20 +612,25 @@ What the source becomes, and what it does not:
 
 | source | core | transform |
 |---|---|---|
-| `cetacean_segment` row | `sample` (`transect`) | key `sio_cetacean-sightings:transect:<segment_id>`; midpoint position; start time |
-| `cetacean_segment.segment_length_km` | `sample_measurement` `transect_length` | km |
-| `cetacean_sighting` row | `sample` (`sighting`) | every sighting; parent = its transect when `segment_id` resolves, else none |
-| `cetacean_sighting.group_size_best` | `obs` `group_size` | only where Best > 0: a Best of 0 or blank (10 sightings) keeps its `sample` row and publishes no obs or attribute (Q13); `measurement_qual` NULL |
-| `effort_status` | `obs_attribute` `effort_status` | `bin_label` ON / OFF, `bin_value` 1 / 0; none where the flag is blank |
+| `cetacean_segment` row | `sample` (`transect`) | every on-effort segment, on or off transect; key `sio_cetacean-sightings:transect:<segment_id>`; midpoint position; start time |
+| `cetacean_segment.segment_length_km` | `sample_measurement` `transect_length` | km; on-transect segments only (`transect_flag` ON), as the type is defined |
+| `cetacean_sighting` row | `sample` (`sighting`) | every sighting; parent = its segment when `segment_id` resolves, else none |
+| `cetacean_sighting.group_size_best` | `obs` `group_size` | only where Best > 0: a Best of 0 keeps its `sample` row and publishes no obs or attribute (Q13); `measurement_qual` NULL |
+| `effort_status` (the segment's `transect_flag`) | `obs_attribute` `effort_status` | `bin_label` ON / OFF, `bin_value` 1 / 0; none where the segment is missing |
 | `group_size_min` / `_max` | `obs_attribute` `group_size_min` / `_max` | value in `count` |
 | `calf_count` | `obs_attribute` `calf_count`, `life_stage = calf` | plain integers only (Q09) |
-| `behavior_primary` / `_other1` / `_other2` | `obs_attribute` `behavior` | **held** (Q03): no rows until the lab supplies the codebook (`publish_behavior <- FALSE`); when enabled, one row per code token, `bin_label` = the code, `bin_value` = 1 / 2 / 3 for primary / other1 / other2 |
-| `species_code` | `obs.taxon_key` via `dataset_taxon` | `Oth` keeps a NULL taxon |
+| `behavior_primary` / `_other1` | `obs_attribute` `behavior` | **held** (Q03): no rows until the lab supplies the codebook (`publish_behavior <- FALSE`); when enabled, one row per code token, `bin_label` = the code, `bin_value` = 1 / 2 for primary / other1 |
+| `species_code` | `obs.taxon_key` via `dataset_taxon` | `Oth`, `EL` and `UNID_OBJCT` keep a NULL taxon |
 
-**Not published** (kept in the archived source): the behaviour codes (Q03), observer initials, original
-effort/transect flags and their off-codes, comments, speed over ground,
-`species2_raw`, `calf_raw`, segment start/end coordinates and times, from/to
-stations, transect and line lengths.
+**Not published** (they stay in the source table and the lab's files): the
+behaviour codes (Q03), the sighting conditions (Beaufort, swell, visibility,
+precipitation, cloud, glare, wind), observer initials and positions, cue, the
+reticle / bearing / distance measurements and the computed perpendicular
+distance, the original effort/transect flags, the mixed-group percentages,
+comments, `time_diff_min`, `calf_raw`, and the segment start/end coordinates and
+times. Perpendicular distance, Beaufort and visibility are what a
+line-transect density estimate needs; they are candidates for `obs_attribute`
+types once the lab has signed off on publishing this product.
 
 ### Taxon vocabulary
 
@@ -566,13 +644,15 @@ mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
 tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
 obs_codes      <- unique(d_sighting$species_code)
-# not a taxon: "Other"; its sightings keep a NULL taxon_key
+# not a taxon: "Other", an unidentified object, and EL (not in the lab's list,
+# meaning unknown); their sightings keep a NULL taxon_key
 excluded_codes <- intersect(obs_codes, d_species$species_code[is.na(d_species$scientific_name)])
-stopifnot("Oth is the only code without a taxon" = identical(excluded_codes, "Oth"))
+stopifnot("Oth, EL and UNID_OBJCT are the only codes without a taxon" =
+            setequal(excluded_codes, c("Oth", "EL", "UNID_OBJCT")))
 
 # the declaration: code, the name the code is resolved from, and the common name.
 # The source supplied no ids, so none ride along as ds_source_json.
-# only the codes the sightings use: an unused code (Be) would be resolved for nothing
+# only the codes the sightings use: an unused code (Be, Beba, CU) would be resolved for nothing
 d_vocab <- d_species |>
   filter(!is.na(scientific_name), species_code %in% obs_codes) |>
   transmute(ds_taxa_code = species_code, ds_scientific_name = scientific_name,
@@ -595,11 +675,13 @@ dt <- dbGetQuery(con, "
 key_of <- function(code) dt$taxon_key[dt$ds_taxa_code == code]
 stopifnot(
   "every staged code has a taxon_key"   = !anyNA(dt$taxon_key),
-  "Beba and Bbo are one taxon"          = identical(key_of("Beba"), key_of("Bbo")),
+  "Bbo keys Berardius bairdii"          = identical(dt$scientific_name[dt$ds_taxa_code == "Bbo"], "Berardius bairdii"),
+  "Mesoplodon spp keys the genus"       = identical(dt$scientific_name[dt$ds_taxa_code == "Mesoplodon spp"], "Mesoplodon") &&
+                                          identical(dt$rank[dt$ds_taxa_code == "Mesoplodon spp"], "Genus"),
   "Dc keys Delphinus capensis (Q10)"    = identical(key_of("Dc"), "worms:383816"),
   "Dc and Dd are distinct taxa (Q10)"   = !identical(key_of("Dc"), key_of("Dd")),
   "Lo keys Sagmatias obliquidens (Q10)" = identical(key_of("Lo"), "worms:1571909"))
-cat(glue("vocabulary: {n_staged} codes staged, {length(excluded_codes)} excluded (Oth); ",
+cat(glue("vocabulary: {n_staged} codes staged, {length(excluded_codes)} excluded (Oth, EL, UNID_OBJCT); ",
          "taxon {n_taxon}, dataset_taxon {n_ds_taxon}, taxon_group {n_tx_group}"), "\n")
 dt |> datatable(caption = "species_code -> taxon", rownames = FALSE, filter = "top")
 ```
@@ -612,7 +694,7 @@ dt |> datatable(caption = "species_code -> taxon", rownames = FALSE, filter = "t
 tr_key <- function(col) ns_key(ds_key, "transect", col)
 si_key <- function(col) ns_key(ds_key, "sighting", col)
 
-# transects: one sample per effort segment
+# transects: one sample per on-effort segment, on or off transect
 append_sample(con, sample_arm_self(ds_key, "cetacean_segment", "segment_id", "transect"))
 
 # sightings: one sample per sighting, the child of its transect when on one. The
@@ -630,15 +712,18 @@ append_sample(con, glue("
   FROM cetacean_sighting s
   LEFT JOIN cetacean_segment g USING (segment_id)"))
 
-# effort: segment length on the transect sample
+# effort: segment length on the transect sample, for the on-transect segments
+# only (`transect_length` is the length of an on-effort, ON-transect segment);
+# an off-transect segment keeps its sample row and its length in the source
 append_sample_measurement(con, glue("
   SELECT {tr_key('segment_id')}, '{ds_key}', 'transect_length',
          segment_length_km, NULL::VARCHAR
-  FROM cetacean_segment WHERE segment_length_km IS NOT NULL"))
+  FROM cetacean_segment WHERE segment_length_km IS NOT NULL AND transect_flag = 'ON'"))
 
 # obs -- the headline: one row per COUNTED sighting, the group size (best
 # estimate). One species per sighting (Q05), so the sighting IS the occurrence
-# grain. A Best of 0 or blank is animals seen but not counted (a blow, a splash):
+# grain (a mixed group is split by the lab into one row per species, a/b). A
+# Best of 0 is animals seen but not counted (a blow, a splash):
 # a row here would assert a measured group of 0, which reads as an absence, so
 # those sightings keep their sample row and publish no obs (Q13; Ben, 2026-10-01).
 # measurement_qual stays NULL: the on/off-effort flag is a sampling regime, not a
@@ -668,8 +753,8 @@ attr_sel <- function(type, life_stage, bin_value, bin_label, count, where) glue(
   LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
                             AND dt.ds_taxa_code = s.species_code
   WHERE {counted} AND {where}")
-# the analyst-adjusted on-effort-and-on-transect flag: line-transect density
-# uses ON only; OFF is a different sampling regime, not bad data
+# the segment's on-transect flag (every sighting is on effort): line-transect
+# density uses ON only; OFF is a different sampling regime, not bad data
 append_obs_attribute(con, attr_sel("effort_status", "NULL::VARCHAR",
                                    "CAST(CASE s.effort_status WHEN 'ON' THEN 1 ELSE 0 END AS DOUBLE)",
                                    "s.effort_status", "NULL::INTEGER", "s.effort_status IS NOT NULL"))
@@ -680,8 +765,8 @@ append_obs_attribute(con, attr_sel("group_size_max", "NULL::VARCHAR", "NULL::DOU
 append_obs_attribute(con, attr_sel("calf_count", "'calf'", "NULL::DOUBLE", "NULL::VARCHAR",
                                    "s.calf_count", "s.calf_count IS NOT NULL"))
 
-# behaviour: HELD (Q03, Ben 2026-10-04). The three columns hold bare numeric codes
-# ("1", "1, 34", "2 8") with no codebook, in the same `behavior` type that
+# behaviour: HELD (Q03, Ben 2026-10-04). The two columns hold bare numeric codes
+# ("1", "1, 34", "2, 5, 8") with no codebook, in the same `behavior` type that
 # farallon_bird-mammal fills with words, so no rows are emitted until the lab
 # supplies the codebook. Flip `publish_behavior` then, map code -> label here (or
 # emit under a dataset-specific type), and add the behavior assertions back.
@@ -689,10 +774,10 @@ append_obs_attribute(con, attr_sel("calf_count", "'calf'", "NULL::DOUBLE", "NULL
 publish_behavior <- FALSE
 if (publish_behavior) {
   d_behavior <- d_sighting |>
-    select(sighting_id, behavior_primary, behavior_other1, behavior_other2) |>
+    select(sighting_id, behavior_primary, behavior_other1) |>
     pivot_longer(-sighting_id, names_to = "slot", values_to = "code") |>
     filter(!is.na(code)) |>
-    mutate(slot = match(slot, c("behavior_primary", "behavior_other1", "behavior_other2")),
+    mutate(slot = match(slot, c("behavior_primary", "behavior_other1")),
            # split lists of numeric codes; free text ("Slow Travel") stays whole
            code = map(code, \(x) if (str_detect(x, "^[0-9?,/&\\s]+$"))
                                      str_split_1(x, "[,/&\\s]+") else x)) |>
@@ -728,9 +813,8 @@ cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", coll
 stopifnot(
   "one transect sample per segment"  = core$sample_transect == nrow(d_segment),
   "one sighting sample per sighting, counted or not" = core$sample_sighting == nrow(d_sighting),
-  "the uncounted sightings are the 8 zeros and 2 blanks of Q13" =
-    n_uncounted == 10L && sum(d_sighting$group_size_best %in% 0) == 8L &&
-    sum(is.na(d_sighting$group_size_best)) == 2L,
+  "the uncounted sightings are the 2 zeros (Q13: MN on 202504SH, UD on 202511SR)" =
+    n_uncounted == 2L && sum(d_sighting$group_size_best %in% 0) == 2L,
   "one obs per counted sighting"     = core$obs == nrow(d_counted),
   "no obs has a group size of 0 or NULL (Q13)" =
     q1("SELECT COUNT(*) FROM obs WHERE measurement_value IS NULL OR measurement_value <= 0") == 0,
@@ -752,9 +836,10 @@ stopifnot(
     publish_behavior || q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'behavior'") == 0,
   "every obs_attribute row sits on a sighting that has an obs" =
     q1("SELECT COUNT(*) FROM obs_attribute a WHERE a.sample_key NOT IN (SELECT sample_key FROM obs)") == 0,
-  "transect_length total = source total" =
+  "transect_length rows and total = the on-transect segments'" =
+    core$sample_measurement == sum(d_segment$transect_flag == "ON") &&
     isTRUE(all.equal(q1("SELECT SUM(measurement_value) FROM sample_measurement"),
-                     sum(d_segment$segment_length_km, na.rm = TRUE))),
+                     sum(d_segment$segment_length_km[d_segment$transect_flag == "ON"]))),
   "every obs.sample_key resolves in sample" =
     q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key) WHERE s.sample_key IS NULL") == 0,
   "every obs_attribute.sample_key resolves in sample" =
@@ -765,8 +850,8 @@ stopifnot(
   "every obs.taxon_key RESOLVES in taxon" =
     q1("SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
        WHERE o.taxon_key IS NOT NULL AND t.taxon_key IS NULL") == 0,
-  "a NULL obs.taxon_key is an Oth sighting and nothing else" =
-    q1("SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL") == sum(d_counted$species_code == "Oth"),
+  "a NULL obs.taxon_key is an Oth, EL or UNID_OBJCT sighting and nothing else" =
+    q1("SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL") == sum(d_counted$species_code %in% excluded_codes),
   "every obs / obs_attribute / sample_measurement type is registered" =
     q1("SELECT COUNT(*) FROM (SELECT measurement_type FROM obs UNION
                              SELECT measurement_type FROM obs_attribute UNION
@@ -788,23 +873,26 @@ lbl_sql <- paste0("'", c(unresolved_labels, "_"), "'", collapse = ", ")
 nullable <- tribble(
   ~table,   ~column,             ~n,                                              ~reason,
   "sample", "cruise_key",        q1("SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL"),
-    glue("labels resolved by neither the ichthyo track nor the crosswalk ({paste(unresolved_labels, collapse = ', ')}), and their segments"),
-  "sample", "parent_sample_key", sum(is.na(d_sighting$segment_id)) + n_seg_orphan + nrow(d_segment),
-    "transects are roots; off-effort sightings, and those whose segment_id is not in the effort file, have no parent",
+    glue("labels resolved by neither the ichthyo track nor the crosswalk ({paste(unresolved_labels, collapse = ', ')}), their segments, and the misdated segment 2886"),
+  "sample", "parent_sample_key", n_seg_orphan + nrow(d_segment),
+    "transects are roots; the sightings whose segment_id is not in the segments file (419) have no parent",
   "sample", "site_key",          nrow(d_segment) + nrow(d_sighting),
     "underway survey: no event sits on a CalCOFI station",
   "sample", "grid_key",          q1("SELECT COUNT(*) FROM sample WHERE grid_key IS NULL"),
-    "positions outside the CalCOFI grid (e.g. the CC1511 transit north of 39 N) and the one nulled position (Q11)",
-  "sample", "datetime",          n_ref,
-    "'#REF!' sighting times on CC0501 (Q06)",
-  "obs",    "taxon_key",         sum(d_counted$species_code == "Oth"),
-    "'Oth' (Other) is not a taxon")
+    "positions outside the CalCOFI grid (e.g. the CC2015-10 transit north of 39 N)",
+  "sample", "datetime",          0L,
+    "none: every sighting and segment has a time",
+  "obs",    "taxon_key",         sum(d_counted$species_code %in% excluded_codes),
+    "'Oth' (Other) and 'UNID_OBJCT' are not taxa; 'EL' is not in the lab's list (meaning unknown)")
 # the counts above that are measured rather than derived from the source must
 # still be explained: every NULL cruise_key belongs to an unresolved label
 stopifnot(
   "every NULL sighting cruise_key belongs to an unresolved label" =
     q1(glue("SELECT COUNT(*) FROM cetacean_sighting WHERE cruise_key IS NULL
             AND cruise_label NOT IN ({lbl_sql})")) == 0,
+  "every NULL segment cruise_key belongs to an unresolved label or is misdated" =
+    q1(glue("SELECT COUNT(*) FROM cetacean_segment WHERE cruise_key IS NULL
+            AND cruise_label NOT IN ({lbl_sql}) AND NOT misdated")) == 0,
   "the declared NULL counts match the tables" =
     q1("SELECT COUNT(*) FROM sample WHERE parent_sample_key IS NULL") ==
       nullable$n[nullable$column == "parent_sample_key"] &&
@@ -886,11 +974,13 @@ build_metadata_json(
   workflow_url = cc$workflow_url, tables_owned = tables_owned,
   sources = src_stamp)
 
+# gs://calcofi-db is world-readable: a held dataset (in_release: false, until the
+# lab signs off) is never mirrored there
 if (publish_to_gcs) {
   sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet,
               gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
 } else {
-  cat("CALCOFI_SKIP_GCS set -- parquet kept local, NOT synced to gs://calcofi-db\n")
+  cat("held (in_release: false) or CALCOFI_SKIP_GCS set -- parquet kept local, NOT synced to gs://calcofi-db\n")
 }
 ```
 

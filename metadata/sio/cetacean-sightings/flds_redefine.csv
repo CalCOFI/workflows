@@ -1,47 +1,68 @@
 tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Segment.ID,segment_id,DOUBLE,INTEGER,Effort segment identifier; primary key. Sightings reference it.,,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Cruise,cruise_label_effort,VARCHAR,VARCHAR,"Cruise label as the effort file writes it (CCYYYY-MM, e.g. CC2004-07).",,cruise_label (CCYYMM) is derived from it to match the sightings
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Season,season,VARCHAR,VARCHAR,"Season of the cruise (winter, spring, summer, fall).",,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,StartDateTimeLocal,datetime_start_local,VARCHAR,VARCHAR,"Segment start date-time as recorded, local Pacific clock time (M/D/YYYY H:MM).",,converted to datetime_start_utc (Q04)
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,EndDateTimeLocal,datetime_end_local,VARCHAR,VARCHAR,"Segment end date-time as recorded, local Pacific clock time (M/D/YYYY H:MM).",,converted to datetime_end_utc (Q04)
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,StartLat,latitude_start,DOUBLE,DOUBLE,"Latitude of the segment start, WGS84.",decimal_degrees,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,StartLon,longitude_start,DOUBLE,DOUBLE,"Longitude of the segment start, WGS84.",decimal_degrees,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,EndLat,latitude_end,DOUBLE,DOUBLE,"Latitude of the segment end, WGS84.",decimal_degrees,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,EndLon,longitude_end,DOUBLE,DOUBLE,"Longitude of the segment end, WGS84.",decimal_degrees,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Comment.ST,comment,VARCHAR,VARCHAR,Observer comment on the segment.,,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,AG.Comment,analyst_comment,VARCHAR,VARCHAR,Analyst comment added during curation.,,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,From.Station,station_from,VARCHAR,VARCHAR,"CalCOFI station the segment starts from ('line-station', e.g. 90-30).",,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,To.Station,station_to,VARCHAR,VARCHAR,CalCOFI station the segment runs to ('line-station').,,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Segment.length..km.,segment_length_km,DOUBLE,DOUBLE,"Length of the on-effort, on-transect segment.",km,published as sample_measurement transect_length
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Transect,transect_number,DOUBLE,INTEGER,Transect number within the survey; a transect is one or more segments between two stations.,,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,Transect.Length,transect_length_km,DOUBLE,DOUBLE,Total on-effort length of the transect this segment belongs to.,km,
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,ccLine,line,DOUBLE,DOUBLE,CalCOFI line the segment runs along.,,dictionary field; the CalCOFI coordinate carries no SI unit
-CalCOFI_2004-2021_Effort_OnTransectOnEffortONLY_MNA,cetacean_segment,ccLineLength,line_length_km,DOUBLE,DOUBLE,Total on-effort length surveyed along the CalCOFI line on this cruise.,km,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Cruise,cruise_label,VARCHAR,VARCHAR,"Source cruise label CCYYMM (e.g. CC0407). cruise_key is resolved from the ship track, not parsed from the label.",,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Season,season,VARCHAR,VARCHAR,Season of the cruise.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,DateTimeLocal,datetime_local,VARCHAR,VARCHAR,"Sighting date-time as recorded, local Pacific clock time (M/D/YYYY H:MM).",,'#REF!' in 36 CC0501 rows (Q06); converted to datetime_start_utc (Q04)
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,DecLat,latitude,DOUBLE,DOUBLE,"Latitude of the sighting, WGS84.",decimal_degrees,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,DecLong,longitude,DOUBLE,DOUBLE,"Longitude of the sighting, WGS84.",decimal_degrees,one position on land nulled (Q11)
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,segID..NaN..Off.effort.and.or.off.transect..AG.,segment_id,DOUBLE,INTEGER,Effort segment the sighting was made on; FK to cetacean_segment. NULL = off effort and/or off transect.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,PortObs,observer_port,VARCHAR,VARCHAR,Initials of the port-side observer.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,StbdObs,observer_starboard,VARCHAR,VARCHAR,Initials of the starboard-side observer.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Best,group_size_best,DOUBLE,DOUBLE,Observers' best estimate of the number of animals in the group.,count,published as obs group_size
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Min,group_size_min,DOUBLE,DOUBLE,Observers' minimum estimate of group size.,count,published as obs_attribute group_size_min
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Max,group_size_max,DOUBLE,DOUBLE,Observers' maximum estimate of group size.,count,published as obs_attribute group_size_max
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Calf,calf_raw,VARCHAR,VARCHAR,"Number of calves as recorded (0, 1, ..., ND = not determined, and variants; Q09).",,calf_count is parsed from it
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Species1,species_code,VARCHAR,VARCHAR,Species code of the sighting; FK to cetacean_species.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Species2,species2_raw,VARCHAR,VARCHAR,"Second species field as recorded; holds only the value 100, on 59 CC2111 rows (Q05).",,not treated as a species
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Original.Effort.Flag..ON.OFF.,effort_flag_original,VARCHAR,VARCHAR,"Observer's original on/off effort flag, as recorded (mixed case).",,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,OffEffortCode,off_effort_code,VARCHAR,VARCHAR,Reason code when off effort.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,OriginalTransect.ON.OFF.,transect_flag_original,VARCHAR,VARCHAR,"Observer's original on/off transect flag, as recorded.",,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,OffTransectCode,off_transect_code,VARCHAR,VARCHAR,Reason code when off transect.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Adjusted.both.On.Effort.and.On.Transect,effort_status,VARCHAR,VARCHAR,"Analyst-adjusted flag: ON when the sighting was both on effort and on transect, else OFF.",,published as obs_attribute effort_status (bin_label ON / OFF) on each counted sighting
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,PrimaryBehaviour,behavior_primary,VARCHAR,VARCHAR,Primary behaviour code(s) of the group (numeric codes; codebook is Q03).,,held (Q03): not published until the codebook arrives
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,OtherBehaviour1,behavior_other1,VARCHAR,VARCHAR,Secondary behaviour code(s).,,held (Q03): not published until the codebook arrives
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,OtherBehaviour2,behavior_other2,VARCHAR,VARCHAR,Tertiary behaviour code(s).,,held (Q03): not published until the codebook arrives
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,Comments,comments,VARCHAR,VARCHAR,Observer comments.,,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,SOG..knots.,speed_over_ground_kn,DOUBLE,DOUBLE,Ship speed over ground at the sighting.,knots,
-CalCOFI_2004-2022_CombinedSightings,cetacean_sighting,AGComments,analyst_comment,VARCHAR,VARCHAR,Analyst comment added during curation.,,
-CalCOFI_species_codes,cetacean_species,speciesCode,species_code,VARCHAR,VARCHAR,Species code; primary key.,,
-CalCOFI_species_codes,cetacean_species,speciesName,common_name,VARCHAR,VARCHAR,Common name.,,
-CalCOFI_species_codes,cetacean_species,taxonomy,suborder,VARCHAR,VARCHAR,"Mysticete, Odontocete or Unidentified.",,
+CalCOFI_segments_on_effort,cetacean_segment,SegmentID,segment_id,VARCHAR,INTEGER,"On-effort segment identifier, unique across cruises; primary key. Sightings reference it.",,
+CalCOFI_segments_on_effort,cetacean_segment,Cruise,cruise_label,VARCHAR,VARCHAR,"Survey label CCYYYY-MM (e.g. CC2004-07); the canonical label, which the sightings take from their segment.",,"cruise_key is resolved from the ship track, not parsed from the label"
+CalCOFI_segments_on_effort,cetacean_segment,Season,season,VARCHAR,VARCHAR,"Season of the cruise (winter, spring, summer, fall), lower-cased.",,
+CalCOFI_segments_on_effort,cetacean_segment,Year,year,VARCHAR,INTEGER,Year of the segment start.,,
+CalCOFI_segments_on_effort,cetacean_segment,StartDateTimeLocal,datetime_start_local,DOUBLE,VARCHAR,"Segment start, local Pacific clock time, as YYYY-MM-DD HH:MM:SS (an Excel date serial in the source).",,converted to datetime_start_utc (Q04)
+CalCOFI_segments_on_effort,cetacean_segment,EndDateTimeLocal,datetime_end_local,DOUBLE,VARCHAR,"Segment end, local Pacific clock time, as YYYY-MM-DD HH:MM:SS (an Excel date serial in the source).",,converted to datetime_end_utc (Q04)
+CalCOFI_segments_on_effort,cetacean_segment,StartLat,latitude_start,DOUBLE,DOUBLE,"Latitude of the segment start, WGS84.",decimal_degrees,
+CalCOFI_segments_on_effort,cetacean_segment,StartLon,longitude_start,DOUBLE,DOUBLE,"Longitude of the segment start, WGS84.",decimal_degrees,
+CalCOFI_segments_on_effort,cetacean_segment,EndLat,latitude_end,DOUBLE,DOUBLE,"Latitude of the segment end, WGS84.",decimal_degrees,
+CalCOFI_segments_on_effort,cetacean_segment,EndLon,longitude_end,DOUBLE,DOUBLE,"Longitude of the segment end, WGS84.",decimal_degrees,
+CalCOFI_segments_on_effort,cetacean_segment,TransectFlag,transect_flag,VARCHAR,VARCHAR,"ON when the on-effort segment ran along a CalCOFI transect line, OFF when on effort but off transect.",,the sightings' effort_status; transect_length is published for ON segments only
+CalCOFI_segments_on_effort,cetacean_segment,SegmentLength_km,segment_length_km,DOUBLE,DOUBLE,Length of the on-effort segment.,km,published as sample_measurement transect_length where transect_flag is ON
+CalCOFI_sightings_on_effort,cetacean_sighting,Cruise,cruise_label_source,VARCHAR,VARCHAR,"The sighting's own cruise label as recorded (CCYYYY-MM; 202504SH-style for 2025, CC2007-04 where the segments say CC2007-03).",,cruise_label is taken from the segment
+CalCOFI_sightings_on_effort,cetacean_sighting,Season,season,VARCHAR,VARCHAR,"Season of the cruise, lower-cased.",,
+CalCOFI_sightings_on_effort,cetacean_sighting,Date_Local_,date_local,DOUBLE,,Local date of the sighting (Excel date serial); blank on 7 rows.,,"checked against Date_Time_Local_, not kept"
+CalCOFI_sightings_on_effort,cetacean_sighting,Date_Time_Local_,datetime_local,DOUBLE,VARCHAR,"Sighting date-time, local Pacific clock time, as YYYY-MM-DD HH:MM:SS (an Excel date serial in the source).",,converted to datetime_start_utc (Q04)
+CalCOFI_sightings_on_effort,cetacean_sighting,DecLat,latitude,DOUBLE,DOUBLE,"Latitude of the sighting, WGS84.",decimal_degrees,
+CalCOFI_sightings_on_effort,cetacean_sighting,DecLong,longitude,DOUBLE,DOUBLE,"Longitude of the sighting, WGS84.",decimal_degrees,
+CalCOFI_sightings_on_effort,cetacean_sighting,segID_ON_Effort_MNA,segment_id,DOUBLE,INTEGER,On-effort segment the sighting was made on; FK to cetacean_segment.,,"2 sightings name segment 419, absent from the segments file"
+CalCOFI_sightings_on_effort,cetacean_sighting,PortObs,observer_port,VARCHAR,VARCHAR,Initials of the port-side observer.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,StbdObs,observer_starboard,VARCHAR,VARCHAR,Initials of the starboard-side observer.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,Quality,sighting_quality,VARCHAR,VARCHAR,"Sighting-conditions quality code as recorded (E, G, F, P, UX; mixed case).",,codebook not supplied
+CalCOFI_sightings_on_effort,cetacean_sighting,Visibility,visibility,DOUBLE,DOUBLE,"Visibility as recorded (0-10, one value 66).",,units not supplied (nautical miles assumed)
+CalCOFI_sightings_on_effort,cetacean_sighting,Precipitation,precipitation,VARCHAR,VARCHAR,"Weather / precipitation code as recorded (OV, PC, CL, HZ, LF, ...).",,codebook not supplied
+CalCOFI_sightings_on_effort,cetacean_sighting,Cloud_,cloud_pct,DOUBLE,DOUBLE,Cloud cover.,percent,
+CalCOFI_sightings_on_effort,cetacean_sighting,GlareBearing,glare_bearing,VARCHAR,VARCHAR,Bearing of the glare as recorded.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,GlareBearing_1,glare_bearing_1,VARCHAR,VARCHAR,Second glare bearing as recorded.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,GlareQuality_SL_M_SE_,glare_quality,VARCHAR,VARCHAR,"Glare severity: SL slight, M moderate, SE severe (also 0, 1, N as recorded).",,
+CalCOFI_sightings_on_effort,cetacean_sighting,WindDir_T_,wind_dir_true,DOUBLE,DOUBLE,True wind direction.,degrees,
+CalCOFI_sightings_on_effort,cetacean_sighting,WindSpd_T_,wind_speed,DOUBLE,DOUBLE,True wind speed as recorded (0-317).,,units not supplied; one value of 317
+CalCOFI_sightings_on_effort,cetacean_sighting,Bft,beaufort,DOUBLE,DOUBLE,Beaufort sea state (0-6).,,
+CalCOFI_sightings_on_effort,cetacean_sighting,Swell_ft_,swell_ft,DOUBLE,DOUBLE,Swell height.,feet,
+CalCOFI_sightings_on_effort,cetacean_sighting,SightingNo,sighting_no,VARCHAR,VARCHAR,Sighting number within the cruise as recorded (62a / 62b for a split record).,,
+CalCOFI_sightings_on_effort,cetacean_sighting,UniqueID,unique_id,VARCHAR,VARCHAR,"Lab sighting id: survey code + sighting number (CC0407_001, CC202504SH_ 83); not unique (3 ids on 2 rows each).",,survey_code and survey_code6 are derived from it
+CalCOFI_sightings_on_effort,cetacean_sighting,InitObserver,observer_initial,VARCHAR,VARCHAR,Initials of the observer who first saw the group.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,Cue,cue,VARCHAR,VARCHAR,Sighting cue code as recorded (0-5).,,codebook not supplied
+CalCOFI_sightings_on_effort,cetacean_sighting,ShipHeadingTru,ship_heading_true,DOUBLE,DOUBLE,Ship's true heading at the sighting.,degrees,
+CalCOFI_sightings_on_effort,cetacean_sighting,SightingBearingTru,sighting_bearing_true,DOUBLE,DOUBLE,True bearing to the sighting.,degrees,
+CalCOFI_sightings_on_effort,cetacean_sighting,BinoReticle,bino_reticle,DOUBLE,DOUBLE,Binocular reticle reading to the sighting.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,Distance_m_,distance_m,DOUBLE,DOUBLE,Estimated distance to the sighting.,m,
+CalCOFI_sightings_on_effort,cetacean_sighting,ObsHeight_m_,obs_height_m,DOUBLE,DOUBLE,Observer eye height above the sea surface.,m,
+CalCOFI_sightings_on_effort,cetacean_sighting,PortOrStarbord,port_or_starboard,VARCHAR,VARCHAR,"Side of the ship the sighting was on (Port, Star).",,
+CalCOFI_sightings_on_effort,cetacean_sighting,AngleFormula,angle_formula,DOUBLE,DOUBLE,"Angle between the ship's heading and the sighting, as used in the distance formula.",degrees,
+CalCOFI_sightings_on_effort,cetacean_sighting,sight_brng,,DOUBLE,,Intermediate of the reticle-distance calculation.,,not kept (in the lab's file)
+CalCOFI_sightings_on_effort,cetacean_sighting,ret_radians,,DOUBLE,,Intermediate of the reticle-distance calculation.,,not kept (in the lab's file)
+CalCOFI_sightings_on_effort,cetacean_sighting,radius_earth,,DOUBLE,,Intermediate of the reticle-distance calculation.,,not kept (in the lab's file)
+CalCOFI_sightings_on_effort,cetacean_sighting,Phi,,DOUBLE,,Intermediate of the reticle-distance calculation.,,not kept (in the lab's file)
+CalCOFI_sightings_on_effort,cetacean_sighting,cos_phi_ret_,,DOUBLE,,Intermediate of the reticle-distance calculation.,,not kept (in the lab's file)
+CalCOFI_sightings_on_effort,cetacean_sighting,sin_phi_ret_,,DOUBLE,,Intermediate of the reticle-distance calculation.,,not kept (in the lab's file)
+CalCOFI_sightings_on_effort,cetacean_sighting,dist_calc_m_,dist_calc_m,DOUBLE,DOUBLE,Radial distance to the sighting computed from the reticle reading and observer height.,m,
+CalCOFI_sightings_on_effort,cetacean_sighting,perp_dist_m,perp_dist_m,DOUBLE,DOUBLE,"Perpendicular distance from the trackline to the sighting, the line-transect distance-sampling measure.",m,blank on 250 sightings (2025); not published yet
+CalCOFI_sightings_on_effort,cetacean_sighting,Best,group_size_best,DOUBLE,DOUBLE,Observers' best estimate of the number of animals in the group (per species row for a mixed group).,count,published as obs group_size where > 0
+CalCOFI_sightings_on_effort,cetacean_sighting,Min,group_size_min,DOUBLE,DOUBLE,Observers' minimum estimate of group size.,count,published as obs_attribute group_size_min
+CalCOFI_sightings_on_effort,cetacean_sighting,Max,group_size_max,DOUBLE,DOUBLE,Observers' maximum estimate of group size.,count,published as obs_attribute group_size_max
+CalCOFI_sightings_on_effort,cetacean_sighting,Calf,calf_raw,VARCHAR,VARCHAR,"Number of calves as recorded (0, 1, ..., 001, ND = not determined, and variants; Q09).",,calf_count is parsed from it
+CalCOFI_sightings_on_effort,cetacean_sighting,Species1,species_code_source,VARCHAR,VARCHAR,"Species code as recorded (upper-case, as in the lab's code list).",,species_code is its vocabulary key
+CalCOFI_sightings_on_effort,cetacean_sighting,Species2,species2_raw,VARCHAR,VARCHAR,Second species field; always blank in this delivery (a mixed group is split into a/b rows instead).,,
+CalCOFI_sightings_on_effort,cetacean_sighting,sp1Percent,sp1_percent,DOUBLE,DOUBLE,Percent of a mixed group that is the first species (100 for a single-species group).,percent,
+CalCOFI_sightings_on_effort,cetacean_sighting,sp2Percent,sp2_percent,DOUBLE,DOUBLE,Percent of a mixed group that is the second species.,percent,
+CalCOFI_sightings_on_effort,cetacean_sighting,OriginalEffortFlag_ON_OFF_,effort_flag_original,VARCHAR,VARCHAR,Observer's original on/off effort flag (always ON in this on-effort product).,,
+CalCOFI_sightings_on_effort,cetacean_sighting,OriginalTransect_ON_OFF_,transect_flag_original,VARCHAR,VARCHAR,Observer's original on/off transect flag.,,disagrees with the segment's transect_flag on 284 sightings
+CalCOFI_sightings_on_effort,cetacean_sighting,PrimaryBehaviour,behavior_primary,VARCHAR,VARCHAR,Primary behaviour code(s) of the group (numeric codes; codebook is Q03).,,held (Q03): not published until the codebook arrives
+CalCOFI_sightings_on_effort,cetacean_sighting,OtherBehaviour1,behavior_other1,VARCHAR,VARCHAR,Secondary behaviour code(s).,,held (Q03): not published until the codebook arrives
+CalCOFI_sightings_on_effort,cetacean_sighting,Comments,comments,VARCHAR,VARCHAR,Observer comments.,,
+CalCOFI_sightings_on_effort,cetacean_sighting,Time_Diff_minutes,time_diff_min,DOUBLE,DOUBLE,"Time difference in minutes as recorded (on 1,194 sightings, -1408 to 84425); meaning not supplied.",minutes,asked of the lab
+CalCOFI_sighting_codes,cetacean_species,CalCOFI/NOAA Species Abbreviation,lab_code,VARCHAR,VARCHAR,Species code in the lab's list; species_codes.csv maps it to the vocabulary key species_code.,,
+CalCOFI_sighting_codes,cetacean_species,Common Name,common_name,VARCHAR,VARCHAR,"Common name, from the lab's list (non-breaking spaces removed); species_codes.csv's own name for a code the list lacks.",,
