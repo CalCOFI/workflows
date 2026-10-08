@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.08
+
 ## The three marine mammal datasets are withdrawn until the lab that collected them has reviewed them
 
 `sio_cetacean-sightings`, `sio_cetacean-sonobuoy` and `sio_cetacean-edna` entered in v2026.10.05 from
@@ -26,8 +28,12 @@ now `in_release: false`, so none of their rows is in this release:
 
 Their ingest notebooks are also off calcofi.io/workflows. The `sample_type` values (`sighting`,
 `deployment`, `scan`, `water`) and the `measurement_type` rows they introduced stay in the registry
-with no rows behind them; `edna_presence` is still filled by `calcofi_2022-edna`. v2026.10.05 and
-v2026.10.06 still contain the marmam-app rows; use this release or later.
+with no rows behind them; `edna_presence` is still filled by `calcofi_2022-edna`.
+
+**v2026.10.05 and v2026.10.06 are retired.** They carried the marmam-app rows, so their parquet is
+removed (`scripts/thin_releases.R --withdraw`); nothing in them was rewritten. Their catalogs,
+sidecars, release notes and DOIs stay, and each `retired.json` names this release as the one to read
+instead.
 
 **Consumers:** a query filtered on `dataset_key LIKE 'sio_cetacean%'` now returns no rows.
 
