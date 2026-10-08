@@ -7,6 +7,13 @@
 #   Rscript scripts/thin_releases.R                 # dry run: table of what would go
 #   Rscript scripts/thin_releases.R --execute       # delete, write retired.json, rebuild versions.json + index
 #   Rscript scripts/thin_releases.R --prefix ducklake-staging/releases   # staging
+#   Rscript scripts/thin_releases.R --withdraw v2026.10.05,v2026.10.06 --reason "…" [--execute]
+#
+# --withdraw retires only the named versions, whatever the policy keeps, with the
+# given reason in their retired.json: for a release whose content a provider asked
+# us to stop distributing (sio_cetacean-*, 2026-10-08). Nothing is rewritten; the
+# parquet goes and the sidecars stay, exactly as for thinning, and the sweep then
+# removes content-store objects no remaining version references.
 #
 # Refuses (even with --execute) to touch a version that is pinned as a literal
 # in docs/, db-query/_config.yml or server/postgis/init/50_release_views.sql —
@@ -25,6 +32,24 @@ latest   <- trimws(readLines(https(glue("{prefix}/latest.txt")), warn = FALSE)[1
 versions <- build_versions_json(bucket, prefix, consolidated = policy$consolidated)
 plan     <- thin_plan(versions, latest, policy$consolidated, policy$keep_latest %||% 2)
 cand     <- plan[!plan$keep, ]
+
+# --withdraw: the named versions only, retired with an explicit reason ----------
+withdraw <- opt("--withdraw", "")
+withdraw <- if (nzchar(withdraw)) strsplit(withdraw, ",")[[1]] else character()
+reason   <- opt("--reason", "")
+if (length(withdraw)) {
+  stopifnot(
+    "--withdraw needs --reason"                 = nzchar(reason),
+    "--withdraw names an unknown version"       = all(withdraw %in% plan$version),
+    "--withdraw cannot retire the promoted one" = !latest %in% withdraw,
+    "--withdraw names an already retired one"   = !any(plan$reason[plan$version %in% withdraw] == "already retired"))
+  # every other version keeps its references, so the sweep below removes only what
+  # the withdrawn versions alone pointed at, never a policy-thinnable version's objects
+  plan$keep <- !plan$version %in% withdraw
+  plan$reason[plan$version %in% withdraw] <- "withdrawn"
+  plan$to[plan$version %in% withdraw]     <- latest
+  cand <- plan[plan$version %in% withdraw, ]
+}
 
 # pinned-version guard --------------------------------------------------------
 pin_files <- c(
@@ -97,8 +122,10 @@ for (i in seq_len(nrow(cand))) {
   v <- cand$version[i]
   ret <- list(retired_utc = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
               to = cand$to[i],
-              reason = glue("archive thinning (metadata/release_policy.yml): parquet removed, ",
-                            "sidecars and RELEASE_NOTES.md kept; read {cand$to[i]} instead"))
+              reason = if (length(withdraw)) glue("withdrawn: {reason}; parquet removed, sidecars and ",
+                                                  "RELEASE_NOTES.md kept; read {cand$to[i]} instead") else
+                glue("archive thinning (metadata/release_policy.yml): parquet removed, ",
+                     "sidecars and RELEASE_NOTES.md kept; read {cand$to[i]} instead"))
   f <- tempfile(fileext = ".json"); write_json(ret, f, auto_unbox = TRUE, pretty = TRUE)
   put_gcs_file(f, glue("gs://{bucket}/{prefix}/{v}/retired.json"))
   rc <- system2(gcloud, c("storage", "rm", "-r", glue("gs://{bucket}/{prefix}/{v}/parquet/")),
