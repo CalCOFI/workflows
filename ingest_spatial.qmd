@@ -135,6 +135,10 @@ datatable(
 if (!"role" %in% names(d_layers)) d_layers$role <- "boundary"
 d_layers_ref <- d_layers |> filter(role == "reference")
 d_layers     <- d_layers |> filter(is.na(role) | role != "reference")
+# gazetteer rows (own `source_url` + `source_layer`) are served from the oceanmetrics gazetteer's
+# PMTiles, not built here: no source file, no parquet, no membership (explore PR #16)
+if ("source_url" %in% names(d_layers))
+  d_layers   <- d_layers |> filter(is.na(source_url) | source_url == "")
 
 # compare with folders/files in dir_spatial
 spatial_dirs <- dir_ls(dir_spatial, type = "directory")
