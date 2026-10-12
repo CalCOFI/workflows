@@ -1,0 +1,7 @@
+table,column,name_long,units,description_md
+hopkins_zoopl_sample,tow_id,Tow ID,,"`{year}-{page_position}-{station}`: the source file year, the sheet's position in that year's FromThePage work, and the Hopkins station 1-6. Stable across re-runs because it comes from the file layout, not row order; the core `sample_key` is `stanford_hopkins-zooplankton:tow:{tow_id}`."
+hopkins_zoopl_sample,emit,Emitted,,"TRUE where the station was sampled and the sheet has a date; only these rows reach the core."
+hopkins_zoopl_sample,date_flag,Date Flag,,"`ok`, `dates_differ` (the two transcriptions disagree; the Roman-numeral form is used), `date_unparsed`, `year_from_file` (a mistyped year corrected from the file) or `out_of_sequence` (runs backwards or jumps more than six weeks from the sheet before)."
+hopkins_zoopl_sample,grid_key,Grid Key,,"CalCOFI grid cell from `assign_grid_key()`; all six stations fall in `st50-ln66.7`."
+hopkins_zoopl_obs,raw_measurement_type,Raw Measurement Type,,"Snake-case of the log-sheet row label (rows 1-24 only); joins `metadata/measurement_taxon.csv` to give `measurement_type`, `taxon_key` and `life_stage`."
+hopkins_zoopl_obs,agreement,Transcription Agreement,,"`agree`, `only_1`, `only_2` or `differ` between the two independent transcriptions. `only_*` becomes `measurement_qual = 'single_transcription'`; `differ` is not published."

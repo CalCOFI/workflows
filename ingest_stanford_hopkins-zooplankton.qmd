@@ -446,6 +446,25 @@ dbGetQuery(con, "
   datatable(caption = "obs by resolved taxon", rownames = FALSE)
 ```
 
+## Check Declared Bounds
+
+Not optional (`RUNBOOK.md` §3b). Run on what is actually published, the core
+tables: `percent_volume` is declared 0-100 and `settled_volume_ml` 0-10,000 mL
+in `metadata/measurement_type.csv`.
+
+```{r}
+#| label: bounds-core
+
+d_bounds <- bind_rows(
+  check_measurement_bounds(con, "obs", mt = d_meas_type, dataset_key = ds_key),
+  check_measurement_bounds(con, "sample_measurement", mt = d_meas_type, dataset_key = ds_key))
+bounds_datatable(d_bounds)
+stopifnot(
+  "every published type must declare a bound" = !any(d_bounds$status == "undeclared"),
+  "no published value may lie outside its declared bound" =
+    !any(d_bounds$status == "out_of_range"))
+```
+
 ## Questions for Data Providers
 
 Ranked; tracked in `metadata/stanford/hopkins-zooplankton/questions.csv`. Q01
@@ -478,6 +497,23 @@ if (length(results$warnings) > 0)
 ```
 
 ## Schema
+
+### What the source looks like — the working tables
+
+The parse lib turns the 18 CSVs into two working tables. They are not
+published; the core below is.
+
+```{r}
+#| label: schema-source
+
+hop_rels <- list(
+  primary_keys = list(hopkins_zoopl_sample = "tow_id"),
+  foreign_keys = list(
+    list(table = "hopkins_zoopl_obs", column = "tow_id",
+         ref_table = "hopkins_zoopl_sample", ref_column = "tow_id")))
+cc_erd(con, tables = hop_tbls, rels = hop_rels,
+       colors = list(lightblue = hop_tbls))
+```
 
 ### What gets published — the core
 
@@ -571,7 +607,8 @@ parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
 d_tbls_rd <- read_csv(here(glue("metadata/{provider}/{dataset}/tbls_redefine.csv")))
 metadata_path <- build_metadata_json(
   con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
-  metadata_derived_csv = here("metadata/core_dictionary.csv"),
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           here(glue("metadata/{provider}/{dataset}/metadata_derived.csv"))),
   output_dir = dir_parquet, tables = tbls_out,
   set_comments = TRUE, provider = provider, dataset = dataset,
   workflow_url = cc$workflow_url, tables_owned = tables_owned)
