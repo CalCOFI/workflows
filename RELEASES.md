@@ -8,6 +8,15 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A `percent_volume` measurement type, ahead of the Hopkins Monterey Bay zooplankton (1955-1963)
+
+`stanford_hopkins-zooplankton` is ingested but held out (`in_release: false`): its sheets merge a
+count and a percent row for each taxon, so whole numbers 1-5 can be either (question Q01), and the
+six Monterey Bay stations have no CalCOFI cruise key (Q08). Its registry rows ship now with no
+observations behind them: `measurement_type` gains `percent_volume` (a taxon's share of a plankton
+sample's settled volume, 0-100), and `measurement_qual` gains the code set `hopkins-zooplankton`
+(`unit_unclear`, `single_transcription`).
+
 # v2026.10.08
 
 ## The three marine mammal datasets are withdrawn until the lab that collected them has reviewed them
