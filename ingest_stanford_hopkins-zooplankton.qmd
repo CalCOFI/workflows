@@ -489,11 +489,46 @@ if (length(results$errors) > 0)
 if (length(results$warnings) > 0)
   cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
 
-# TODO after the first render: declare each expected NULL with its count and
-# reason, reconcile against `results`, and hard-fail on anything undeclared
-# (ingest-new skill, step 11). Known by design: sample.cruise_key (every tow,
-# Q08), sample.site_key (every tow), obs.cruise_key (every row), and
-# sample.grid_key / obs.grid_key for any station outside the grid (see Spatial).
+# validate_for_release() treats every *_id / *_key column as required, a
+# heuristic rather than this dataset's contract. Every expected NULL is declared
+# with its count and reason; anything undeclared, or a count that moves, fails.
+# Counts from the first render, 2026-10-12. All six stations fall in one grid
+# cell (st50-ln66.7), so grid_key is not on this list.
+nullable <- tribble(
+  ~table,   ~column,             ~n,    ~reason,
+  "sample", "cruise_key",        1702L, "Hopkins weekly day trips, not CalCOFI ship cruises (Q08)",
+  "sample", "site_key",          1702L, "the six Hopkins stations are not on the CalCOFI line/station pattern (Q08)",
+  "sample", "parent_sample_key", 1702L, "each tow is a root sample; no parent event in this dataset",
+  "obs",    "cruise_key",        2462L, "inherits the sample's NULL cruise_key (Q08)",
+  # 98 taxa = 23 crosswalk taxa + their WoRMS lineage ancestors
+  "taxon",  "itis_id",           14L,   "WoRMS links no ITIS TSN for these lineage nodes",
+  "taxon",  "gbif_id",           98L,   "nothing asks GBIF; no GBIF crosswalk in the xref",
+  "taxon",  "ncbi_id",           98L,   "never populated by any dataset",
+  "taxon",  "inat_id",           98L,   "never populated by any dataset",
+  "taxon",  "parent_taxon_key",  1L,    "the lineage root (Biota) has no parent")
+
+nulls <- results$checks |>
+  filter(check == "nulls", status != "PASS") |>
+  mutate(column = str_match(message, "column '([^']+)'")[, 2],
+         n      = as.integer(str_match(message, "has (\\d+) NULL")[, 2])) |>
+  select(table, column, n)
+
+reconciled  <- full_join(nulls, select(nullable, table, column, n_expected = n),
+                         by = c("table", "column"))
+unexplained <- filter(reconciled, is.na(n_expected))
+moved       <- filter(reconciled, !is.na(n_expected), !is.na(n), n != n_expected)
+resolved    <- filter(reconciled, !is.na(n_expected), is.na(n))
+if (nrow(unexplained)) print(unexplained)
+if (nrow(moved)) print(moved)
+stopifnot(
+  "a NULL appeared in a column with no declared reason: investigate, don't just add it" =
+    nrow(unexplained) == 0,
+  "a declared NULL count changed: the data moved, so re-derive the reason" =
+    nrow(moved) == 0)
+if (nrow(resolved))
+  cat(glue("{nrow(resolved)} declared nullable case(s) no longer occur, prune them: ",
+           "{paste(resolved$table, resolved$column, sep = '.', collapse = ', ')}"), "\n")
+cat("validate: every NULL is declared\n")
 ```
 
 ## Schema
