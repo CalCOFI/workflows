@@ -136,9 +136,11 @@ publicly like every other ingest.
 #| label: read-source
 
 stopifnot("source dir not found" = dir_exists(dir_src))
-sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
-            bucket = "calcofi-files-public",
-            exclude = c(".DS_Store", "*.tmp", "__MACOSX/*"))
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
+              bucket = "calcofi-files-public",
+              exclude = c(".DS_Store", "*.tmp", "__MACOSX/*"))
+} else cat("CALCOFI_SKIP_GCS set — sources not archived (local verification run)\n")
 
 z <- tidy_hopkins_zoopl(dir_src)
 
