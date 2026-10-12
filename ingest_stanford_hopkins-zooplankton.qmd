@@ -260,9 +260,13 @@ d_grid <- dbGetQuery(con, "
          ANY_VALUE(grid_key) AS grid_key
   FROM hopkins_zoopl_sample GROUP BY station ORDER BY station")
 
-# the borrowed grid VIEW has done its job; drop it so validation and the
-# metadata sidecar see only this dataset's tables
-dbExecute(con, "DROP VIEW IF EXISTS grid")
+# the borrowed grid has done its job; drop it so validation and the metadata
+# sidecar see only this dataset's tables. A VIEW when read from the local stage,
+# a TABLE when read from GCS (the GCS fallback ignores as_view)
+grid_type <- dbGetQuery(con, "
+  SELECT table_type FROM information_schema.tables WHERE table_name = 'grid'")$table_type
+if (length(grid_type))
+  dbExecute(con, if (grid_type == "VIEW") "DROP VIEW grid" else "DROP TABLE grid")
 
 d_grid |>
   datatable(caption = "Station -> grid cell (NULL = outside the CalCOFI grid, Q08)",
