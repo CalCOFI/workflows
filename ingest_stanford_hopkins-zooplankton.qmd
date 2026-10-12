@@ -1,0 +1,593 @@
+---
+title: "Ingest Stanford Hopkins Zooplankton (Monterey Bay, 1955-1963)"
+calcofi:
+  # underscores: target_name must be a valid R symbol, unlike the filename
+  target_name: ingest_stanford_hopkins_zooplankton
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo   # the shared `grid` reference for assign_grid_key()
+  output: data/parquet/stanford_hopkins-zooplankton/manifest.json
+  provider: stanford
+  dataset: hopkins-zooplankton
+  # HELD OUT of the release (2026-10-11) until Q01 (whole numbers 1-5: count or
+  # percent?) has a plan and Q08 (no CalCOFI cruise_key; grid coverage of the six
+  # Monterey Bay stations) is settled. `in_release` is opt-out: delete this key,
+  # don't set it TRUE, once those are answered.
+  in_release: false
+  workflow_url: https://calcofi.io/workflows/ingest_stanford_hopkins-zooplankton.html
+  questions_file: metadata/stanford/hopkins-zooplankton/questions.csv
+  dataset_meta:
+    dataset_name: CalCOFI Zooplankton Data from Monterey Bay (1955-1963) - Stanford Hopkins Marine Station
+    dataset_name_short: "Hopkins zooplankton (Monterey Bay)"
+    category: Zooplankton
+  # publishes the consolidated core AND NOTHING ELSE: the two transcriptions are
+  # parsed by libs/parse_stanford_hopkins-zooplankton.R and projected into
+  # sample / obs / sample_measurement + the taxa refs. The source CSVs are
+  # archived, so no per-dataset table is written to parquet.
+  tables_owned:
+    - {table: sample, shared: true, note: "core event dimension: one half-metre net tow per sheet date x station (six fixed Monterey Bay stations)"}
+    - {table: obs, shared: true, note: "core occurrence headline: percent of the settled volume per log-sheet taxon (rows 1-24)"}
+    - {table: sample_measurement, shared: true, note: "event-level wet settled volume (settled_volume_ml)"}
+    - {table: taxon, shared: true, note: "shared taxa reference"}
+    - {table: dataset_taxon, shared: true, note: "log-sheet row label -> taxon_key crosswalk"}
+  erd:
+    color: "#d8e8c8"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: Whitmire, A. L. (2022). *Monterey Bay zooplankton data from the
+Hopkins Marine Station CalCOFI program (1955-1963)*. Stanford Digital Repository,
+[doi:10.25740/nt620vn7810](https://doi.org/10.25740/nt620vn7810), CC0. 18 CSVs
+(`zooplankton-data-sheets-{year}_{1,2}.csv`), the README and a PDF of the methods
+notes and example log sheets, under `data-public/stanford/hopkins-zooplankton/`.
+Provider `stanford` (Hopkins Marine Station; the Miller Library curates the
+archive).
+
+**What a row is**: one log sheet = one sampling day, with columns for six fixed
+stations in Monterey Bay. For each station the sheet records the **wet settled
+volume** (mL) of a half-metre net sample (towed obliquely from 15 m) and, for each
+of 24 printed taxa or groups, **the share of that volume** it made up, estimated
+by eye. Two extra rows are hand-written taxa.
+
+**Why it needs a parse step** (`libs/parse_stanford_hopkins-zooplankton.R`):
+
+- **Every sheet was transcribed twice**, independently, by FromThePage
+  volunteers. The parse pairs the two by page position and keeps a value only
+  where they agree, or only one of them transcribed the cell (flagged
+  `single_transcription`). Cells where they disagree are withheld and listed for
+  a check against the scans (Q06).
+- **Count and percent were merged.** The sheet has separate *No.* and *%* rows
+  per taxon; the transcription template had one cell. Counts were only recorded
+  for five or fewer individuals, so a value above 5 is a percent, but a whole
+  number 1-5 is ambiguous. Those are published with
+  `measurement_qual = 'unit_unclear'` (Q01).
+- **Dates are written four ways**: `10-II-55` (as on the sheet), `4/2/55`
+  (day-first), `2/7/61` (US month-first, for 7-II-61) and `14.VII.59`. The
+  Roman-numeral form is trusted first; a slash date is read whichever way matches
+  the other transcription.
+- **Text values**: "trace", "<1", "no haul", "fouled", "-", and Excel-mangled
+  cells ("4-Feb"). Only numbers reach the core (Q02, Q04).
+
+```{mermaid}
+graph LR
+  A[sheets _1] --> P{{parse lib<br/>pair + reconcile}}
+  B[sheets _2] --> P
+  P --> S[hopkins_zoopl_sample<br/>sheet x station]
+  P --> O[hopkins_zoopl_obs<br/>taxon cells]
+  P --> K[check list<br/>for the scans]
+  S --> CS[[core: sample]]
+  S --> SM[[core: sample_measurement<br/>settled_volume_ml]]
+  O --> CO[[core: obs<br/>percent_volume]]
+  X[measurement_taxon.csv] -.taxon_key.-> CO
+```
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, jsonlite, knitr,
+  purrr, readr, stringr, tibble, tidyr, quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+source(here("libs/ingest.R"))
+source(here("libs/parse_stanford_hopkins-zooplankton.R"))
+
+cc           <- read_calcofi_meta(here("ingest_stanford_hopkins-zooplankton.qmd"))
+provider     <- cc$provider
+dataset      <- cc$dataset
+tables_owned <- cc$tables_owned
+ds_key       <- glue("{provider}_{dataset}")
+dir_label    <- ds_key
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_src      <- path_expand(glue("{dir_data}/{provider}/{dataset}"))
+
+if (overwrite) {
+  if (file_exists(db_path))                 file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+
+hop_tbls <- c("hopkins_zoopl_sample", "hopkins_zoopl_obs")
+
+# the sampling net: lowered vertically to 15 m, then towed obliquely to the
+# surface (README methods), so every tow spans 0-15 m
+net_depth_max_m <- 15
+```
+
+## Read Source
+
+The CSVs are CC0 (SDR record and README), so the source folder is archived
+publicly like every other ingest.
+
+```{r}
+#| label: read-source
+
+stopifnot("source dir not found" = dir_exists(dir_src))
+sync_to_gcs(local_dir = dir_src, gcs_prefix = glue("archive/{provider}/{dataset}"),
+            bucket = "calcofi-files-public",
+            exclude = c(".DS_Store", "*.tmp", "__MACOSX/*"))
+
+z <- tidy_hopkins_zoopl(dir_src)
+
+n_sheets <- n_distinct(z$sample$year, z$sample$page_position)
+cat(glue("sheets {n_sheets} (1955-1963); station rows {nrow(z$sample)}; ",
+         "non-blank taxon cells {nrow(z$obs)}; to check against the scans {nrow(z$check)}"), "\n")
+
+# hold the parse to the release it was written against (SDR version 1,
+# 2025-07-07): a re-export that changes the files fails loudly here
+stopifnot(
+  "expected 324 non-blank sheets across the 9 file pairs" = n_sheets == 324,
+  "expected 6 station rows per sheet" = nrow(z$sample) == 6 * n_sheets,
+  "every sheet date within 1955-1963" =
+    all(is.na(z$sample$date) | between(as.integer(format(z$sample$date, "%Y")), 1955, 1963)))
+```
+
+## What the Parse Decided
+
+Agreement between the two transcriptions, and how each non-blank taxon cell was
+classified. Only `value_code = number` reaches the core.
+
+```{r}
+#| label: parse-summary
+
+z$obs |>
+  count(value_code, unit, agreement, name = "cells") |>
+  arrange(value_code, unit, agreement) |>
+  datatable(caption = "Taxon cells by value code, unit and transcription agreement",
+            options = list(dom = "t", pageLength = 50), rownames = FALSE)
+
+z$sample |>
+  distinct(year, page_position, date_flag) |>
+  count(date_flag, name = "sheets") |>
+  datatable(caption = "Sheet dates: ok, or why they need a look (see the check list)",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+The check list for the scans (Q06). Each row links both transcriptions on
+FromThePage, where the scanned page sits beside the transcription.
+
+```{r}
+#| label: check-list
+
+z$check |>
+  datatable(caption = "Cells and dates to check against the scans (Q06)",
+            rownames = FALSE, filter = "top")
+```
+
+## Build Working Tables
+
+`hopkins_zoopl_sample` keeps every sheet x station; the core takes only the
+**sampled** rows with a **date** (a station marked "no haul" or left entirely
+blank was not sampled; five sheets have no readable date on either
+transcription). `tow_id` is `{year}-{page_position}-{station}`, stable across
+re-runs because it comes from the file layout, not the row order.
+
+```{r}
+#| label: build-tables
+
+d_sample <- z$sample |>
+  mutate(
+    tow_id = sprintf("%d-%02d-%d", year, page_position, station),
+    emit   = coalesce(sampled, FALSE) & !is.na(date)) |>
+  select(tow_id, year, page_position, station, date, date_flag, sampled, emit,
+         wet_volume_ml, wet_volume_code, wet_volume_agreement,
+         latitude, longitude, cast_depth_m, page_url_1, page_url_2)
+
+d_obs <- z$obs |>
+  mutate(tow_id = sprintf("%d-%02d-%d", year, page_position, station)) |>
+  select(tow_id, item_seq, taxon_label, raw_measurement_type, value, unit,
+         value_code, agreement, value_raw_1, value_raw_2)
+
+stopifnot(
+  "tow_id must be unique" = !anyDuplicated(d_sample$tow_id),
+  "every obs cell must belong to a sheet x station" = all(d_obs$tow_id %in% d_sample$tow_id))
+
+dbWriteTable(con, "hopkins_zoopl_sample", as.data.frame(d_sample), overwrite = TRUE)
+dbWriteTable(con, "hopkins_zoopl_obs",    as.data.frame(d_obs),    overwrite = TRUE)
+
+cat(glue("tows to emit: {sum(d_sample$emit)} of {nrow(d_sample)} sheet x station rows ",
+         "({sum(d_sample$sampled %in% TRUE & is.na(d_sample$date))} sampled but undated, ",
+         "{sum(!(d_sample$sampled %in% TRUE))} not sampled or blank)"), "\n")
+```
+
+## Enforce Column Types
+
+Before any geometry exists (DuckDB >= 1.5.1 cannot rewrite a table carrying
+`GEOMETRY`; see `CLAUDE.md`).
+
+```{r}
+#| label: enforce-types
+
+d_flds_rd <- read_csv(here(glue("metadata/{provider}/{dataset}/flds_redefine.csv")))
+enforce_column_types(con, d_flds_rd = d_flds_rd, tables = hop_tbls)
+```
+
+## Spatial
+
+Positions are the six station coordinates from the README. `grid_key` is
+whichever CalCOFI grid cell each station falls in, if any: these are inshore
+Monterey Bay stations, so some or all may fall outside the grid and keep a NULL
+`grid_key` (Q08).
+
+```{r}
+#| label: spatial
+
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+
+add_point_geom(con, "hopkins_zoopl_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "hopkins_zoopl_sample")
+
+d_grid <- dbGetQuery(con, "
+  SELECT station, ANY_VALUE(latitude) AS latitude, ANY_VALUE(longitude) AS longitude,
+         ANY_VALUE(grid_key) AS grid_key
+  FROM hopkins_zoopl_sample GROUP BY station ORDER BY station")
+
+# the borrowed grid VIEW has done its job; drop it so validation and the
+# metadata sidecar see only this dataset's tables
+dbExecute(con, "DROP VIEW IF EXISTS grid")
+
+d_grid |>
+  datatable(caption = "Station -> grid cell (NULL = outside the CalCOFI grid, Q08)",
+            options = list(dom = "t"), rownames = FALSE)
+```
+
+## Measurement Vocabulary + Dataset Metadata
+
+Two quantities:
+
+- `settled_volume_ml`, already registered (by `cdfw_dungeness-crab`), for the
+  wet settled volume, at the sample level;
+- `percent_volume`, **new** in this change, for each taxon's share of that
+  volume, at the obs level. Bounded 0-100.
+
+The taxon lives in `taxon_key`, never in the type name: the 24 printed rows map to
+`(measurement_type = percent_volume, taxon_key, life_stage)` through
+`metadata/measurement_taxon.csv`. The quality codes (`unit_unclear`,
+`single_transcription`) are registered in `metadata/measurement_qual.csv` under
+code set `hopkins-zooplankton`.
+
+```{r}
+#| label: meas-types
+
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
+stopifnot(
+  "percent_volume and settled_volume_ml must be in the shared registry" =
+    all(c("percent_volume", "settled_volume_ml") %in% d_meas_type$measurement_type))
+dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
+
+this_provider <- provider; this_dataset <- dataset   # also column names
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot("this dataset must appear in the ingest YAML registry" = nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+```
+
+## Emit Core Tables
+
+Project into the shared core (`RUNBOOK.md` §3b) with the generic `append_*`
+helpers; no `calcofi4db` change is needed.
+
+- **`sample`**: one `tow` per emitted sheet x station, keyed
+  `stanford_hopkins-zooplankton:tow:{year}-{page_position}-{station}`, depth
+  0-15 m, no parent. `cruise_key` and `site_key` are NULL: these were Hopkins
+  day trips, not CalCOFI ship cruises, and the six stations are not on the CalCOFI
+  line/station pattern (Q08). The date carries no time of day, so `datetime` is
+  midnight of the sample date.
+- **`obs`**: one row per numeric taxon cell (log-sheet rows 1-24) on an emitted
+  tow. `measurement_qual` is NULL where both transcriptions agree and the value is
+  unambiguous, else `unit_unclear`, `single_transcription`, or both.
+- **`sample_measurement`**: the wet settled volume where it is a number.
+- **Not published** (kept in the archived source and the check list): cells the
+  transcriptions disagree on, "trace" / "<1" (Q02), dashes and unparsed text
+  (Q04), the hand-written rows 25 and *bottom* (Q05), and absences (Q03).
+
+```{r}
+#| label: emit-core
+
+# the crosswalk, restricted to this dataset. worms_id/itis_id MUST be integer:
+# read as double, CAST(... AS VARCHAR) yields "1100.0" and every taxon_key
+# silently fails to resolve against `taxon`
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"))
+stopifnot(
+  "crosswalk must cover all 24 printed log-sheet rows" =
+    setequal(mt_taxon$raw_measurement_type,
+             unique(na.omit(d_obs$raw_measurement_type))),
+  "every crosswalk row needs a worms_id: run scripts/fill_measurement_taxon_ids.R stanford_hopkins-zooplankton" =
+    !anyNA(mt_taxon$worms_id))
+
+ensure_taxon_xref(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_xref.csv"))
+ensure_taxon_lineage(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_lineage.csv"))
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
+ensure_measurement_taxon(con, mt_taxon, dataset_key = ds_key)
+
+tow_key <- glue("'{ds_key}:tow:' || s.tow_id")
+
+# 1. sample — one tow per emitted sheet x station
+append_sample(con, glue("
+  SELECT {tow_key}, 'tow', NULL::VARCHAR, {tow_key},
+         '{ds_key}', s.grid_key, NULL::VARCHAR, NULL::VARCHAR, NULL::INTEGER,
+         s.latitude, s.longitude, CAST(s.date AS TIMESTAMP),
+         0::DOUBLE, {net_depth_max_m}::DOUBLE, NULL::VARCHAR
+  FROM hopkins_zoopl_sample s
+  WHERE s.emit"))
+
+# 2. obs — percent of the settled volume per printed taxon
+obs_qual <- "
+  CASE
+    WHEN o.unit = 'unit_unclear' AND o.agreement IN ('only_1', 'only_2')
+      THEN 'unit_unclear;single_transcription'
+    WHEN o.unit = 'unit_unclear'                  THEN 'unit_unclear'
+    WHEN o.agreement IN ('only_1', 'only_2')      THEN 'single_transcription'
+  END"
+obs_where <- "
+  s.emit AND o.value_code = 'number' AND o.item_seq BETWEEN 1 AND 24"
+
+append_obs(con, glue("
+  SELECT 'bio', '{ds_key}', {tow_key},
+         s.grid_key, NULL::VARCHAR, s.latitude, s.longitude,
+         CAST(s.date AS TIMESTAMP), 0::DOUBLE, {net_depth_max_m}::DOUBLE,
+         mx.taxon_key, mx.life_stage, mx.measurement_type, o.value,
+         {obs_qual}, NULL::DOUBLE
+  FROM hopkins_zoopl_obs o
+  JOIN hopkins_zoopl_sample s USING (tow_id)
+  JOIN _measurement_taxon mx
+    ON mx.raw_measurement_type = o.raw_measurement_type AND mx.target = 'obs'
+  WHERE {obs_where}"))
+
+# 3. sample_measurement — wet settled volume
+append_sample_measurement(con, glue("
+  SELECT {tow_key}, '{ds_key}', 'settled_volume_ml', s.wet_volume_ml,
+         CASE WHEN s.wet_volume_agreement IN ('only_1', 'only_2')
+              THEN 'single_transcription' END
+  FROM hopkins_zoopl_sample s
+  WHERE s.emit AND s.wet_volume_code = 'number'"))
+
+core_n <- list(
+  sample             = dbGetQuery(con, "SELECT COUNT(*) FROM sample")[[1]],
+  obs                = dbGetQuery(con, "SELECT COUNT(*) FROM obs")[[1]],
+  sample_measurement = dbGetQuery(con, "SELECT COUNT(*) FROM sample_measurement")[[1]],
+  taxon = n_taxon, dataset_taxon = n_ds_taxon, taxon_group = n_tx_group)
+cat(glue("core projection — ",
+         "{paste(names(core_n), unlist(core_n), sep = '=', collapse = '  ')}"), "\n")
+```
+
+The projection must be lossless and must not invent anything:
+
+```{r}
+#| label: core-parity
+
+q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+n_emit  <- sum(d_sample$emit)
+src_obs <- d_obs |>
+  inner_join(filter(d_sample, emit) |> select(tow_id), by = "tow_id") |>
+  filter(value_code == "number", between(item_seq, 1, 24))
+src_vol <- filter(d_sample, emit, wet_volume_code == "number")
+
+stopifnot(
+  "one core sample per emitted tow" = core_n$sample == n_emit,
+  "sample_key must be unique" =
+    q1("SELECT COUNT(*) - COUNT(DISTINCT sample_key) FROM sample") == 0,
+  "obs must carry every emitted source cell, no more" = core_n$obs == nrow(src_obs),
+  "obs total must equal the source total" =
+    isTRUE(all.equal(q1("SELECT SUM(measurement_value) FROM obs"), sum(src_obs$value))),
+  "every obs.sample_key must resolve in sample" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key)
+        WHERE s.sample_key IS NULL") == 0,
+  # NOT-NULL is not enough: a numeric-typed worms_id renders as "1100.0", which
+  # is non-NULL and joins to nothing. Assert the FK actually resolves.
+  "every obs.taxon_key must resolve in taxon" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
+        WHERE t.taxon_key IS NULL") == 0,
+  "every obs.measurement_type must resolve in measurement_type" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN measurement_type t USING (measurement_type)
+        WHERE t.measurement_type IS NULL") == 0,
+  "percent_volume must stay within 0-100" =
+    q1("SELECT COUNT(*) FROM obs WHERE measurement_value < 0 OR measurement_value > 100") == 0,
+  "unit_unclear must mean exactly the whole numbers 1-5" =
+    q1("SELECT COUNT(*) FROM obs WHERE measurement_qual LIKE 'unit_unclear%'") ==
+      sum(src_obs$unit == "unit_unclear"),
+  "one settled volume per emitted tow that has one" =
+    core_n$sample_measurement == nrow(src_vol),
+  "no cruise_key is invented (Q08)" =
+    q1("SELECT COUNT(cruise_key) FROM sample") == 0)
+cat("core parity: all assertions passed\n")
+
+dbGetQuery(con, "
+  SELECT COALESCE(t.scientific_name, o.taxon_key) AS taxon, o.life_stage,
+         COUNT(*) AS n_obs,
+         SUM(CASE WHEN o.measurement_qual LIKE 'unit_unclear%' THEN 1 ELSE 0 END) AS n_unit_unclear,
+         ROUND(AVG(o.measurement_value), 1) AS mean_value
+  FROM obs o LEFT JOIN taxon t USING (taxon_key)
+  GROUP BY 1, 2 ORDER BY n_obs DESC") |>
+  datatable(caption = "obs by resolved taxon", rownames = FALSE)
+```
+
+## Questions for Data Providers
+
+Ranked; tracked in `metadata/stanford/hopkins-zooplankton/questions.csv`. Q01
+(count vs percent) and Q08 (cruise and grid keys, for Ben) gate the release.
+
+```{r}
+#| label: provider-questions
+
+questions_datatable(here(cc$questions_file),
+                    caption = "Questions for the Hopkins zooplankton data (ranked)")
+```
+
+## Validate
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("Validation:", ifelse(results$passed, "PASSED", "FAILED"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+if (length(results$warnings) > 0)
+  cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
+
+# TODO after the first render: declare each expected NULL with its count and
+# reason, reconcile against `results`, and hard-fail on anything undeclared
+# (ingest-new skill, step 11). Known by design: sample.cruise_key (every tow,
+# Q08), sample.site_key (every tow), obs.cruise_key (every row), and
+# sample.grid_key / obs.grid_key for any station outside the grid (see Spatial).
+```
+
+## Schema
+
+### What gets published — the core
+
+```{r}
+#| label: schema-core
+
+core_tbls <- core_output_tables(con, extra = "measurement_type")
+cc_erd(con, tables = core_tbls, rels = core_relationships(core_tbls),
+       colors = list(
+         lightblue   = c("sample", "obs"),
+         lightgreen  = c("sample_measurement"),
+         lightyellow = c("taxon", "dataset_taxon", "measurement_type")))
+```
+
+### How the source maps onto it
+
+```{r}
+#| label: source-to-core
+#| echo: false
+
+tribble(
+  ~source, ~`core table`, ~`core field`, ~transform,
+  "file year + Page Position + station column", "sample", "sample_key",
+    "'stanford_hopkins-zooplankton:tow:{year}-{page_position}-{station}'",
+  "Date (text), both transcriptions", "sample", "datetime",
+    "Roman-numeral date trusted first; slash dates read to match the other transcription; year from the file; midnight (no time recorded)",
+  "station 1-6", "sample", "latitude / longitude",
+    "README station coordinates",
+  "(net method)", "sample", "depth_min_m / depth_max_m", "0 / 15 m (README)",
+  "Wet settled volume (mL)", "sample_measurement", "measurement_value",
+    "measurement_type = 'settled_volume_ml'; numbers only",
+  "rows 1-24, station columns", "obs", "measurement_value",
+    "measurement_type = 'percent_volume'; consensus of the two transcriptions",
+  "rows 1-24 labels", "obs", "taxon_key / life_stage",
+    "metadata/measurement_taxon.csv",
+  "agreement + value range", "obs", "measurement_qual",
+    "unit_unclear (whole 1-5), single_transcription, or both",
+  "rows 25 + bottom (write-ins)", "(not published)", "", "Q05",
+  "trace / <1, dashes, unparsed text", "(not published)", "", "Q02, Q04",
+  "cells the transcriptions disagree on", "(not published)", "", "Q06 check list",
+  "blank taxon cells", "(not published)", "", "absence uncertain, Q03",
+  "Σ columns on the sheet", "(not published)", "", "derived on the sheet, not observed",
+  "NOTES, MISCELLANEOUS", "(not published)", "", "kept in the archived source; feeds Q01") |>
+  datatable(caption = "Source -> core mapping", rownames = FALSE,
+            options = list(dom = "t", pageLength = 50))
+```
+
+## Preview
+
+Through the core, the way a consumer reads it.
+
+```{r}
+#| label: preview
+
+dbGetQuery(con, glue("
+  SELECT s.sample_key, CAST(s.datetime AS DATE) AS date, s.latitude, s.longitude,
+         t.scientific_name, o.life_stage, o.measurement_value AS percent_volume,
+         o.measurement_qual
+  FROM obs o JOIN sample s USING (sample_key) LEFT JOIN taxon t USING (taxon_key)
+  ORDER BY s.datetime, s.sample_key, t.scientific_name
+  LIMIT 500")) |>
+  datatable(caption = "obs joined to sample and taxon (first 500)",
+            rownames = FALSE, filter = "top")
+```
+
+## Write Outputs
+
+The core and nothing else.
+
+```{r}
+#| label: write-parquet
+
+dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+parquet_stats <- write_parquet_outputs(
+  con = con, output_dir = dir_parquet, tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
+  strip_provenance = FALSE)
+
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+```{r}
+#| label: write-metadata
+
+d_tbls_rd <- read_csv(here(glue("metadata/{provider}/{dataset}/tbls_redefine.csv")))
+metadata_path <- build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = here("metadata/core_dictionary.csv"),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned)
+```
+
+```{r}
+#| label: upload-gcs
+
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet,
+              gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set — skipping the upload (local verification run)\n")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
+```

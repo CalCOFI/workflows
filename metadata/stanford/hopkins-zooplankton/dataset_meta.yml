@@ -1,30 +1,22 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: stanford
-
-# source: WS-R1 2026-09-05
-dataset: hopkins-zooplankton
-
-# source: caloos-sheet row 33, 2026-09-05
-dataset_name: CalCOFI Zooplankton Data from Monterey Bay (1955-1963) - Stanford Hopkins
-  Marine Station
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "Hopkins zooplankton (Monterey Bay)"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Zooplankton
-
-# source: caloos-sheet row 33, 2026-09-05
-status: archived
+# descriptive metadata for stanford_hopkins-zooplankton -- provider-editable
+# (Google Sheet tab `metadata`, scripts/sync_dataset_meta_sheets.R). The
+# structural keys (dataset_name, dataset_name_short, category) moved to
+# ingest_stanford_hopkins-zooplankton.qmd's calcofi.dataset_meta YAML block on
+# 2026-10-11 when this holding (WS-R1 2026-09-05, CalOOS intake) became an
+# active ingest for workflows#84; `status`/`module`/`next_step` (holdings-tracker
+# fields) were dropped for the same reason -- the pipeline stage now lives in
+# metadata/dataset_status.csv.
 
 # source: WS-R1 2026-09-05 default
 visibility: public
 
-# source: caloos-sheet row 33, 2026-09-05
-priority_caloos: Other
-
-# source: caloos-sheet row 33, 2026-09-05
-module: CalCOFI Zooplankton, Phytoplankton and Supplemental Data from Monterey Bay
-  (1955–1963), Stanford Hopkins Marine Station
+# source: SDR record https://purl.stanford.edu/nt620vn7810, checked 2026-10-11
+description: >
+  Zooplankton composition from weekly half-metre net tows at six Monterey Bay
+  stations, 1955-1963, by the Hopkins Marine Station of Stanford University for
+  CalCOFI. Each sample's wet settled volume (mL) and the visually estimated
+  percent of that volume made up by each of 24 taxa or groups, crowd-transcribed
+  twice from the original log sheets.
 
 # source: caloos-sheet row 33, 2026-09-05
 abstract: CalCOFI Zooplankton Data from Monterey Bay (1955-1963) contains transcribed
@@ -43,11 +35,23 @@ abstract: CalCOFI Zooplankton Data from Monterey Bay (1955-1963) contains transc
   1951 to 1974 Hopkins Marine Station sampling period; a separate program at Moss
   Landing Marine Laboratories continued similar sampling from 1974 to 1979.
 
-# source: caloos-sheet row 33, 2026-09-05
+# source: dataset README (readme-hms-calcofi-zooplankton.txt, 2022-08-29),
+# "Methodological information", condensed
+methods_md: >
+  At six fixed stations a half-metre net was lowered vertically to 15 m, 10 m of
+  wire recovered obliquely, and the net towed just below the surface for one
+  minute. Samples were preserved in formaldehyde. On shore the wet settled volume
+  was measured and the share of that volume made up by each listed group was
+  estimated visually (up to 100%); where five or fewer individuals of a group were
+  present, the number of individuals was recorded instead. Each log sheet was
+  transcribed twice, independently, on the FromThePage platform (58 volunteers).
+
+# source: SDR record, Creators/Contributors, checked 2026-10-11
 creators:
 - name: Amanda Whitmire
   organization: Hopkins Marine Station, Stanford University
   email: thalassa@stanford.edu
+  orcid: https://orcid.org/0000-0003-2429-8879
   role: lead
 
 # source: caloos-sheet row 33, 2026-09-05
@@ -57,15 +61,34 @@ contact: thalassa@stanford.edu
 keywords:
 - Zooplankton Biomass and Diversity
 
-# source: caloos-sheet row 33, 2026-09-05
-quality_control_md: 'QC flags present: No.'
+# source: dataset README, "quality-assurance procedures", checked 2026-10-11
+quality_control_md: >-
+  Each log sheet was transcribed twice, independently. No edits were made to the
+  transcriptions by library staff. This ingest keeps a value only where the two
+  transcriptions agree or only one transcribed it (flagged
+  `single_transcription`); cells where they disagree are withheld and listed for
+  checking against the scans.
 
 # source: caloos-sheet row 33, 2026-09-05
 maintenance: Never; archived
 
+# source: SDR record "Preferred citation", checked 2026-10-11
+citation_main: >
+  Whitmire, Amanda L. (2022). Monterey Bay zooplankton data from the Hopkins
+  Marine Station CalCOFI program (1955-1963). Stanford Digital Repository.
+  https://doi.org/10.25740/nt620vn7810
+
+# source: SDR record "License" + README "Licenses/restrictions", checked 2026-10-11
+license: CC0-1.0
+license_url: https://creativecommons.org/publicdomain/zero/1.0/
+
+# source: SDR record, checked 2026-10-11
+doi: 10.25740/nt620vn7810
+
 # source: caloos-sheet row 33, 2026-09-05
 link_data_source: https://doi.org/10.25740/nt620vn7810
 
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. Stanford Digital Repository DOI 10.25740/nt620vn7810 -- new provider stanford
+# source: dataset README "Links to other publicly accessible locations", 2026-10-11
+link_others:
+- https://searchworks.stanford.edu/view/jc935sr2551
+- https://fromthepage.com/stanfordlibraries/monterey-bay-historical-zooplankton-project/

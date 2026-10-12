@@ -1,0 +1,18 @@
+tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,file year,year,VARCHAR,INTEGER,Year of the source file pair; also used to correct a mis-transcribed year in a sheet date.,,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,Page Position,page_position,VARCHAR,INTEGER,Sheet position within the year's FromThePage work; pairs the two transcriptions.,,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,Date (text),date,VARCHAR,DATE,"Sample date. The sheets write day-first with a Roman-numeral month (10-II-55); a slash date is read day-first or month-first, whichever matches the other transcription.",,no time of day is recorded
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,date_flag,,VARCHAR,"ok, dates_differ, date_unparsed, year_from_file or out_of_sequence (see the parse lib).",,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,station column,station,VARCHAR,INTEGER,Hopkins station number 1-6 (README coordinates).,,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,Wet settled volume (mL) (text),wet_volume_ml,VARCHAR,DOUBLE,Wet settled volume of the preserved half-metre net sample.,mL,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,wet_volume_code,,VARCHAR,"number, trace, dash, no_sample, fouled, unparsed or transcriptions_differ.",,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,wet_volume_agreement,,VARCHAR,"agree, only_1, only_2, differ or both_blank between the two transcriptions.",,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,sampled,,BOOLEAN,"TRUE where a volume or any taxon was recorded; FALSE where the sheet says no sample / no haul / fouled.",,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,latitude,,DOUBLE,Station latitude from the dataset README (decimal degrees N).,degrees_north,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,longitude,,DOUBLE,Station longitude from the dataset README (decimal degrees; negative = W).,degrees_east,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_sample,,cast_depth_m,,DOUBLE,Depth of cast at the station per the README (33/53/18 m).,m,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_obs,"N Taxon (text)",taxon_label,VARCHAR,VARCHAR,Log-sheet taxon/group label (rows 1-24) or the hand-written name (rows 25 and bottom).,,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_obs,,raw_measurement_type,,VARCHAR,Snake-case of the row 1-24 label; joins metadata/measurement_taxon.csv.,,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_obs,station column,value,VARCHAR,DOUBLE,Consensus numeric value of the two transcriptions.,percent,"percent of the wet settled volume; whole numbers 1-5 may instead be counts (Q01)"
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_obs,,unit,,VARCHAR,"percent_volume or unit_unclear (whole numbers 1-5).",,
+zooplankton-data-sheets-YYYY_N.csv,hopkins_zoopl_obs,,agreement,,VARCHAR,"agree, only_1, only_2 or differ between the two transcriptions.",,
