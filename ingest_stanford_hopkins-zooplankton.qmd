@@ -249,6 +249,7 @@ Monterey Bay stations, so some or all may fall outside the grid and keep a NULL
 
 load_prior_tables(
   con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",  # public GCS copy when not staged locally
   tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
 
 add_point_geom(con, "hopkins_zoopl_sample", lon_col = "longitude", lat_col = "latitude")
