@@ -133,13 +133,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
    
   <ul class="collapse">
   <li><a href="#sec-changed" id="toc-sec-changed" class="nav-link active" data-scroll-target="#sec-changed"><span class="header-section-number">1</span> What changed</a></li>
-  <li><a href="#sec-stations-wea" id="toc-sec-stations-wea" class="nav-link" data-scroll-target="#sec-stations-wea"><span class="header-section-number">2</span> Stations with the wind areas behind them</a></li>
+  <li><a href="#sec-obs-wea" id="toc-sec-obs-wea" class="nav-link" data-scroll-target="#sec-obs-wea"><span class="header-section-number">2</span> Every cast over the wind areas, sea floor only</a></li>
   <li><a href="#sec-og-aoa" id="toc-sec-og-aoa" class="nav-link" data-scroll-target="#sec-og-aoa"><span class="header-section-number">3</span> Oil and gas areas and AOAs</a></li>
-  <li><a href="#sec-centres" id="toc-sec-centres" class="nav-link" data-scroll-target="#sec-centres"><span class="header-section-number">4</span> A dot at the centre of each cluster, over the sea floor only</a></li>
-  <li><a href="#sec-inputs" id="toc-sec-inputs" class="nav-link" data-scroll-target="#sec-inputs"><span class="header-section-number">5</span> How many stations go into a surface</a></li>
-  <li><a href="#sec-lines" id="toc-sec-lines" class="nav-link" data-scroll-target="#sec-lines"><span class="header-section-number">6</span> The lines</a></li>
-  <li><a href="#sec-diablo" id="toc-sec-diablo" class="nav-link" data-scroll-target="#sec-diablo"><span class="header-section-number">7</span> Diablo Canyon and the age of the wind data</a></li>
-  <li><a href="#sec-todo" id="toc-sec-todo" class="nav-link" data-scroll-target="#sec-todo"><span class="header-section-number">8</span> Still to do</a></li>
+  <li><a href="#sec-centres" id="toc-sec-centres" class="nav-link" data-scroll-target="#sec-centres"><span class="header-section-number">4</span> The clusters, up close</a></li>
+  <li><a href="#sec-how" id="toc-sec-how" class="nav-link" data-scroll-target="#sec-how"><span class="header-section-number">5</span> How to draw it yourself</a></li>
+  <li><a href="#sec-inputs" id="toc-sec-inputs" class="nav-link" data-scroll-target="#sec-inputs"><span class="header-section-number">6</span> How many stations go into a surface</a></li>
+  <li><a href="#sec-lines" id="toc-sec-lines" class="nav-link" data-scroll-target="#sec-lines"><span class="header-section-number">7</span> The lines</a></li>
+  <li><a href="#sec-diablo" id="toc-sec-diablo" class="nav-link" data-scroll-target="#sec-diablo"><span class="header-section-number">8</span> Diablo Canyon and the age of the wind data</a></li>
+  <li><a href="#sec-todo" id="toc-sec-todo" class="nav-link" data-scroll-target="#sec-todo"><span class="header-section-number">9</span> Still to do</a></li>
   </ul>
 </nav>
 </div>
@@ -248,124 +249,136 @@ Table&nbsp;1: The energy and industry layers in the Explorer, each a collection 
 </div>
 </figure>
 </div>
+<p>The Explorer also has a new <strong>Observations</strong> layer (<a href="#sec-how" class="quarto-xref">Section&nbsp;5</a>): every cast at its own position as a black dot, drawn with or without the data, so the maps below show the sampling over the sea floor and the boundaries with no temperature colour.</p>
 <p>Every map below is a link: it opens the same view, and everything on it (lens, layers, colours, extent) can be changed from there. The screenshots are from release v2026.10.08.</p>
 </section>
-<section id="sec-stations-wea" class="level2" data-number="2">
-<h2 data-number="2" class="anchored" data-anchor-id="sec-stations-wea"><span class="header-section-number">2</span> Stations with the wind areas behind them</h2>
-<p>The <strong>Stations</strong> lens draws one dot per CalCOFI station. In these links the boundary layers sit <em>under</em> the data in the Layers card (the order of the <em>On the map</em> rows), so the stations draw on top of the wind, oil and gas and aquaculture polygons.</p>
-<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: stations over all six layers, Point Conception to San Diego</a></p>
-<div id="fig-region" class="quarto-float quarto-figure quarto-figure-center anchored">
+<section id="sec-obs-wea" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="sec-obs-wea"><span class="header-section-number">2</span> Every cast over the wind areas, sea floor only</h2>
+<p>Each black dot is a site where temperature was sampled (a CTD or bottle cast, at its own position to 0.01°, all years, 0–500 m), over the GEBCO sea floor and the six layers, with the data layer off. The repeat occupations of a station make the clusters; the grid of clusters is the station pattern, and its diagonal rows are the lines.</p>
+<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: Point Conception to San Diego</a></p>
+<div id="fig-obs-region" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-region-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/stations_count_layers_region.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1" title="Figure&nbsp;1: CalCOFI stations, shaded by how many observations each holds, over the sea floor and the six energy and industry layers."><img src="figures/explore_stations-lines-weas/stations_count_layers_region.png" class="img-fluid figure-img"></a>
+<div aria-describedby="fig-obs-region-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/obs_region.png" class="lightbox" data-gallery="quarto-lightbox-gallery-1" title="Figure&nbsp;1: Every temperature cast as a black dot over the sea floor and the six energy and industry layers, Point Conception to San Diego."><img src="figures/explore_stations-lines-weas/obs_region.png" class="img-fluid figure-img"></a>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-region-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;1: CalCOFI stations, shaded by how many observations each holds, over the sea floor and the six energy and industry layers.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-obs-region-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: Every temperature cast as a black dot over the sea floor and the six energy and industry layers, Point Conception to San Diego.
 </figcaption>
 </figure>
 </div>
-<p>Off the Central Coast, the Morro Bay leases (purple) sit over the rescinded Morro Bay WEA (brown), with the oil and gas leases off Point Arguello and in the Santa Barbara Channel to the south. Hover a lease for its status.</p>
-<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-121.3,35.3,7.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: the Central Coast</a></p>
-<div id="fig-central" class="quarto-float quarto-figure quarto-figure-center anchored">
+<p>Off the Central Coast, the Morro Bay leases (purple) sit over the rescinded Morro Bay WEA (brown), with the oil and gas leases off Point Arguello to the south. Hover a lease for its status.</p>
+<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-121.3,35.3,7.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: the Central Coast</a></p>
+<div id="fig-obs-central" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-central-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/stations_wind_leases_central-coast.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2" title="Figure&nbsp;2: The Central Coast: the Morro Bay wind leases and the rescinded WEA beneath them, with the CalCOFI stations around them."><img src="figures/explore_stations-lines-weas/stations_wind_leases_central-coast.png" class="img-fluid figure-img"></a>
+<div aria-describedby="fig-obs-central-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/obs_central-coast.png" class="lightbox" data-gallery="quarto-lightbox-gallery-2" title="Figure&nbsp;2: The Central Coast: the Morro Bay wind leases and the rescinded WEA beneath them, with every cast around them."><img src="figures/explore_stations-lines-weas/obs_central-coast.png" class="img-fluid figure-img"></a>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-central-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2: The Central Coast: the Morro Bay wind leases and the rescinded WEA beneath them, with the CalCOFI stations around them.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-obs-central-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: The Central Coast: the Morro Bay wind leases and the rescinded WEA beneath them, with every cast around them.
 </figcaption>
 </figure>
 </div>
-<p>The Humboldt leases lie north of the CalCOFI grid, so there are no stations near them to show.</p>
+<p>The Humboldt leases lie north of the CalCOFI grid, so there are no casts near them to show.</p>
 </section>
 <section id="sec-og-aoa" class="level2" data-number="3">
 <h2 data-number="3" class="anchored" data-anchor-id="sec-og-aoa"><span class="header-section-number">3</span> Oil and gas areas and AOAs</h2>
 <p>Erin, 2026-10-05: <em>“Also do we have oil/gas &amp; AOAs too?”</em> Yes: the oil and gas leases (brown outlines), the OCS planning areas and the draft 11th Program areas, and NOAA’s aquaculture opportunity areas (the small blue squares off Ventura and Oxnard).</p>
-<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-118.6,33.55,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: Southern California Bight</a></p>
-<div id="fig-socal" class="quarto-float quarto-figure quarto-figure-center anchored">
+<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-118.6,33.55,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: Southern California Bight</a></p>
+<div id="fig-obs-socal" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-socal-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/stations_og_leases_socal.png" class="lightbox" data-gallery="quarto-lightbox-gallery-3" title="Figure&nbsp;3: The Southern California Bight: oil and gas leases in the Santa Barbara Channel and off Huntington Beach, the OCS planning areas, and the CalCOFI stations."><img src="figures/explore_stations-lines-weas/stations_og_leases_socal.png" class="img-fluid figure-img"></a>
+<div aria-describedby="fig-obs-socal-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/obs_socal.png" class="lightbox" data-gallery="quarto-lightbox-gallery-3" title="Figure&nbsp;3: The Southern California Bight: every cast over the oil and gas leases in the Santa Barbara Channel and off Huntington Beach and the OCS planning areas."><img src="figures/explore_stations-lines-weas/obs_socal.png" class="img-fluid figure-img"></a>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-socal-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;3: The Southern California Bight: oil and gas leases in the Santa Barbara Channel and off Huntington Beach, the OCS planning areas, and the CalCOFI stations.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-obs-socal-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: The Southern California Bight: every cast over the oil and gas leases in the Santa Barbara Channel and off Huntington Beach and the OCS planning areas.
 </figcaption>
 </figure>
 </div>
-<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-119.05,34.35,8.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: the aquaculture opportunity areas off Ventura</a></p>
-<div id="fig-aoa" class="quarto-float quarto-figure quarto-figure-center anchored">
+<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-119.05,34.35,8.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: the aquaculture opportunity areas off Ventura</a></p>
+<div id="fig-obs-aoa" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-aoa-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/stations_aoa_ventura.png" class="lightbox" data-gallery="quarto-lightbox-gallery-4" title="Figure&nbsp;4: NOAA’s Southern California aquaculture opportunity areas (small blue squares) between the Santa Barbara Channel oil and gas leases and Ventura."><img src="figures/explore_stations-lines-weas/stations_aoa_ventura.png" class="img-fluid figure-img"></a>
+<div aria-describedby="fig-obs-aoa-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/obs_aoa_ventura.png" class="lightbox" data-gallery="quarto-lightbox-gallery-4" title="Figure&nbsp;4: NOAA’s Southern California aquaculture opportunity areas (small blue squares) between the Santa Barbara Channel oil and gas leases and Ventura, with the casts around them."><img src="figures/explore_stations-lines-weas/obs_aoa_ventura.png" class="img-fluid figure-img"></a>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-aoa-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;4: NOAA’s Southern California aquaculture opportunity areas (small blue squares) between the Santa Barbara Channel oil and gas leases and Ventura.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-obs-aoa-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: NOAA’s Southern California aquaculture opportunity areas (small blue squares) between the Santa Barbara Channel oil and gas leases and Ventura, with the casts around them.
 </figcaption>
 </figure>
 </div>
 </section>
 <section id="sec-centres" class="level2" data-number="4">
-<h2 data-number="4" class="anchored" data-anchor-id="sec-centres"><span class="header-section-number">4</span> A dot at the centre of each cluster, over the sea floor only</h2>
-<p>Erin, 2026-10-05: <em>“is there a way to put a black dot at the ‘center’ of these clusters and just have a basemap that is the ocean floor (not temp)?”</em></p>
-<p>The clusters are the <strong>Contours</strong> lens fitted to <em>every site</em>: each cast at its own position, so the repeat occupations of one station scatter around it (<a href="#fig-clusters" class="quarto-xref">Figure&nbsp;5</a>).</p>
-<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=contour&amp;interp=krig&amp;grain=site&amp;inputs=on&amp;map=-120.55,34.15,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: Contours over every site</a></p>
-<div id="fig-clusters" class="quarto-float quarto-figure quarto-figure-center anchored">
+<h2 data-number="4" class="anchored" data-anchor-id="sec-centres"><span class="header-section-number">4</span> The clusters, up close</h2>
+<p>Erin, 2026-10-05: <em>“is there a way to put a black dot at the ‘center’ of these clusters and just have a basemap that is the ocean floor (not temp)?”</em> Closer in, each cluster resolves into the individual casts at one station: the ship’s position on each occupation.</p>
+<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-120.55,34.15,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: the Santa Barbara Channel</a></p>
+<div id="fig-obs-zoom" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-clusters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/contour_every-site_clusters.png" class="lightbox" data-gallery="quarto-lightbox-gallery-5" title="Figure&nbsp;5: The Contours lens over every site: each white pinprick is a cast at its own position, so each station is a cluster."><img src="figures/explore_stations-lines-weas/contour_every-site_clusters.png" class="img-fluid figure-img"></a>
+<div aria-describedby="fig-obs-zoom-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/obs_santa-barbara-channel.png" class="lightbox" data-gallery="quarto-lightbox-gallery-5" title="Figure&nbsp;5: The Santa Barbara Channel and Point Conception: each cluster of black dots is the casts at one station, over the sea floor and the oil and gas leases."><img src="figures/explore_stations-lines-weas/obs_santa-barbara-channel.png" class="img-fluid figure-img"></a>
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-clusters-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;5: The Contours lens over every site: each white pinprick is a cast at its own position, so each station is a cluster.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-obs-zoom-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;5: The Santa Barbara Channel and Point Conception: each cluster of black dots is the casts at one station, over the sea floor and the oil and gas leases.
 </figcaption>
 </figure>
 </div>
-<p>The centre of each cluster is the station itself, and the <strong>Stations</strong> lens is exactly that: one dot per station over the sea floor, with no temperature surface. The links in <a href="#sec-stations-wea" class="quarto-xref">Section&nbsp;2</a> and <a href="#sec-og-aoa" class="quarto-xref">Section&nbsp;3</a> colour each dot by its <strong>count of observations</strong> on a grey ramp, so the well-sampled stations are black and the rarely visited ones pale (<a href="#fig-region" class="quarto-xref">Figure&nbsp;1</a>). To get the sea floor and the boundaries with no dots at all, turn the <strong>Data</strong> row off in the Layers card:</p>
-<p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: the sea floor and the six layers only</a></p>
-<div id="fig-seafloor" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-seafloor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/seafloor_only_layers.png" class="lightbox" data-gallery="quarto-lightbox-gallery-6" title="Figure&nbsp;6: The sea floor (GEBCO 2025) and the six energy and industry layers, with the data turned off."><img src="figures/explore_stations-lines-weas/seafloor_only_layers.png" class="img-fluid figure-img"></a>
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-seafloor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;6: The sea floor (GEBCO 2025) and the six energy and industry layers, with the data turned off.
-</figcaption>
-</figure>
-</div>
-<p>Not there yet: a single plain black dot for every station, whatever its count. That option is still to be added to the Explorer.</p>
 </section>
-<section id="sec-inputs" class="level2" data-number="5">
-<h2 data-number="5" class="anchored" data-anchor-id="sec-inputs"><span class="header-section-number">5</span> How many stations go into a surface</h2>
+<section id="sec-how" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="sec-how"><span class="header-section-number">5</span> How to draw it yourself</h2>
+<p>Open <strong>Layers</strong> (top right of the map): untick <strong>Data</strong>, tick <strong>Observations</strong> and pick its colour, then add or remove boundary layers under <strong>Add a layer → Energy &amp; Industry</strong>. The dots follow the selection, so choosing another variable, an organism, years, seasons or depths changes which casts or tows are drawn. The link (Share, or the address bar) carries all of it: <code>data=off&amp;obs=on</code>.</p>
+<div id="fig-obs-card" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-obs-card-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/obs_layers_card.png" class="lightbox" data-gallery="quarto-lightbox-gallery-6" title="Figure&nbsp;6: The Layers card: Data off, Observations on in black, the sea floor in three parts and the boundary layers in draw order."><img src="figures/explore_stations-lines-weas/obs_layers_card.png" class="img-fluid figure-img"></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-obs-card-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6: The Layers card: Data off, Observations on in black, the sea floor in three parts and the boundary layers in draw order.
+</figcaption>
+</figure>
+</div>
+<p>If a single dot per station is wanted instead, the <strong>Stations</strong> lens with the data on draws one, here shaded by its count of observations (<a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">open in the Explorer</a>).</p>
+<div id="fig-stations" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-stations-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<a href="figures/explore_stations-lines-weas/stations_count_layers_region.png" class="lightbox" data-gallery="quarto-lightbox-gallery-7" title="Figure&nbsp;7: One dot per station, shaded by how many observations it holds (black = most), over the sea floor and the six layers."><img src="figures/explore_stations-lines-weas/stations_count_layers_region.png" class="img-fluid figure-img"></a>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-stations-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7: One dot per station, shaded by how many observations it holds (black = most), over the sea floor and the six layers.
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="sec-inputs" class="level2" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="sec-inputs"><span class="header-section-number">6</span> How many stations go into a surface</h2>
 <p>Erin, 2026-10-02: <em>“To be able to see how many stations are actually going into the interpolation/mean for a given summarized area.”</em></p>
-<p>In the Contours lens, fitted to the <strong>station grid</strong>, <strong>show the inputs</strong> draws every station the surface was fitted to, sized by how many observations it holds, and the checkbox gives their number (222 stations here). Under it the fit reports itself: the number of points, the leave-one-out error and the variogram. The Stations lens with <em>count of observations</em> (<a href="#fig-region" class="quarto-xref">Figure&nbsp;1</a>) gives the same at each station, and <strong>Regions</strong> gives a mean and its count inside each polygon of a boundary layer (sanctuaries, protected areas, counties; not yet the gazetteer layers above).</p>
+<p>In the Contours lens, fitted to the <strong>station grid</strong>, <strong>show the inputs</strong> draws every station the surface was fitted to, sized by how many observations it holds, and the checkbox gives their number (222 stations here). Under it the fit reports itself: the number of points, the leave-one-out error and the variogram. The Stations lens with <em>count of observations</em> (<a href="#fig-stations" class="quarto-xref">Figure&nbsp;7</a>) gives the same at each station, and <strong>Regions</strong> gives a mean and its count inside each polygon of a boundary layer (sanctuaries, protected areas, counties; not yet the gazetteer layers above).</p>
 <p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;map=-120.4,33.9,6.3&amp;lens=contour&amp;interp=krig&amp;grain=station&amp;inputs=on&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal">Open in the Explorer: Contours over the station grid, inputs shown</a></p>
 <div id="fig-inputs" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-inputs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/contour_station-grid_inputs.png" class="lightbox" data-gallery="quarto-lightbox-gallery-7" title="Figure&nbsp;7: The Contours lens over the station grid: the white dots are the stations the surface was fitted to; the Controls panel gives their number and the fit."><img src="figures/explore_stations-lines-weas/contour_station-grid_inputs.png" class="img-fluid figure-img"></a>
+<a href="figures/explore_stations-lines-weas/contour_station-grid_inputs.png" class="lightbox" data-gallery="quarto-lightbox-gallery-8" title="Figure&nbsp;8: The Contours lens over the station grid: the white dots are the stations the surface was fitted to; the Controls panel gives their number and the fit."><img src="figures/explore_stations-lines-weas/contour_station-grid_inputs.png" class="img-fluid figure-img"></a>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-inputs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;7: The Contours lens over the station grid: the white dots are the stations the surface was fitted to; the Controls panel gives their number and the fit.
+Figure&nbsp;8: The Contours lens over the station grid: the white dots are the stations the surface was fitted to; the Controls panel gives their number and the fit.
 </figcaption>
 </figure>
 </div>
 </section>
-<section id="sec-lines" class="level2" data-number="6">
-<h2 data-number="6" class="anchored" data-anchor-id="sec-lines"><span class="header-section-number">6</span> The lines</h2>
-<p>On the 2-D map the lines read as the diagonal rows of station dots (<a href="#fig-region" class="quarto-xref">Figure&nbsp;1</a>), but they are not labelled there yet. The <strong>Sections</strong> lens in <strong>3-D</strong> draws the whole station pattern at the sea surface, each line threaded and named at both ends, and every station numbered.</p>
+<section id="sec-lines" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="sec-lines"><span class="header-section-number">7</span> The lines</h2>
+<p>On the 2-D map the lines read as the diagonal rows of clusters (<a href="#fig-obs-region" class="quarto-xref">Figure&nbsp;1</a>), but they are not labelled there yet. The <strong>Sections</strong> lens in <strong>3-D</strong> draws the whole station pattern at the sea surface, each line threaded and named at both ends, and every station numbered.</p>
 <p><a href="https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=section&amp;line=80&amp;view=3d">Open in the Explorer: line 80 in 3-D</a></p>
 <div id="fig-lines" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-lines-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<a href="figures/explore_stations-lines-weas/section_3d_lines.png" class="lightbox" data-gallery="quarto-lightbox-gallery-8" title="Figure&nbsp;8: The Sections lens in 3-D: a temperature section along line 80 hanging over the GEBCO sea floor, with every line of the station pattern threaded and labelled at the surface."><img src="figures/explore_stations-lines-weas/section_3d_lines.png" class="img-fluid figure-img"></a>
+<a href="figures/explore_stations-lines-weas/section_3d_lines.png" class="lightbox" data-gallery="quarto-lightbox-gallery-9" title="Figure&nbsp;9: The Sections lens in 3-D: a temperature section along line 80 hanging over the GEBCO sea floor, with every line of the station pattern threaded and labelled at the surface."><img src="figures/explore_stations-lines-weas/section_3d_lines.png" class="img-fluid figure-img"></a>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-lines-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;8: The Sections lens in 3-D: a temperature section along line 80 hanging over the GEBCO sea floor, with every line of the station pattern threaded and labelled at the surface.
+Figure&nbsp;9: The Sections lens in 3-D: a temperature section along line 80 hanging over the GEBCO sea floor, with every line of the station pattern threaded and labelled at the surface.
 </figcaption>
 </figure>
 </div>
 </section>
-<section id="sec-diablo" class="level2" data-number="7">
-<h2 data-number="7" class="anchored" data-anchor-id="sec-diablo"><span class="header-section-number">7</span> Diablo Canyon and the age of the wind data</h2>
+<section id="sec-diablo" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="sec-diablo"><span class="header-section-number">8</span> Diablo Canyon and the age of the wind data</h2>
 <p>Erin, 2026-10-05: <em>“I think that the Diablo canyon area is no longer a thing right? Just verifying that the WEA dataset is a recent one.”</em> Answered by email on 2026-10-08:</p>
 <ul>
 <li>Diablo Canyon was only a 2018 call area. It was never designated a WEA or leased, and it is in none of BOEM’s current layers.</li>
@@ -375,11 +388,10 @@ Figure&nbsp;8: The Sections lens in 3-D: a temperature section along line 80 han
 </ul>
 <p>The gazetteer re-checks its sources weekly and records when each layer was retrieved (<a href="#tbl-layers" class="quarto-xref">Table&nbsp;1</a>).</p>
 </section>
-<section id="sec-todo" class="level2" data-number="8">
-<h2 data-number="8" class="anchored" data-anchor-id="sec-todo"><span class="header-section-number">8</span> Still to do</h2>
+<section id="sec-todo" class="level2" data-number="9">
+<h2 data-number="9" class="anchored" data-anchor-id="sec-todo"><span class="header-section-number">9</span> Still to do</h2>
 <ul>
-<li>A plain black dot for every station, whatever its count (<a href="#sec-centres" class="quarto-xref">Section&nbsp;4</a>).</li>
-<li>The lines labelled on the 2-D map (<a href="#sec-lines" class="quarto-xref">Section&nbsp;6</a>).</li>
+<li>The lines labelled on the 2-D map (<a href="#sec-lines" class="quarto-xref">Section&nbsp;7</a>).</li>
 </ul>
 <!-- -->
 
@@ -874,124 +886,120 @@ Figure&nbsp;8: The Sections lens in 3-D: a temperature section along line 80 han
 <span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>: The energy and industry layers in the Explorer, each a collection of the gazetteer with its own</span>
 <span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>licence, attribution and provenance in its README. {#tbl-layers}</span>
 <span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>Every map below is a link: it opens the same view, and everything on it (lens, layers, colours,</span>
-<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>extent) can be changed from there. The screenshots are from release v2026.10.08.</span>
-<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a><span class="fu">## Stations with the wind areas behind them {#sec-stations-wea}</span></span>
-<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>The **Stations** lens draws one dot per CalCOFI station. In these links the boundary layers sit</span>
-<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>*under* the data in the Layers card (the order of the *On the map* rows), so the stations draw on</span>
-<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>top of the wind, oil and gas and aquaculture polygons.</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>The Explorer also has a new **Observations** layer (@sec-how): every cast at its own position as</span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>a black dot, drawn with or without the data, so the maps below show the sampling over the sea floor</span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>and the boundaries with no temperature colour.</span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>Every map below is a link: it opens the same view, and everything on it (lens, layers, colours,</span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>extent) can be changed from there. The screenshots are from release v2026.10.08.</span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a><span class="fu">## Every cast over the wind areas, sea floor only {#sec-obs-wea}</span></span>
 <span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: stations over all six layers, Point Conception to San</span>
-<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>Diego](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
-<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a><span class="al">![CalCOFI stations, shaded by how many observations each holds, over the sea floor and the six energy and industry layers.](figures/explore_stations-lines-weas/stations_count_layers_region.png)</span>{#fig-region}</span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>Each black dot is a site where temperature was sampled (a CTD or bottle cast, at its own position to</span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>0.01°, all years, 0–500 m), over the GEBCO sea floor and the six layers, with the data layer off. The</span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>repeat occupations of a station make the clusters; the grid of clusters is the station pattern, and</span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>its diagonal rows are the lines.</span>
 <span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>Off the Central Coast, the Morro Bay leases (purple) sit over the rescinded Morro Bay WEA</span>
-<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>(brown), with the oil and gas leases off Point Arguello and in the Santa Barbara Channel to the</span>
-<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>south. Hover a lease for its status.</span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Open in the Explorer: Point Conception to San Diego</span><span class="co">](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a><span class="al">![Every temperature cast as a black dot over the sea floor and the six energy and industry layers, Point Conception to San Diego.](figures/explore_stations-lines-weas/obs_region.png)</span>{#fig-obs-region}</span>
 <span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: the Central</span>
-<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>Coast](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-121.3,35.3,7.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
+<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>Off the Central Coast, the Morro Bay leases (purple) sit over the rescinded Morro Bay WEA (brown),</span>
+<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>with the oil and gas leases off Point Arguello to the south. Hover a lease for its status.</span>
 <span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a><span class="al">![The Central Coast: the Morro Bay wind leases and the rescinded WEA beneath them, with the CalCOFI stations around them.](figures/explore_stations-lines-weas/stations_wind_leases_central-coast.png)</span>{#fig-central}</span>
+<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Open in the Explorer: the Central Coast</span><span class="co">](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-121.3,35.3,7.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span></span>
 <span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>The Humboldt leases lie north of the CalCOFI grid, so there are no stations near them to show.</span>
+<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a><span class="al">![The Central Coast: the Morro Bay wind leases and the rescinded WEA beneath them, with every cast around them.](figures/explore_stations-lines-weas/obs_central-coast.png)</span>{#fig-obs-central}</span>
 <span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a><span class="fu">## Oil and gas areas and AOAs {#sec-og-aoa}</span></span>
+<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>The Humboldt leases lie north of the CalCOFI grid, so there are no casts near them to show.</span>
 <span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-05: *"Also do we have oil/gas &amp; AOAs too?"* Yes: the oil and gas leases (brown</span>
-<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a>outlines), the OCS planning areas and the draft 11th Program areas, and NOAA's aquaculture</span>
-<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>opportunity areas (the small blue squares off Ventura and Oxnard).</span>
-<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: Southern California</span>
-<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a>Bight](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-118.6,33.55,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
-<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a><span class="al">![The Southern California Bight: oil and gas leases in the Santa Barbara Channel and off Huntington Beach, the OCS planning areas, and the CalCOFI stations.](figures/explore_stations-lines-weas/stations_og_leases_socal.png)</span>{#fig-socal}</span>
-<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: the aquaculture opportunity areas off</span>
-<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a>Ventura](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-119.05,34.35,8.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
+<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a><span class="fu">## Oil and gas areas and AOAs {#sec-og-aoa}</span></span>
+<span id="cb1-65"><a href="#cb1-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-66"><a href="#cb1-66" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-05: *"Also do we have oil/gas &amp; AOAs too?"* Yes: the oil and gas leases (brown</span>
+<span id="cb1-67"><a href="#cb1-67" aria-hidden="true" tabindex="-1"></a>outlines), the OCS planning areas and the draft 11th Program areas, and NOAA's aquaculture</span>
+<span id="cb1-68"><a href="#cb1-68" aria-hidden="true" tabindex="-1"></a>opportunity areas (the small blue squares off Ventura and Oxnard).</span>
+<span id="cb1-69"><a href="#cb1-69" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-70"><a href="#cb1-70" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Open in the Explorer: Southern California Bight</span><span class="co">](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-118.6,33.55,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span></span>
+<span id="cb1-71"><a href="#cb1-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-72"><a href="#cb1-72" aria-hidden="true" tabindex="-1"></a><span class="al">![The Southern California Bight: every cast over the oil and gas leases in the Santa Barbara Channel and off Huntington Beach and the OCS planning areas.](figures/explore_stations-lines-weas/obs_socal.png)</span>{#fig-obs-socal}</span>
+<span id="cb1-73"><a href="#cb1-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-74"><a href="#cb1-74" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Open in the Explorer: the aquaculture opportunity areas off Ventura</span><span class="co">](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-119.05,34.35,8.7&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span></span>
 <span id="cb1-75"><a href="#cb1-75" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a><span class="al">![NOAA's Southern California aquaculture opportunity areas (small blue squares) between the Santa Barbara Channel oil and gas leases and Ventura.](figures/explore_stations-lines-weas/stations_aoa_ventura.png)</span>{#fig-aoa}</span>
+<span id="cb1-76"><a href="#cb1-76" aria-hidden="true" tabindex="-1"></a><span class="al">![NOAA's Southern California aquaculture opportunity areas (small blue squares) between the Santa Barbara Channel oil and gas leases and Ventura, with the casts around them.](figures/explore_stations-lines-weas/obs_aoa_ventura.png)</span>{#fig-obs-aoa}</span>
 <span id="cb1-77"><a href="#cb1-77" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a><span class="fu">## A dot at the centre of each cluster, over the sea floor only {#sec-centres}</span></span>
+<span id="cb1-78"><a href="#cb1-78" aria-hidden="true" tabindex="-1"></a><span class="fu">## The clusters, up close {#sec-centres}</span></span>
 <span id="cb1-79"><a href="#cb1-79" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-80"><a href="#cb1-80" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-05: *"is there a way to put a black dot at the 'center' of these clusters and just</span>
-<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>have a basemap that is the ocean floor (not temp)?"*</span>
-<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a>The clusters are the **Contours** lens fitted to *every site*: each cast at its own position, so</span>
-<span id="cb1-84"><a href="#cb1-84" aria-hidden="true" tabindex="-1"></a>the repeat occupations of one station scatter around it (@fig-clusters).</span>
+<span id="cb1-81"><a href="#cb1-81" aria-hidden="true" tabindex="-1"></a>have a basemap that is the ocean floor (not temp)?"* Closer in, each cluster resolves into the</span>
+<span id="cb1-82"><a href="#cb1-82" aria-hidden="true" tabindex="-1"></a>individual casts at one station: the ship's position on each occupation.</span>
+<span id="cb1-83"><a href="#cb1-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-84"><a href="#cb1-84" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Open in the Explorer: the Santa Barbara Channel</span><span class="co">](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;obs=on&amp;map=-120.55,34.15,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span></span>
 <span id="cb1-85"><a href="#cb1-85" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-86"><a href="#cb1-86" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: Contours over every</span>
-<span id="cb1-87"><a href="#cb1-87" aria-hidden="true" tabindex="-1"></a>site](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=contour&amp;interp=krig&amp;grain=site&amp;inputs=on&amp;map=-120.55,34.15,7.9&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
-<span id="cb1-88"><a href="#cb1-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-89"><a href="#cb1-89" aria-hidden="true" tabindex="-1"></a><span class="al">![The Contours lens over every site: each white pinprick is a cast at its own position, so each station is a cluster.](figures/explore_stations-lines-weas/contour_every-site_clusters.png)</span>{#fig-clusters}</span>
-<span id="cb1-90"><a href="#cb1-90" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>The centre of each cluster is the station itself, and the **Stations** lens is exactly that: one</span>
-<span id="cb1-92"><a href="#cb1-92" aria-hidden="true" tabindex="-1"></a>dot per station over the sea floor, with no temperature surface. The links in</span>
-<span id="cb1-93"><a href="#cb1-93" aria-hidden="true" tabindex="-1"></a>@sec-stations-wea and @sec-og-aoa colour each dot by its **count of observations** on a grey ramp,</span>
-<span id="cb1-94"><a href="#cb1-94" aria-hidden="true" tabindex="-1"></a>so the well-sampled stations are black and the rarely visited ones pale (@fig-region). To get the</span>
-<span id="cb1-95"><a href="#cb1-95" aria-hidden="true" tabindex="-1"></a>sea floor and the boundaries with no dots at all, turn the **Data** row off in the Layers card:</span>
+<span id="cb1-86"><a href="#cb1-86" aria-hidden="true" tabindex="-1"></a><span class="al">![The Santa Barbara Channel and Point Conception: each cluster of black dots is the casts at one station, over the sea floor and the oil and gas leases.](figures/explore_stations-lines-weas/obs_santa-barbara-channel.png)</span>{#fig-obs-zoom}</span>
+<span id="cb1-87"><a href="#cb1-87" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-88"><a href="#cb1-88" aria-hidden="true" tabindex="-1"></a><span class="fu">## How to draw it yourself {#sec-how}</span></span>
+<span id="cb1-89"><a href="#cb1-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-90"><a href="#cb1-90" aria-hidden="true" tabindex="-1"></a>Open **Layers** (top right of the map): untick **Data**, tick **Observations** and pick its colour,</span>
+<span id="cb1-91"><a href="#cb1-91" aria-hidden="true" tabindex="-1"></a>then add or remove boundary layers under **Add a layer → Energy &amp; Industry**. The dots follow the</span>
+<span id="cb1-92"><a href="#cb1-92" aria-hidden="true" tabindex="-1"></a>selection, so choosing another variable, an organism, years, seasons or depths changes which casts</span>
+<span id="cb1-93"><a href="#cb1-93" aria-hidden="true" tabindex="-1"></a>or tows are drawn. The link (Share, or the address bar) carries all of it: <span class="in">`data=off&amp;obs=on`</span>.</span>
+<span id="cb1-94"><a href="#cb1-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-95"><a href="#cb1-95" aria-hidden="true" tabindex="-1"></a><span class="al">![The Layers card: Data off, Observations on in black, the sea floor in three parts and the boundary layers in draw order.](figures/explore_stations-lines-weas/obs_layers_card.png)</span>{#fig-obs-card}</span>
 <span id="cb1-96"><a href="#cb1-96" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-97"><a href="#cb1-97" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: the sea floor and the six layers</span>
-<span id="cb1-98"><a href="#cb1-98" aria-hidden="true" tabindex="-1"></a>only](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;data=off&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
+<span id="cb1-97"><a href="#cb1-97" aria-hidden="true" tabindex="-1"></a>If a single dot per station is wanted instead, the **Stations** lens with the data on draws one,</span>
+<span id="cb1-98"><a href="#cb1-98" aria-hidden="true" tabindex="-1"></a>here shaded by its count of observations (<span class="co">[</span><span class="ot">open in the Explorer</span><span class="co">](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=station&amp;stat=n&amp;ramp=gray_r&amp;map=-120.2,34.1,6.45&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>).</span>
 <span id="cb1-99"><a href="#cb1-99" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-100"><a href="#cb1-100" aria-hidden="true" tabindex="-1"></a><span class="al">![The sea floor (GEBCO 2025) and the six energy and industry layers, with the data turned off.](figures/explore_stations-lines-weas/seafloor_only_layers.png)</span>{#fig-seafloor}</span>
+<span id="cb1-100"><a href="#cb1-100" aria-hidden="true" tabindex="-1"></a><span class="al">![One dot per station, shaded by how many observations it holds (black = most), over the sea floor and the six layers.](figures/explore_stations-lines-weas/stations_count_layers_region.png)</span>{#fig-stations}</span>
 <span id="cb1-101"><a href="#cb1-101" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-102"><a href="#cb1-102" aria-hidden="true" tabindex="-1"></a>Not there yet: a single plain black dot for every station, whatever its count. That option is</span>
-<span id="cb1-103"><a href="#cb1-103" aria-hidden="true" tabindex="-1"></a>still to be added to the Explorer.</span>
-<span id="cb1-104"><a href="#cb1-104" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-105"><a href="#cb1-105" aria-hidden="true" tabindex="-1"></a><span class="fu">## How many stations go into a surface {#sec-inputs}</span></span>
+<span id="cb1-102"><a href="#cb1-102" aria-hidden="true" tabindex="-1"></a><span class="fu">## How many stations go into a surface {#sec-inputs}</span></span>
+<span id="cb1-103"><a href="#cb1-103" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-104"><a href="#cb1-104" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-02: *"To be able to see how many stations are actually going into the</span>
+<span id="cb1-105"><a href="#cb1-105" aria-hidden="true" tabindex="-1"></a>interpolation/mean for a given summarized area."*</span>
 <span id="cb1-106"><a href="#cb1-106" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-107"><a href="#cb1-107" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-02: *"To be able to see how many stations are actually going into the</span>
-<span id="cb1-108"><a href="#cb1-108" aria-hidden="true" tabindex="-1"></a>interpolation/mean for a given summarized area."*</span>
-<span id="cb1-109"><a href="#cb1-109" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-110"><a href="#cb1-110" aria-hidden="true" tabindex="-1"></a>In the Contours lens, fitted to the **station grid**, **show the inputs** draws every station the</span>
-<span id="cb1-111"><a href="#cb1-111" aria-hidden="true" tabindex="-1"></a>surface was fitted to, sized by how many observations it holds, and the checkbox gives their</span>
-<span id="cb1-112"><a href="#cb1-112" aria-hidden="true" tabindex="-1"></a>number (222 stations here). Under it the fit reports itself: the number of points, the</span>
-<span id="cb1-113"><a href="#cb1-113" aria-hidden="true" tabindex="-1"></a>leave-one-out error and the variogram. The Stations lens with *count of observations* (@fig-region)</span>
-<span id="cb1-114"><a href="#cb1-114" aria-hidden="true" tabindex="-1"></a>gives the same at each station, and **Regions** gives a mean and its count inside each polygon of a</span>
-<span id="cb1-115"><a href="#cb1-115" aria-hidden="true" tabindex="-1"></a>boundary layer (sanctuaries, protected areas, counties; not yet the gazetteer layers above).</span>
+<span id="cb1-107"><a href="#cb1-107" aria-hidden="true" tabindex="-1"></a>In the Contours lens, fitted to the **station grid**, **show the inputs** draws every station the</span>
+<span id="cb1-108"><a href="#cb1-108" aria-hidden="true" tabindex="-1"></a>surface was fitted to, sized by how many observations it holds, and the checkbox gives their</span>
+<span id="cb1-109"><a href="#cb1-109" aria-hidden="true" tabindex="-1"></a>number (222 stations here). Under it the fit reports itself: the number of points, the</span>
+<span id="cb1-110"><a href="#cb1-110" aria-hidden="true" tabindex="-1"></a>leave-one-out error and the variogram. The Stations lens with *count of observations* (@fig-stations)</span>
+<span id="cb1-111"><a href="#cb1-111" aria-hidden="true" tabindex="-1"></a>gives the same at each station, and **Regions** gives a mean and its count inside each polygon of a</span>
+<span id="cb1-112"><a href="#cb1-112" aria-hidden="true" tabindex="-1"></a>boundary layer (sanctuaries, protected areas, counties; not yet the gazetteer layers above).</span>
+<span id="cb1-113"><a href="#cb1-113" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-114"><a href="#cb1-114" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: Contours over the station grid, inputs</span>
+<span id="cb1-115"><a href="#cb1-115" aria-hidden="true" tabindex="-1"></a>shown](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;map=-120.4,33.9,6.3&amp;lens=contour&amp;interp=krig&amp;grain=station&amp;inputs=on&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
 <span id="cb1-116"><a href="#cb1-116" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-117"><a href="#cb1-117" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: Contours over the station grid, inputs</span>
-<span id="cb1-118"><a href="#cb1-118" aria-hidden="true" tabindex="-1"></a>shown](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;map=-120.4,33.9,6.3&amp;lens=contour&amp;interp=krig&amp;grain=station&amp;inputs=on&amp;layers=gebco_gazetteer,data,boem_wind_planning,boem_wind_planning_rescinded,boem_ocs_planning,boem_program_11_draft,boem_pacific_og_leases,noaa_aoa_socal)</span>
-<span id="cb1-119"><a href="#cb1-119" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-120"><a href="#cb1-120" aria-hidden="true" tabindex="-1"></a><span class="al">![The Contours lens over the station grid: the white dots are the stations the surface was fitted to; the Controls panel gives their number and the fit.](figures/explore_stations-lines-weas/contour_station-grid_inputs.png)</span>{#fig-inputs}</span>
-<span id="cb1-121"><a href="#cb1-121" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-122"><a href="#cb1-122" aria-hidden="true" tabindex="-1"></a><span class="fu">## The lines {#sec-lines}</span></span>
-<span id="cb1-123"><a href="#cb1-123" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-124"><a href="#cb1-124" aria-hidden="true" tabindex="-1"></a>On the 2-D map the lines read as the diagonal rows of station dots (@fig-region), but they are not</span>
-<span id="cb1-125"><a href="#cb1-125" aria-hidden="true" tabindex="-1"></a>labelled there yet. The **Sections** lens in **3-D** draws the whole station pattern at the sea</span>
-<span id="cb1-126"><a href="#cb1-126" aria-hidden="true" tabindex="-1"></a>surface, each line threaded and named at both ends, and every station numbered.</span>
+<span id="cb1-117"><a href="#cb1-117" aria-hidden="true" tabindex="-1"></a><span class="al">![The Contours lens over the station grid: the white dots are the stations the surface was fitted to; the Controls panel gives their number and the fit.](figures/explore_stations-lines-weas/contour_station-grid_inputs.png)</span>{#fig-inputs}</span>
+<span id="cb1-118"><a href="#cb1-118" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-119"><a href="#cb1-119" aria-hidden="true" tabindex="-1"></a><span class="fu">## The lines {#sec-lines}</span></span>
+<span id="cb1-120"><a href="#cb1-120" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-121"><a href="#cb1-121" aria-hidden="true" tabindex="-1"></a>On the 2-D map the lines read as the diagonal rows of clusters (@fig-obs-region), but they are not</span>
+<span id="cb1-122"><a href="#cb1-122" aria-hidden="true" tabindex="-1"></a>labelled there yet. The **Sections** lens in **3-D** draws the whole station pattern at the sea</span>
+<span id="cb1-123"><a href="#cb1-123" aria-hidden="true" tabindex="-1"></a>surface, each line threaded and named at both ends, and every station numbered.</span>
+<span id="cb1-124"><a href="#cb1-124" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-125"><a href="#cb1-125" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: line 80 in</span>
+<span id="cb1-126"><a href="#cb1-126" aria-hidden="true" tabindex="-1"></a>3-D](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=section&amp;line=80&amp;view=3d)</span>
 <span id="cb1-127"><a href="#cb1-127" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-128"><a href="#cb1-128" aria-hidden="true" tabindex="-1"></a>[Open in the Explorer: line 80 in</span>
-<span id="cb1-129"><a href="#cb1-129" aria-hidden="true" tabindex="-1"></a>3-D](https://calcofi.io/explore/?tour=off&amp;var=temperature&amp;hide=select,years&amp;lens=section&amp;line=80&amp;view=3d)</span>
-<span id="cb1-130"><a href="#cb1-130" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-131"><a href="#cb1-131" aria-hidden="true" tabindex="-1"></a><span class="al">![The Sections lens in 3-D: a temperature section along line 80 hanging over the GEBCO sea floor, with every line of the station pattern threaded and labelled at the surface.](figures/explore_stations-lines-weas/section_3d_lines.png)</span>{#fig-lines}</span>
-<span id="cb1-132"><a href="#cb1-132" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-133"><a href="#cb1-133" aria-hidden="true" tabindex="-1"></a><span class="fu">## Diablo Canyon and the age of the wind data {#sec-diablo}</span></span>
+<span id="cb1-128"><a href="#cb1-128" aria-hidden="true" tabindex="-1"></a><span class="al">![The Sections lens in 3-D: a temperature section along line 80 hanging over the GEBCO sea floor, with every line of the station pattern threaded and labelled at the surface.](figures/explore_stations-lines-weas/section_3d_lines.png)</span>{#fig-lines}</span>
+<span id="cb1-129"><a href="#cb1-129" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-130"><a href="#cb1-130" aria-hidden="true" tabindex="-1"></a><span class="fu">## Diablo Canyon and the age of the wind data {#sec-diablo}</span></span>
+<span id="cb1-131"><a href="#cb1-131" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-132"><a href="#cb1-132" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-05: *"I think that the Diablo canyon area is no longer a thing right? Just verifying</span>
+<span id="cb1-133"><a href="#cb1-133" aria-hidden="true" tabindex="-1"></a>that the WEA dataset is a recent one."* Answered by email on 2026-10-08:</span>
 <span id="cb1-134"><a href="#cb1-134" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-135"><a href="#cb1-135" aria-hidden="true" tabindex="-1"></a>Erin, 2026-10-05: *"I think that the Diablo canyon area is no longer a thing right? Just verifying</span>
-<span id="cb1-136"><a href="#cb1-136" aria-hidden="true" tabindex="-1"></a>that the WEA dataset is a recent one."* Answered by email on 2026-10-08:</span>
-<span id="cb1-137"><a href="#cb1-137" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-138"><a href="#cb1-138" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Diablo Canyon was only a 2018 call area. It was never designated a WEA or leased, and it is in</span>
-<span id="cb1-139"><a href="#cb1-139" aria-hidden="true" tabindex="-1"></a>  none of BOEM's current layers.</span>
-<span id="cb1-140"><a href="#cb1-140" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>BOEM rescinded all designated WEAs, including Humboldt and Morro Bay, on 30 July 2025. They are</span>
-<span id="cb1-141"><a href="#cb1-141" aria-hidden="true" tabindex="-1"></a>  the *rescinded* history layer (@tbl-layers).</span>
-<span id="cb1-142"><a href="#cb1-142" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The five California leases from the December 2022 auction are still drawn, each with its status</span>
-<span id="cb1-143"><a href="#cb1-143" aria-hidden="true" tabindex="-1"></a>  from BOEM's California page in the popup (cancelled, relinquished, under settlement or</span>
-<span id="cb1-144"><a href="#cb1-144" aria-hidden="true" tabindex="-1"></a>  unchanged).</span>
-<span id="cb1-145"><a href="#cb1-145" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The <span class="co">[</span><span class="ot">Data Basin layer</span><span class="co">](https://caoffshorewind.databasin.org/maps/new/#datasets=ec0cd811194540258fa203af171531f4)</span></span>
-<span id="cb1-146"><a href="#cb1-146" aria-hidden="true" tabindex="-1"></a>  is a 2022 snapshot of the proposed, pre-auction lease areas, so it is not used.</span>
+<span id="cb1-135"><a href="#cb1-135" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Diablo Canyon was only a 2018 call area. It was never designated a WEA or leased, and it is in</span>
+<span id="cb1-136"><a href="#cb1-136" aria-hidden="true" tabindex="-1"></a>  none of BOEM's current layers.</span>
+<span id="cb1-137"><a href="#cb1-137" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>BOEM rescinded all designated WEAs, including Humboldt and Morro Bay, on 30 July 2025. They are</span>
+<span id="cb1-138"><a href="#cb1-138" aria-hidden="true" tabindex="-1"></a>  the *rescinded* history layer (@tbl-layers).</span>
+<span id="cb1-139"><a href="#cb1-139" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The five California leases from the December 2022 auction are still drawn, each with its status</span>
+<span id="cb1-140"><a href="#cb1-140" aria-hidden="true" tabindex="-1"></a>  from BOEM's California page in the popup (cancelled, relinquished, under settlement or</span>
+<span id="cb1-141"><a href="#cb1-141" aria-hidden="true" tabindex="-1"></a>  unchanged).</span>
+<span id="cb1-142"><a href="#cb1-142" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The <span class="co">[</span><span class="ot">Data Basin layer</span><span class="co">](https://caoffshorewind.databasin.org/maps/new/#datasets=ec0cd811194540258fa203af171531f4)</span></span>
+<span id="cb1-143"><a href="#cb1-143" aria-hidden="true" tabindex="-1"></a>  is a 2022 snapshot of the proposed, pre-auction lease areas, so it is not used.</span>
+<span id="cb1-144"><a href="#cb1-144" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-145"><a href="#cb1-145" aria-hidden="true" tabindex="-1"></a>The gazetteer re-checks its sources weekly and records when each layer was retrieved</span>
+<span id="cb1-146"><a href="#cb1-146" aria-hidden="true" tabindex="-1"></a>(@tbl-layers).</span>
 <span id="cb1-147"><a href="#cb1-147" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-148"><a href="#cb1-148" aria-hidden="true" tabindex="-1"></a>The gazetteer re-checks its sources weekly and records when each layer was retrieved</span>
-<span id="cb1-149"><a href="#cb1-149" aria-hidden="true" tabindex="-1"></a>(@tbl-layers).</span>
-<span id="cb1-150"><a href="#cb1-150" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-151"><a href="#cb1-151" aria-hidden="true" tabindex="-1"></a><span class="fu">## Still to do {#sec-todo}</span></span>
-<span id="cb1-152"><a href="#cb1-152" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-153"><a href="#cb1-153" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>A plain black dot for every station, whatever its count (@sec-centres).</span>
-<span id="cb1-154"><a href="#cb1-154" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The lines labelled on the 2-D map (@sec-lines).</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+<span id="cb1-148"><a href="#cb1-148" aria-hidden="true" tabindex="-1"></a><span class="fu">## Still to do {#sec-todo}</span></span>
+<span id="cb1-149"><a href="#cb1-149" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-150"><a href="#cb1-150" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The lines labelled on the 2-D map (@sec-lines).</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
 <script>var lightboxQuarto = GLightbox({"closeEffect":"zoom","descPosition":"bottom","loop":false,"openEffect":"zoom","selector":".lightbox"});
