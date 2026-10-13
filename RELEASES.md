@@ -72,7 +72,9 @@ band from 12 to 24 NM. All three are named `Pacific Coast`.
 occupied the same day. The track was the ichthyoplankton tows alone, so the two surveys on cruises
 without a tow, `CAC2021_7` (`2021-07-33P4`) and `CAC2022_8` (`2022-08-39C2`), had a NULL
 `cruise_key` (workflows#74). The track now includes the CTD casts. `Fronts_0711`, a CCE-LTER process
-cruise with no CalCOFI cruise, stays NULL.
+cruise with no CalCOFI cruise, stays NULL. `CAC2021_7`'s 466 transects carry no observations in the
+source (question Q11, also open for January 2021 and October 2022), so 2021-07-33P4 is a third
+farallon cruise with effort and no sightings.
 
 # v2026.10.08
 
