@@ -5021,13 +5021,19 @@ if (!parquet_complete) {
 # over an unchanged directory is a listing and no bytes. Paying that on every
 # render is far cheaper than a silently stale mirror, and it makes the upload
 # idempotent — safe to re-run after any failure.
-sync_to_gcs(
-  local_dir    = dir_stage,
-  sidecar_dir  = dir_parquet,
-  gcs_prefix   = glue("ingest/{dir_label}"),
-  bucket       = "calcofi-db",
-  delete_stale = TRUE
-)
+#
+# CALCOFI_SKIP_GCS (as in ingest_calcofi_ctd-derived): a dry run into a private
+# CALCOFI_STAGE_DIR, diffed against the release before it is staged for real, must
+# not reach the world-readable mirror first
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(
+    local_dir    = dir_stage,
+    sidecar_dir  = dir_parquet,
+    gcs_prefix   = glue("ingest/{dir_label}"),
+    bucket       = "calcofi-db",
+    delete_stale = TRUE
+  )
+} else cat("CALCOFI_SKIP_GCS set — skipping the upload (local verification run)\n")
 ```
 
 ## Findings {#findings}
