@@ -5,6 +5,7 @@ calcofi:
   workflow_type: ingest
   dependency:
     - ingest_swfsc_ichthyo
+    - ingest_calcofi_ctd_cast
   output: data/parquet/farallon_bird-mammal/manifest.json
   provider: farallon
   dataset: bird-mammal
@@ -356,11 +357,12 @@ track. `match_cruise_by_track()` matches every transect to the nearest station
 occupied the same day, then takes the **majority vote per survey label** — one
 label is one cruise — and applies the winner to all of that label's transects.
 
-The reference track is the `swfsc_ichthyo` sample shard (already this notebook's
-declared dependency). That choice matters for referential integrity: its
-`cruise_key`s are exactly the `cruise` reference table's, so every key emitted
-here resolves. Tracks assembled from other shards include cruises absent from
-`cruise` (e.g. `2021-07-33P4`), which would ship a dangling FK.
+The reference track is the `swfsc_ichthyo` **and** `calcofi_ctd-cast` sample
+shards (both declared dependencies). The CTD casts cover cruises with no ichthyo
+tow, such as `2021-07-33P4` and `2022-08-39C2`, which the ichthyo track alone
+left unresolved (workflows#74). Those keys are not in the ichthyo `cruise`
+shard, but they do not dangle: the release's `complete_cruise_reference()` adds
+every cruise a released dataset references, and CTD references both.
 
 ```{r}
 #| label: spatial-cruise
@@ -373,10 +375,14 @@ assign_grid_key(con, "bird_mammal_transect") |> datatable(caption = "Grid assign
 
 # cruise track: one row per (cruise, day, station position); the match below
 # is on datetime_start_utc now that ERDDAP's `time` is a UTC timestamp (Q01).
+# ichthyo tows + CTD casts: the casts carry the cruises with no tow (workflows#74)
 dbExecute(con, glue(
   "CREATE OR REPLACE VIEW cruise_track AS
    SELECT DISTINCT cruise_key, datetime, latitude, longitude
-   FROM read_parquet('{cc_stage_path('parquet','swfsc_ichthyo','sample.parquet')}')
+   FROM read_parquet([
+     '{cc_stage_path('parquet','swfsc_ichthyo','sample.parquet')}',
+     '{cc_stage_path('parquet','calcofi_ctd-cast','sample.parquet')}'],
+     union_by_name = true)
    WHERE cruise_key IS NOT NULL AND datetime IS NOT NULL"))
 
 # CHANGED: matched on datetime_start_utc, not date-only -- the old date-only
@@ -434,22 +440,14 @@ cat(glue(
   "{paste(grp$cruise_label[is.na(grp$cruise_key)], collapse=', ')}"), "\n")
 ```
 
-The unresolved labels are correct as NULL, not gaps to be filled:
+The unresolved label is correct as NULL, not a gap to be filled:
 
 - **`Fronts_0711`** (2011-06-21 → 07-16) is a CCE-LTER *Fronts* process cruise;
   no CalCOFI cruise sailed in that window (2011-04 ended 04-27, the next began
   07-27), so there is no CalCOFI cruise to point at.
-- **`CAC2021_7`** (2021-07-19 → 08-02) *did* ride a CalCOFI cruise —
-  `2021-07-33P4`, an exact date-range match — but that cruise is missing from the
-  `cruise` reference table, which is built from the ichthyo source alone.
-  Assigning it would ship a dangling FK. It resolves for free once `cruise`
-  covers every cruise the other datasets reference (workflows#75 — 296 of 987
-  referenced keys are missing, so that gap is worth closing on its own merits
-  rather than for this one survey).
-- **`CAC2022_8`** (2022-08-14 → 08-29, new with the ERDDAP source) is the same
-  case: the ichthyo reference carries `2022-04-3322` and `2022-10-33UD` but no
-  August 2022 cruise, so its 523 transects (355 with observations) stay NULL
-  until the reference does.
+
+`CAC2021_7` (2021-07-33P4) and `CAC2022_8` (2022-08-39C2) were NULL until the
+track took in the CTD casts; both cruises sailed without an ichthyo tow.
 
 ## Load Dataset Metadata + Schema
 
