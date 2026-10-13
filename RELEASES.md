@@ -8,6 +8,47 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CalCOFI 2607 (2026-07-3322): the corrected preliminary CTD files
+
+The CTD team re-published `20-2607SH_CTDPrelim.zip` on calcofi.org on 2026-10-12 (Ben Gire). The
+Shared Drive copy the pipeline reads was replaced with it the next day. The bins and columns are the
+same as before. What changed:
+
+- **Sensor-2 oxygen is flagged bad (9) on the early casts** (about 1,550 upcast and 880 downcast 1 m
+  bins). The pipeline rebuilds the oxygen sensor-pair average after applying the flags
+  (`combine_sensor_pair_sql()`), so those depths now use sensor 1 alone. These are the inshore line
+  93.3 stations, so their oxygen anomalies change.
+- **A new CTD quality code, 4**: a corrected chlorophyll-a or nitrate estimate that came out negative
+  is now 0 instead of blank. It is registered in `metadata/measurement_qual.csv` as `set_to_zero`, and
+  `qual_ok` keeps it: the zero is a real value and counts in averages, integrated chlorophyll and
+  anomalies.
+- The provider recomputed their own temperature and oxygen averages and slightly recalibrated
+  sensor-2 oxygen and the nitrate estimates. The numbers are diffed per measurement type against
+  v2026.10.08 in the CTD ingest.
+
+## Anomalies for the derived CTD products, and a seasonal baseline
+
+Rasmus Swalethorp asked for both (2026-10-06, 2026-10-07). The `climatology` table (calcofi4db
+4.24.0) now carries:
+
+- **Per-cast baselines** for the derived products in `sample_measurement`: the three mixed-layer
+  depths (`mld_sigma_theta_002`, `mld_sigma_theta_0125`, `mld_temperature_02`), `chl_max_depth`,
+  `chl_max` and `chl_integrated`. They use the same rules (station, cruise month, 1993–2013, at least
+  5 cruises). Such a value has no depth, so its row's **`depth_bin` is NULL**. `relationships.json`
+  declares that column as `nullable_key_columns`.
+- **A seasonal baseline beside the monthly one**: new columns `quarter`, `season_mean`, `season_sd`,
+  `season_n`, `season_n_cruises`, by the quarter of the cruise's month (Q1 Jan–Mar … Q4 Oct–Dec).
+  They are set on every month of a quarter that has at least 5 cruises. Where only the season passes
+  (mostly the northern lines 60–73.3), the row has a seasonal mean and a **NULL `clim_mean`**.
+
+**`obs_env` / `obs_bio` `year` and `quarter` are the cruise's**, not the cast's calendar date. 2607's
+inshore 93.3 casts were worked on 30 June and now fall in Q3 with the rest of the July cruise, the
+same season their baseline is filed under.
+
+**Consumers:** a row that exists is no longer always a monthly baseline. Test `clim_mean IS NOT NULL`
+before subtracting. A per-bin join on `depth_bin = <n>` never matches a per-cast cell. Columns were
+appended, never renamed.
+
 # v2026.10.08
 
 ## The three marine mammal datasets are withdrawn until the lab that collected them has reviewed them
