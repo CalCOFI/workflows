@@ -57,6 +57,15 @@ same season their baseline is filed under.
 before subtracting. A per-bin join on `depth_bin = <n>` never matches a per-cast cell. Columns were
 appended, never renamed.
 
+## The US EEZ, territorial sea and contiguous zone are areas you can filter by
+
+`sample_spatial` had no memberships for the three US maritime zones, because the NOAA limits they
+were drawn from are lines (workflows#169). They are now polygons of the Pacific coast from the Marine
+Regions Maritime Boundaries Geodatabase (Flanders Marine Institute; EEZ v12, 12 NM and 24 NM v4;
+CC BY 4.0), so the Explorer's Area filter and Regions lens can use them. The layer ids and names are
+unchanged: `200NM EEZ` (0–200 NM), `12NM Territorial Sea` (0–12 NM) and `24NM Contiguous Zone`, the
+band from 12 to 24 NM. All three are named `Pacific Coast`.
+
 # v2026.10.08
 
 ## The three marine mammal datasets are withdrawn until the lab that collected them has reviewed them
