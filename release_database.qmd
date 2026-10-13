@@ -1941,13 +1941,37 @@ ss     <- build_sample_spatial(con_wdl)
 # min_cruises = 5, not the function's default 3: Rasmus Swalethorp (2026-09-09) — a three-cruise cell
 # is too thin a baseline for an anomaly a reader will act on; the consumers show n_cruises per cell.
 # Measured on v2026.09.06: 5 keeps 577,113 of 768,880 cells (75 %; 87 % of CTD temperature cells).
-n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L)
+#
+# Since calcofi4db 4.24.0 (Rasmus Swalethorp, 2026-10-06 and 2026-10-07) two more things ride on the same rows:
+# - the per-cast derived products (calcofi_ctd-derived, sample_measurement: no depth, so depth_bin is NULL) get a
+#   baseline by the same rules. chl_integrated_depth is left out: it is the depth the sum reached (200 m unless the
+#   cast is shallower), bookkeeping for chl_integrated, not something with a normal; the retired
+#   mld_sigma_theta_003 is no longer emitted.
+# - a seasonal baseline (quarter of the cruise's month, Q1 Jan-Mar ... Q4 Oct-Dec, the Explorer's season filter)
+#   in `quarter` + `season_*` on every month of a passing quarter; a month that passes only as a season has a
+#   NULL clim_mean, which every consumer reads as "no monthly baseline".
+stopifnot("build_climatology(cast_types =, season =) needs calcofi4db >= 4.24.0; pull and install ../calcofi4db" =
+  packageVersion("calcofi4db") >= "4.24.0")
+clim_cast_types <- c(
+  "mld_sigma_theta_002", "mld_sigma_theta_0125", "mld_temperature_02",
+  "chl_max_depth", "chl_max", "chl_integrated")
+n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L,
+                            cast_types = clim_cast_types, season = TRUE)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))
 datatable(dbGetQuery(con_wdl, "
-  SELECT dataset_key, count(*) AS n_cells, count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
+  SELECT dataset_key,
+         count(*) FILTER (WHERE clim_mean IS NOT NULL) AS n_cells_month,
+         count(*) FILTER (WHERE season_mean IS NOT NULL) AS n_cells_season,
+         count(*) FILTER (WHERE depth_bin IS NULL) AS n_cells_per_cast,
+         count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
          min(n_cruises) AS min_cruises, round(avg(n_cruises), 1) AS mean_cruises, any_value(clim_yr_min) AS yr_min, any_value(clim_yr_max) AS yr_max
-  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — cells per dataset (each ≥ 5 cruises; the window is on every row)")
+  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — rows per dataset: monthly cells (≥ 5 cruises in the month), seasonal cells (≥ 5 in the quarter, on each of its months) and per-cast cells (depth_bin NULL); the window is on every row")
 stopifnot(n_clim > 0, nrow(dbGetQuery(con_wdl, "SELECT DISTINCT clim_yr_min, clim_yr_max FROM climatology")) == 1)
+# every per-cast type the release asked for has a baseline somewhere (a typo or a renamed key would be silent)
+clim_cast_missing <- setdiff(clim_cast_types, dbGetQuery(con_wdl,
+  "SELECT DISTINCT measurement_type FROM climatology WHERE depth_bin IS NULL AND clim_mean IS NOT NULL")$measurement_type)
+if (length(clim_cast_missing))
+  stop("per-cast climatology has no monthly cell for: ", paste(clim_cast_missing, collapse = ", "))
 datatable(ss, caption = "sample_spatial — exact per-root-sample membership, one layer at a time (n_polys = 0: a line or point layer, skipped)")
 
 # what the picker shows for the default taxon (Pacific sardine): dataset × stage × effort class
@@ -2060,6 +2084,8 @@ released_tbls <- setdiff(DBI::dbListTables(con_wdl),
   c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived", "_measurement_taxon"))
 rels_merged <- jsonlite::fromJSON(rels_merged_path, simplifyVector = FALSE)
 rel_pks <- core_relationships(released_tbls)$primary_keys
+# key columns where NULL is a value (climatology.depth_bin for a per-cast cell; calcofi4db 4.24.0)
+rels_merged$nullable_key_columns <- core_relationships(released_tbls)$nullable_key_columns
 for (tb in names(rel_pks))
   if (is.null(rels_merged$primary_keys[[tb]])) rels_merged$primary_keys[[tb]] <- rel_pks[[tb]]
 rels_merged$primary_keys <- rels_merged$primary_keys[

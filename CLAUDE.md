@@ -178,9 +178,10 @@ Rscript scripts/build_workflows_index.R
   breakdown is not a dry run (`measurement-bounds` skill).
 - **One `climatology` table for every anomaly** (`build_climatology()`:
   1993–2013, dataset × station (`site_key`, with `grid_key` as the station's
-  modal cell) × calendar month × 10 m bin × type, ≥ 5 cruises in the release).
-  Month-matched always; pass an explicit color ramp, Plotly's `"RdBu"` runs
-  blue → red.
+  modal cell) × the cruise's month × 10 m bin × type, ≥ 5 cruises in the release).
+  Per-cast types ride in it with `depth_bin` NULL; the seasonal baseline is the
+  `season_*` columns by cruise quarter, and a NULL `clim_mean` means "no monthly
+  baseline". Pass an explicit color ramp, Plotly's `"RdBu"` runs blue → red.
 
 ## Cruise keys and provider ids — `cruise-key` skill
 

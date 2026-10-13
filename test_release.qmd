@@ -565,6 +565,26 @@ contract <- tibble::tribble(
     "SELECT count(*) n FROM {rp('climatology')}
      WHERE dataset_key = 'calcofi_ctd-cast' AND measurement_type = 'temperature_ave'
        AND grid_key = 'st60-ln90' AND month = 7 AND depth_bin = 0 AND n_cruises >= 3"),
+  # the per-cast derived products (calcofi4db 4.24.0; Rasmus Swalethorp 2026-10-07): a mixed-layer depth
+  # has no depth, so its cell's depth_bin is NULL; read the way a per-cast consumer does
+  "consumer: per-cast climatology cell (mld_sigma_theta_002, July, depth_bin NULL)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE measurement_type = 'mld_sigma_theta_002' AND depth_bin IS NULL AND month = 7
+       AND clim_mean IS NOT NULL AND n_cruises >= 5"),
+  "integrity: a NULL depth_bin is a per-cast cell, never a per-bin type", "zero", glue(
+    "SELECT count(*) n FROM {rp('climatology')} c
+     WHERE c.depth_bin IS NULL
+       AND c.measurement_type IN (SELECT DISTINCT measurement_type FROM {rp('obs_env')})"),
+  # the seasonal baseline (Rasmus Swalethorp 2026-10-06): a quarter holds every cruise of its months,
+  # so a cell that passes the monthly floor always passes the seasonal one
+  "integrity: every monthly cell also carries its seasonal baseline", "zero", glue(
+    "SELECT count(*) n FROM {rp('climatology')} WHERE clim_mean IS NOT NULL AND season_mean IS NULL"),
+  "consumer: seasonal-only cells exist (a month below the floor inside a passing quarter)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('climatology')} WHERE clim_mean IS NULL AND season_mean IS NOT NULL"),
+  # the Explorer's season filter keys on the cruise's quarter (calcofi4db 4.24.0): 2607 worked line 93.3
+  # inshore on 30 June and must still be Q3
+  "consumer: a cruise's casts share its quarter (2607 = 2026-07-3322 is Q3)", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_env')} WHERE cruise_key = '2026-07-3322' AND quarter <> 3"),
   "integrity: climatology carries one window, stamped on every row", "zero", glue(
     "SELECT count(*) - 1 AS n FROM (SELECT DISTINCT clim_yr_min, clim_yr_max FROM {rp('climatology')})"),
   # no 500 m ceiling since calcofi4db 4.15.0: build_climatology()'s depth_max_m defaults to NULL
