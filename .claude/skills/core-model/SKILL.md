@@ -219,8 +219,9 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
 - **Per-cast baselines have `depth_bin` NULL** (calcofi4db 4.24.0, `cast_types`). The
   derived CTD products live in `sample_measurement` with no depth (`mld_sigma_theta_002`,
   `mld_sigma_theta_0125`, `mld_temperature_02`, `chl_max_depth`, `chl_max`,
-  `chl_integrated`) and are pooled by the same rules; the release passes the registry's
-  per-cast types, `calcofi4db` carries no list. A NULL never matches `=`, so a per-bin join
+  `chl_integrated`) and are pooled by the same rules; the release names them
+  (`clim_cast_types` in `release_database.qmd`; `chl_integrated_depth` left out as
+  bookkeeping), `calcofi4db` carries no list. A NULL never matches `=`, so a per-bin join
   cannot pick one up; a per-cast consumer matches `depth_bin IS NULL`. `relationships.json`
   declares it under `nullable_key_columns` (`core_relationships()`), and
   `check_release_relationships()` reads a declared nullable key column as a value, not a
