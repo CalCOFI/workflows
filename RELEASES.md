@@ -12,19 +12,27 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 The CTD team re-published `20-2607SH_CTDPrelim.zip` on calcofi.org on 2026-10-12 (Ben Gire). The
 Shared Drive copy the pipeline reads was replaced with it the next day. The bins and columns are the
-same as before. What changed:
+same as before. Diffed per measurement type against the shards v2026.10.08 was cut from, **nothing
+outside 2607 changed** (0 of 4,931 `obs` and 0 of 6,093 `obs_ctd_full` cruise × type cells). In 2607:
 
-- **Sensor-2 oxygen is flagged bad (9) on the early casts** (about 1,550 upcast and 880 downcast 1 m
-  bins). The pipeline rebuilds the oxygen sensor-pair average after applying the flags
-  (`combine_sensor_pair_sql()`), so those depths now use sensor 1 alone. These are the inshore line
-  93.3 stations, so their oxygen anomalies change.
 - **A new CTD quality code, 4**: a corrected chlorophyll-a or nitrate estimate that came out negative
   is now 0 instead of blank. It is registered in `metadata/measurement_qual.csv` as `set_to_zero`, and
   `qual_ok` keeps it: the zero is a real value and counts in averages, integrated chlorophyll and
-  anomalies.
-- The provider recomputed their own temperature and oxygen averages and slightly recalibrated
-  sensor-2 oxygen and the nitrate estimates. The numbers are diffed per measurement type against
-  v2026.10.08 in the CTD ingest.
+  anomalies. This fills about 1,000–2,900 bins per estimate (`est_chlorophyll_a_*`,
+  `est_nitrate_*`).
+- **The nitrate and chlorophyll estimates were recalibrated by the provider**: nitrate by up to
+  1.0 µM (`est_nitrate_sta_corr`), chlorophyll by up to 0.003 µg/L.
+- **Sensor-2 oxygen** (`oxygen_umol_kg_2_*`) was recalibrated (up to 1.06 µmol/kg), and 2,213 of its
+  values were blanked and flagged 9 on the early casts. **The averaged oxygen and temperature are
+  unchanged**: the pipeline already used sensor 1 alone on casts 1–6 (`flag_overrides.csv`, from the
+  provider's cruise note that the secondary temperature sensor was faulty; question Q37), and
+  rebuilds every pair with `combine_sensor_pair_sql()`.
+- **`btl_temperature` is new for 2607** (2,396 bins: the provider filled the file's `BTL_Temp`
+  column). Two bottles' nutrients moved out of their 1 m bins.
+- **Derived products:** `chl_integrated` changed on 72 casts (mean +0.01 mg/m², at most +0.75), and
+  `chl_integrated_depth` deepened on 54 casts (mean +5 m, at most +132 m), because the zeros now count
+  as good bins instead of ending the integral. The mixed-layer depths, `chl_max_depth`, `spiciness0`
+  and `sigma_theta_ave` are unchanged.
 
 ## Anomalies for the derived CTD products, and a seasonal baseline
 
