@@ -162,8 +162,12 @@ Rules that fell out:
 
 `obs.measurement_qual` is each dataset's **own** vocabulary, uninterpreted
 (bottle 6 = ok-from-CTD, 8 = suspect, 9 = missing; CTD 1/2 = use primary/secondary
-sensor, 8 = questionable, 9 = bad/missing; DIC WOCE 2 good, 3 questionable, 4 bad,
-9 missing — `metadata/measurement_qual.csv`). In Aug 2026 Ralf Goericke reported a
+sensor, 4 = set_to_zero, 8 = questionable, 9 = bad/missing; DIC WOCE 2 good, 3 questionable,
+4 bad, 9 missing — `metadata/measurement_qual.csv`; a code is read with its dataset). CTD
+**4** (`set_to_zero`, Ben Gire 2026-10-12) is a negative corrected chlorophyll-a or nitrate
+estimate the provider set to 0: a real value, kept by `qual_ok` (`cc_qual_ok_sql()` is unchanged),
+counted in averages, integrated chlorophyll and anomalies.
+In Aug 2026 Ralf Goericke reported a
 2.18 ml/L oxygen spike at 1,144 m on station 080.0 160.0 in db-viz-station: bottle
 198640 of cast 7644 (5508BD, 3 Sep 1955), flagged `O_qual = 8` in the source since
 1955. Two gaps let it through:
@@ -190,26 +194,54 @@ arbitrary cast per grid cell), the Explorer's Sections lens (**all calendar mont
 year-slider range — a seasonal-cycle map, not an anomaly: line 90 surface is 15.2 °C in
 January, 18.3 in July, 16.8 annually, so a January cruise lost 1–1.5 °C of warming) and
 `calcofi4r::cc_climatology()`. The same July 2026 section read +1.4 °C in one and ~0 in
-another. `release_database.qmd`'s `browser_objects` chunk now builds **`climatology`** with
-`calcofi4db::build_climatology()` — a plain mean per **dataset × `grid_key` × calendar month ×
-10 m floor `depth_bin` × measurement type** over **1993–2013**, kept where **≥ 3 distinct
-cruises** contribute, the window stamped on every row — partitioned by `measurement_type`
-like `obs_env`. Every consumer subtracts that table: ctd-transects (`__TBL:climatology__`,
+another. `release_database.qmd`'s `browser_objects` chunk builds **`climatology`** with
+`calcofi4db::build_climatology()` — a plain mean per **dataset × `site_key` × the cruise's
+month × 10 m floor `depth_bin` × measurement type** over **1993–2013**, kept where **≥ 5
+distinct cruises** contribute (3 until v2026.09.06), the window stamped on every row,
+`grid_key` carried as the station's modal cell — partitioned by `measurement_type` like
+`obs_env`. Every consumer subtracts that table: ctd-transects (`__TBL:climatology__`,
 with `scripts/climatology_fallback.sql` for a release that predates it), explore
 (`sql/section_clim.sql`, pooling a variable's member types weighted by `clim_n`),
 `cc_climatology()` (reads it when the connection has it). Rules that fell out:
 
-- **Month-matched, always.** A cast's anomaly is its value minus the cell of *its own*
-  calendar month. Pooling months is never an option, whatever the UI's season filter says.
+- **Month-matched, always — and the month is the cruise's.** A cast's anomaly is its value
+  minus the cell of *its own* station and cruise month (`substr(cruise_key, 6, 2)`, the
+  month SWFSC designates), never `month(datetime)` (calcofi4db 4.22.0: 2607's 30 June
+  casts looked up a June baseline no cruise samples). Pooling months is never an option,
+  whatever the UI's season filter says.
 - **10 m floor bins, not 5.** `obs` carries the *thinned* CTD series (10 m grid + RDP
   inflection points + bottle depths); at 5 m the off-grid bins hold a third of the casts,
   sampled where the profile bends, and their means sit visibly off their neighbours'.
-- **A floor in cruises, not observations.** Nearshore grid cells hold 2–4 real stations
-  (`st30-ln90` = 90.30, 90.28, 90.27.7, 88.5/30.1), so one cruise supplies four casts.
-  That same fact means the sections should key on `sample.site_key`, not `grid_key` —
-  ctd-transects currently keeps whichever cast the ship hit first, explore averages them.
-  **Open** (2026-08-31); fixing it moves the climatology's grain to `site_key` too.
+- **A floor in cruises, not observations,** and the station is `sample.site_key`, not the
+  grid cell: nearshore cells held 2–4 real stations (`st30-ln90` = 90.30, 90.28, 90.27.7,
+  88.5/30.1), so one cruise supplies four casts. Done in calcofi4db 4.10.0; the key stayed
+  `site_key` when the grid was rebuilt one cell per station.
+- **Per-cast baselines have `depth_bin` NULL** (calcofi4db 4.24.0, `cast_types`). The
+  derived CTD products live in `sample_measurement` with no depth (`mld_sigma_theta_002`,
+  `mld_sigma_theta_0125`, `mld_temperature_02`, `chl_max_depth`, `chl_max`,
+  `chl_integrated`) and are pooled by the same rules; the release passes the registry's
+  per-cast types, `calcofi4db` carries no list. A NULL never matches `=`, so a per-bin join
+  cannot pick one up; a per-cast consumer matches `depth_bin IS NULL`. `relationships.json`
+  declares it under `nullable_key_columns` (`core_relationships()`), and
+  `check_release_relationships()` reads a declared nullable key column as a value, not a
+  failure. Never add a NULL `depth_bin` for a type `obs_env` carries by depth
+  (`test_release.qmd` fails it).
+- **The seasonal baseline is columns, not rows** (4.24.0, `season = TRUE`, which the
+  release sets): `quarter`, `season_mean`, `season_sd`, `season_n`, `season_n_cruises`,
+  by the quarter of the *cruise's month* (Q1 Jan–Mar … Q4 Oct–Dec — the Explorer's season
+  filter), on every month of a quarter that passes the cruise floor. Rows, not columns,
+  would double-count in anything that sums the table. A month below the monthly floor
+  inside a passing quarter (mostly lines 60–73.3) gets a row with **`clim_mean` NULL**:
+  that is "no monthly baseline", the same as an absent row, so a consumer tests
+  `clim_mean IS NOT NULL` before it subtracts and never draws the blank as 0.
+  `calcofi4r::cc_climatology(season = TRUE)` and `cc_cast_anomaly()` read them;
+  `build_measurements_catalog()` ignores rows whose monthly `clim_mean` is NULL.
+  Requested by Rasmus Swalethorp, 2026-10-06/07.
+- **`obs_env` / `obs_bio` `year` and `quarter` are the cruise's** (`build_obs_slim()`,
+  4.24.0), from `cruise_key`; the calendar date only where the key does not parse. The
+  Explorer's season filter and the seasonal baseline therefore agree on 2607's 30 June
+  casts: Q3. `test_release.qmd` asserts it (`cruise_key = '2026-07-3322' AND quarter <> 3`
+  is zero), with the per-cast cell, every-monthly-cell-has-a-season, and NULL-`depth_bin`
+  checks beside it.
 - **Plotly's built-in `"RdBu"` runs blue → red** (`0 = rgb(5,10,172)`). Pass an explicit
   ramp — both apps share ctd-transects' five stops — and check the sign in a screenshot.
-
-
