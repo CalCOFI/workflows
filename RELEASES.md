@@ -66,6 +66,14 @@ CC BY 4.0), so the Explorer's Area filter and Regions lens can use them. The lay
 unchanged: `200NM EEZ` (0–200 NM), `12NM Territorial Sea` (0–12 NM) and `24NM Contiguous Zone`, the
 band from 12 to 24 NM. All three are named `Pacific Coast`.
 
+## Seabird and marine mammal surveys of July 2021 and August 2022 now have their cruise
+
+`farallon_bird-mammal` matches each survey to the CalCOFI cruise its observers rode by the stations
+occupied the same day. The track was the ichthyoplankton tows alone, so the two surveys on cruises
+without a tow, `CAC2021_7` (`2021-07-33P4`) and `CAC2022_8` (`2022-08-39C2`), had a NULL
+`cruise_key` (workflows#74). The track now includes the CTD casts. `Fronts_0711`, a CCE-LTER process
+cruise with no CalCOFI cruise, stays NULL.
+
 # v2026.10.08
 
 ## The three marine mammal datasets are withdrawn until the lab that collected them has reviewed them
