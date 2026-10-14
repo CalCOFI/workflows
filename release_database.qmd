@@ -2008,13 +2008,23 @@ unlink(c(grid_geojson_path, spatial_geojson_path, spatial_layers_path))
 dbExecute(con_wdl, glue("COPY (SELECT grid_key, station, line, shore, pattern, zone, ST_X(geom_ctr) AS lon_ctr, ST_Y(geom_ctr) AS lat_ctr,
                                 ST_GeomFromWKB(ST_AsWKB(geom)) AS geom FROM grid)
                          TO '{grid_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
+# the gazetteer layers (registry rows with their own source_url; in `spatial` since v2026.10.14) draw from the
+# gazetteer's PMTiles, and some are national (OCS planning areas, 3,307 rescinded wind blocks): only their regions
+# that hold samples ride in this sidecar, which the Regions lens and the Area outline need; the rest stays out
+gaz_layers <- readr::read_csv(here("metadata/spatial_layers.csv"), show_col_types = FALSE) |>
+  dplyr::filter(!is.na(source_url), source_url != "", role != "reference" | is.na(role)) |> dplyr::pull(layer)
+gaz_sql <- if (length(gaz_layers)) glue("AND (layer NOT IN ({paste(DBI::dbQuoteString(con_wdl, gaz_layers), collapse = ', ')})
+                                          OR spatial_key IN (SELECT DISTINCT spatial_key FROM sample_spatial))") else ""
 dbExecute(con_wdl, glue("COPY (SELECT spatial_key, layer, name, ST_SimplifyPreserveTopology(ST_GeomFromWKB(ST_AsWKB(geom)), 0.002) AS geom
-                                FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
+                                FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON') {gaz_sql})
                          TO '{spatial_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
 # the boundary-layer registry + what only the release knows about each layer (counts, bbox, names,
 # sample_spatial memberships) — the explorer's Layers card reads this, never the CSV (D23, calcofi4db >= 3.28.0).
 # `built` = the ingest_spatial manifest's mtime: the PMTiles archives are rebuilt outside releases, and the skew
 # must at least be visible (plan 2026-08-31, Risks).
+# region_status + the gazetteer rows' layer status (calcofi4db >= 4.25.0): "OCS-P 0564 (settlement pending 2026-04-27)"
+stopifnot("build_spatial_layers() region_status needs calcofi4db >= 4.25.0; pull and install ../calcofi4db" =
+  packageVersion("calcofi4db") >= "4.25.0")
 jsonlite::write_json(
   build_spatial_layers(
     con_wdl, here("metadata/spatial_layers.csv"), release_version,
