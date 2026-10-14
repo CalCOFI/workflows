@@ -17,17 +17,17 @@ layer. Each one's `places.parquet` is read at a pinned gazetteer version, its sh
 (`calcofi4db::read_gazetteer_layer()`, calcofi4db 4.25.0), and the pins are kept in
 `data/parquet/spatial/gazetteer_pins.csv`. All seven are at gazetteer v1.1.0 in this release.
 
-Each layer's root samples (counted against v2026.10.13's samples):
+Each layer's regions and root samples (counted in the v2026.10.14 staging build's `sample_spatial`):
 
-| layer | gazetteer collection | regions | root samples |
-|---|---|---|---|
-| BOEM OCS Planning Areas | `boem_ocs_planning` | 4 | 293,149 |
-| BOEM 11th National OCS Program | `boem_program_11_draft` | 3 | 286,942 |
-| National Marine Sanctuaries | `noaa_sanctuaries` | 7 | 48,562 |
-| BOEM Pacific Oil & Gas Leases | `boem_pacific_og_leases` | 30 | 1,496 |
-| SoCal Aquaculture AOAs | `noaa_aoa_socal` | 10 | 713 |
-| BOEM Wind Leases | `boem_wind_leases` | 5 | 554 |
-| BOEM Wind Planning Areas | `boem_wind_planning_rescinded` | 235 | 45 |
+| layer | gazetteer collection | regions | with samples | root samples |
+|---|---|---|---|---|
+| BOEM OCS Planning Areas | `boem_ocs_planning` | 4 | 4 | 293,149 |
+| BOEM 11th National OCS Program | `boem_program_11_draft` | 3 | 3 | 286,942 |
+| National Marine Sanctuaries | `noaa_sanctuaries` | 7 | 7 | 48,562 |
+| BOEM Pacific Oil & Gas Leases | `boem_pacific_og_leases` | 30 | 30 | 1,444 |
+| SoCal Aquaculture AOAs | `noaa_aoa_socal` | 10 | 8 | 713 |
+| BOEM Wind Leases | `boem_wind_leases` | 5 | 5 | 554 |
+| BOEM Wind Planning Areas | `boem_wind_planning_rescinded` | 235 | 33 | 45 |
 
 - **Status travels with each region.** `spatial_attribute` carries the gazetteer's `status`,
   `status_date`, `status_source`, the source's own code `status_upstream` and the dated
