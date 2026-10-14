@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.14
+
 ## BOEM wind leases, oil and gas leases, planning areas and Chumash Heritage are areas you can filter by
 
 Seven boundary layers come from the [Ocean Metrics gazetteer](https://oceanmetrics.io/places/) and
