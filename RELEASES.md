@@ -8,7 +8,6 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
-<<<<<<< HEAD
 ## A `percent_volume` measurement type, ahead of the Hopkins Monterey Bay zooplankton (1955-1963)
 
 `stanford_hopkins-zooplankton` is ingested but held out (`in_release: false`): its sheets merge a
@@ -17,7 +16,7 @@ six Monterey Bay stations have no CalCOFI cruise key (Q08). Its registry rows sh
 observations behind them: `measurement_type` gains `percent_volume` (a taxon's share of a plankton
 sample's settled volume, 0-100), and `measurement_qual` gains the code set `hopkins-zooplankton`
 (`unit_unclear`, `single_transcription`).
-=======
+
 ## CTD quality code 4 means "below detection limit"
 
 The provider defined CTD code 4 (Ben Gire, 2026-10-13): **below detection limit**, reported as 0. On the
@@ -102,7 +101,6 @@ without a tow, `CAC2021_7` (`2021-07-33P4`) and `CAC2022_8` (`2022-08-39C2`), ha
 cruise with no CalCOFI cruise, stays NULL. `CAC2021_7`'s 466 transects carry no observations in the
 source (question Q11, also open for January 2021 and October 2022), so 2021-07-33P4 is a third
 farallon cruise with effort and no sightings.
->>>>>>> origin/main
 
 # v2026.10.08
 
