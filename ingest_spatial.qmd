@@ -135,10 +135,14 @@ datatable(
 if (!"role" %in% names(d_layers)) d_layers$role <- "boundary"
 d_layers_ref <- d_layers |> filter(role == "reference")
 d_layers     <- d_layers |> filter(is.na(role) | role != "reference")
-# gazetteer rows (own `source_url` + `source_layer`) are served from the oceanmetrics gazetteer's
-# PMTiles, not built here: no source file, no parquet, no membership (explore PR #16)
-if ("source_url" %in% names(d_layers))
-  d_layers   <- d_layers |> filter(is.na(source_url) | source_url == "")
+# gazetteer rows (own `source_url` + `source_layer`) are drawn from the oceanmetrics gazetteer's
+# PMTiles, so no source file and no PMTiles here; since v2026.10.14 their features join `spatial`
+# (section "Gazetteer layers"), so samples get memberships and the Explorer can filter by them
+d_layers_gaz <- d_layers[0, ]
+if ("source_url" %in% names(d_layers)) {
+  d_layers_gaz <- d_layers |> filter(!is.na(source_url), source_url != "")
+  d_layers     <- d_layers |> filter(is.na(source_url) | source_url == "")
+}
 
 # compare with folders/files in dir_spatial
 spatial_dirs <- dir_ls(dir_spatial, type = "directory")
@@ -625,6 +629,67 @@ for (i in seq_len(nrow(d_groups))) {
     "(CRS {src_crs} -> 4326), PMTiles {pmtiles_size}\n\n"
   ))
 }
+```
+
+## Gazetteer layers
+
+The registry rows with their own `source_url` (BOEM wind leases and planning areas, OCS planning areas,
+the 11th Program draft, Pacific oil and gas leases, NOAA SoCal AOAs, National Marine Sanctuaries) are
+drawn from the [Ocean Metrics gazetteer](https://oceanmetrics.io/places/). Until v2026.10.13 they
+stopped there, so no sample was ever intersected with them and the Explorer's Area filter greyed them
+out. Now each one's `places.parquet` is read at the version the gazetteer manifest names, its sha256
+checked (`calcofi4db::read_gazetteer_layer()`), and its features join `spatial` like any other layer.
+The status columns ride along in `spatial_attribute` (`status`, `status_date`, `status_source`, the
+source's own `status_upstream`, the dated `status_history`), so a release records which status each
+region had when it was cut. The geometries are kept whatever the status: a rescinded wind area or a
+cancelled lease stays a region you can filter by, with its status beside its name.
+
+```{r}
+#| label: gazetteer-layers
+#| output: asis
+
+stopifnot("read_gazetteer_layer() needs calcofi4db >= 4.25.0; pull and install ../calcofi4db" =
+  packageVersion("calcofi4db") >= "4.25.0")
+# the groups above only reach `spatial` when they were (re)built this run; appending the gazetteer
+# layers alone would make build-spatial-parquet rewrite `spatial` with nothing else in it
+stopifnot("gazetteer layers need every boundary group rebuilt in the same run (overwrite = TRUE)" =
+  overwrite || nrow(d_layers_gaz) == 0)
+
+gaz_cols <- c("place_id", "status", "status_date", "status_source", "status_upstream", "status_history")
+gaz_pins <- list()
+for (i in seq_len(nrow(d_layers_gaz))) {
+  lr   <- d_layers_gaz[i, ]
+  # the collection slug is the archive's folder: <base><slug>/places.pmtiles
+  slug <- str_match(lr$source_url, "/([^/]+)/places\\.pmtiles$")[, 2]
+  stopifnot("gazetteer source_url must end in /<slug>/places.pmtiles" = !is.na(slug))
+
+  sf_g <- read_gazetteer_layer(slug, cache_dir = path(dir_stage, "gazetteer"))
+  pin  <- attr(sf_g, "gazetteer")
+  sf_g <- sf_g |>
+    normalize_geom_col() |>
+    apply_filter_expr(lr$filter_expr)
+  name_field <- if (is.na(lr$name_field) || lr$name_field == "") "name" else lr$name_field
+
+  sf_g <- sf_g |>
+    filter(st_geometry_type(geometry) %in% c("POLYGON", "MULTIPOLYGON")) |>
+    mutate(
+      id    = row_number() |> as.integer(),
+      layer = lr$layer,
+      name  = as.character(.data[[name_field]])) |>
+    select(id, layer, name, any_of(gaz_cols), geometry)
+
+  all_spatial[[lr$layer]]      <- sf_g |> select(id, layer, name, geometry)
+  all_spatial_attr[[lr$layer]] <- build_spatial_attr(sf_g, lr$layer)
+  gaz_pins[[lr$dataset_id]]    <- tibble(
+    dataset_id = lr$dataset_id, layer = lr$layer, slug = pin$slug,
+    version = pin$version, sha256 = pin$sha256, n_features = nrow(sf_g))
+  cat(glue("- **{lr$layer}** (gazetteer `{pin$slug}` v{pin$version}): {nrow(sf_g)} features\n\n"))
+}
+
+# which gazetteer version each layer came from, next to the manifest
+d_gaz_pins <- bind_rows(gaz_pins)
+write_csv(d_gaz_pins, path(dir_parquet, "gazetteer_pins.csv"))
+cat(knitr::kable(d_gaz_pins, caption = "gazetteer layers in `spatial`: the pinned version and sha256 of each places.parquet"), sep = "\n")
 ```
 
 ## Reference layers
