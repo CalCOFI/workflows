@@ -1,0 +1,78 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_ctd-derived",
+  "title": "CalCOFI CTD Derived Hydrographic Products",
+  "description": "Hydrographic products DERIVED from the CalCOFI CTD cast profiles rather than measured: spice (spiciness at 0 dbar, TEOS-10) and the sensor-pair averaged sigma-theta at every published CTD depth; and, per cast, the mixed-layer depth (the CalCOFI legacy definition, with two alternative criteria beside it), the depth and value of the chlorophyll-a maximum and the chlorophyll-a integrated over the top 200 m, by the definitions of the CalCOFI CTD team. Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files after the provider's quality flags are applied.\n",
+  "keywords": ["EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY", "EARTH SCIENCE > OCEANS > OCEAN CIRCULATION > OCEAN MIXED LAYER", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > CHLOROPHYLL"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-126.4843, 29.8268, -117.2734, 37.8491]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1993-01-01T00:00:00Z",
+          "2026-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "CalCOFI. (2026). CalCOFI CTD Derived Hydrographic Products (from the CalCOFI CTD Cast Files). CalCOFI.io. https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html",
+  "table:tables": [
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "sample_measurement",
+      "description": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Physical Oceanography"],
+    "calcofi:variables": ["sigma_theta_ave", "kg/m3", "Physical Oceanography", "spiciness0", "kg/m3", "Physical Oceanography"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-derived/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_ctd-derived/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}
