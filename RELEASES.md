@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.13
+
 ## CalCOFI 2607 (2026-07-3322): the corrected preliminary CTD files
 
 The CTD team re-published `20-2607SH_CTDPrelim.zip` on calcofi.org on 2026-10-12 (Ben Gire). The
@@ -65,6 +67,12 @@ Regions Maritime Boundaries Geodatabase (Flanders Marine Institute; EEZ v12, 12 
 CC BY 4.0), so the Explorer's Area filter and Regions lens can use them. The layer ids and names are
 unchanged: `200NM EEZ` (0–200 NM), `12NM Territorial Sea` (0–12 NM) and `24NM Contiguous Zone`, the
 band from 12 to 24 NM. All three are named `Pacific Coast`.
+
+BOEM's 2023 Wind Planning Areas, which BOEM rescinded on 30 July 2025, are no longer an area layer:
+`spatial` and `sample_spatial` drop `BOEM Wind Planning Areas` (in v2026.10.08, 793 samples in 3
+areas). The Explorer draws BOEM's current wind leases, the rescinded planning areas and three other BOEM
+layers from the Ocean Metrics gazetteer instead; those are map layers only, not areas you can filter
+samples by.
 
 ## Seabird and marine mammal surveys of July 2021 and August 2022 now have their cruise
 
