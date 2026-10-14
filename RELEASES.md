@@ -8,6 +8,67 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## BOEM wind leases, oil and gas leases, planning areas and Chumash Heritage are areas you can filter by
+
+Seven boundary layers come from the [Ocean Metrics gazetteer](https://oceanmetrics.io/places/) and
+were map layers only: the Explorer listed them in the Area filter but greyed them out, because
+`ingest_spatial.qmd` skipped them. They are now in `spatial` and `sample_spatial` like every other
+layer. Each one's `places.parquet` is read at a pinned gazetteer version, its sha256 checked
+(`calcofi4db::read_gazetteer_layer()`, calcofi4db 4.25.0), and the pins are kept in
+`data/parquet/spatial/gazetteer_pins.csv`. All seven are at gazetteer v1.1.0 in this release.
+
+Each layer's root samples (counted against v2026.10.13's samples):
+
+| layer | gazetteer collection | regions | root samples |
+|---|---|---|---|
+| BOEM OCS Planning Areas | `boem_ocs_planning` | 4 | 293,149 |
+| BOEM 11th National OCS Program | `boem_program_11_draft` | 3 | 286,942 |
+| National Marine Sanctuaries | `noaa_sanctuaries` | 7 | 48,562 |
+| BOEM Pacific Oil & Gas Leases | `boem_pacific_og_leases` | 30 | 1,496 |
+| SoCal Aquaculture AOAs | `noaa_aoa_socal` | 10 | 713 |
+| BOEM Wind Leases | `boem_wind_leases` | 5 | 554 |
+| BOEM Wind Planning Areas | `boem_wind_planning_rescinded` | 235 | 45 |
+
+- **Status travels with each region.** `spatial_attribute` carries the gazetteer's `status`,
+  `status_date`, `status_source`, the source's own code `status_upstream` and the dated
+  `status_history`. `spatial_layers.json` gains the layer status (`status`, `status_label`,
+  `status_history`, `created`, `source_date`, `gazetteer_version`) and, for every layer, `region_status`
+  (`name`, `status`, `status_date` of each region that holds samples). So the Explorer can say "BOEM
+  Wind Planning Areas (rescinded 2025-07-30)" and "OCS-P 0564 Commercial - Golden State Wind LLC
+  (settlement pending 2026-04-27)".
+- **The California wind leases have a dated history.** It comes from BOEM's lease documents.
+  - OCS-P 0561 (RWE): settlement 2026-08-04, relinquished 2026-09-03.
+  - OCS-P 0564 (Golden State Wind): settlement pending since 2026-04-27.
+  - OCS-P 0565 (Invenergy): settlement 2026-06-12, cancelled 2026-07-10.
+  - OCS-P 0562 and 0563: active.
+  
+  The geometries are kept whatever the status. A rescinded or cancelled area stays a region you can
+  filter by, with its status beside its name.
+- **Only features touching the CalCOFI study area join `spatial`.** The study area is the extent of
+  the station grid, 135.25°W–105.75°W and 18.4°N–49.25°N. Features are kept whole, never clipped, so
+  membership stays exact. The national layers shrink: sanctuaries 47 → 7, wind planning areas
+  3,325 → 235 (outlines and OCS blocks), OCS planning areas 27 → 4. Four samples outside the box lose
+  a gazetteer region they touched: three 2015 CUFES underway points off SE Alaska and a 2002 ichthyo
+  station off Oahu.
+- **National Marine Sanctuaries now come from the gazetteer** (NOAA ONMS via MarineCadastre). This adds
+  **Chumash Heritage** (designated 2024; explore#34), splits Channel Islands into its Northern and Santa
+  Barbara sections, and drops the bad name "Flower Garden BanksUpdated 03/23/21". **Consumers:** the
+  region names change from the short form ("Channel Islands", "Monterey Bay") to the full name
+  ("Monterey Bay National Marine Sanctuary"). The Explorer widens an old short name to the regions it
+  prefixes.
+- **SoCal Aquaculture AOAs now come from the gazetteer.** The AOA codes stay the names (CN1-A … N2-E).
+  The duplicate registry row `noaa_aoa_socal` is removed; the Explorer maps its slug to
+  `noaa_aquaculture_aoas`.
+- **BOEM Wind Planning Areas is a different layer from the one v2026.10.08 carried.** That one was
+  BOEM's 2023 planning areas, with Humboldt and Morro Bay (793 samples in 3 areas). BOEM's current
+  layer holds only the areas never leased, all rescinded on 2025-07-30. The California WEAs became
+  leases OCS-P 0561–0565, so they are in BOEM Wind Leases.
+- **The Pacific oil and gas leases drop four renewable leases.** BOEM's Pacific cadastral service lists
+  OCS-P 0560 and 0562–0564 as `RENACV`. 0562–0564 are wind leases, in BOEM Wind Leases with their dated
+  status.
+- **`spatial.geojson` keeps only the gazetteer regions that hold samples**, so the national layers do
+  not bloat the sidecar. The Explorer draws the full layers from the gazetteer's PMTiles.
+
 ## CTD quality code 4 means "below detection limit"
 
 The provider defined CTD code 4 (Ben Gire, 2026-10-13): **below detection limit**, reported as 0. On the
