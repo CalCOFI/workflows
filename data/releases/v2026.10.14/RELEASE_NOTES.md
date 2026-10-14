@@ -108,11 +108,11 @@ earlier cruises, the 1993–2013 baseline included, keep their negatives or gaps
 
 **Validation:** 97 pass / 0 fail / 4 skip (consumer-contract suite, 2026-10-14T14:21:34Z).
 
-**Software:** calcofi4db 4.25.0, calcofi4r 1.28.0.
+**Software:** calcofi4db 4.25.0, calcofi4r 1.27.0.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.14 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.10.14
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.14 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.23371724
 
 Cite the source datasets you use alongside the release:
 
