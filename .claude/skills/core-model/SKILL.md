@@ -162,10 +162,10 @@ Rules that fell out:
 
 `obs.measurement_qual` is each dataset's **own** vocabulary, uninterpreted
 (bottle 6 = ok-from-CTD, 8 = suspect, 9 = missing; CTD 1/2 = use primary/secondary
-sensor, 4 = set_to_zero, 8 = questionable, 9 = bad/missing; DIC WOCE 2 good, 3 questionable,
+sensor, 4 = below_detection, 8 = questionable, 9 = bad/missing; DIC WOCE 2 good, 3 questionable,
 4 bad, 9 missing — `metadata/measurement_qual.csv`; a code is read with its dataset). CTD
-**4** (`set_to_zero`, Ben Gire 2026-10-12) is a negative corrected chlorophyll-a or nitrate
-estimate the provider set to 0: a real value, kept by `qual_ok` (`cc_qual_ok_sql()` is unchanged),
+**4** (`below_detection`, Ben Gire 2026-10-12/13) is below the detection limit, reported as 0; on the
+corrected chlorophyll-a and nitrate estimates the provider zeroes only a negative value: a real value, kept by `qual_ok` (`cc_qual_ok_sql()` is unchanged),
 counted in averages, integrated chlorophyll and anomalies.
 In Aug 2026 Ralf Goericke reported a
 2.18 ml/L oxygen spike at 1,144 m on station 080.0 160.0 in db-viz-station: bottle

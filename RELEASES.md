@@ -8,6 +8,15 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CTD quality code 4 means "below detection limit"
+
+The provider defined CTD code 4 (Ben Gire, 2026-10-13): **below detection limit**, reported as 0. On the
+corrected chlorophyll-a and nitrate estimates only a negative value is set to 0 and coded 4; the code
+may be used on any CTD sensor series. `metadata/measurement_qual.csv` renames the code from
+`set_to_zero` to `below_detection` and says so. No value changes: the zeros still count in averages,
+integrated chlorophyll and anomalies. Cruises after 2107 are to be reprocessed with the same rule;
+earlier cruises, the 1993–2013 baseline included, keep their negatives or gaps for now.
+
 # v2026.10.13
 
 ## CalCOFI 2607 (2026-07-3322): the corrected preliminary CTD files
