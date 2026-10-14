@@ -644,6 +644,12 @@ source's own `status_upstream`, the dated `status_history`), so a release record
 region had when it was cut. The geometries are kept whatever the status: a rescinded wind area or a
 cancelled lease stays a region you can filter by, with its status beside its name.
 
+Gazetteer layers are national (the OCS planning areas, every sanctuary, 3,307 rescinded wind blocks), so
+only the features that touch the CalCOFI study area join `spatial`, whole and unclipped, so a region's
+membership stays exact. The study area is the extent of the station grid (`grid`, every pattern), the
+same footprint every release intersects. A layer whose pinned version and sha256 match the previous run
+is read from the local cache, not downloaded again; the table at the end says which layers changed.
+
 ```{r}
 #| label: gazetteer-layers
 #| output: asis
@@ -656,6 +662,15 @@ stopifnot("gazetteer layers need every boundary group rebuilt in the same run (o
   overwrite || nrow(d_layers_gaz) == 0)
 
 gaz_cols <- c("place_id", "status", "status_date", "status_source", "status_upstream", "status_history")
+# the CalCOFI study area: the extent of the station grid (the release's `grid` table, v2026.10.13), lon/lat
+STUDY_AREA_BBOX <- c(xmin = -135.25, ymin = 18.4, xmax = -105.75, ymax = 49.25)
+study_area      <- st_as_sfc(st_bbox(STUDY_AREA_BBOX, crs = 4326))
+# the previous run's pins: a layer whose version + sha256 are unchanged is reported as such
+pins_csv  <- path(dir_parquet, "gazetteer_pins.csv")
+pins_prev <- if (file_exists(pins_csv)) read_csv(pins_csv, show_col_types = FALSE) else
+  tibble(dataset_id = character(), version = character(), sha256 = character())
+# planar test against a box: s2 rejects some national multipolygons (antimeridian splits) as invalid
+s2_was <- sf_use_s2(FALSE)
 gaz_pins <- list()
 for (i in seq_len(nrow(d_layers_gaz))) {
   lr   <- d_layers_gaz[i, ]
@@ -672,6 +687,7 @@ for (i in seq_len(nrow(d_layers_gaz))) {
 
   sf_g <- sf_g |>
     filter(st_geometry_type(geometry) %in% c("POLYGON", "MULTIPOLYGON")) |>
+    (\(x) suppressMessages(st_filter(x, study_area, .predicate = st_intersects)))() |>
     mutate(
       id    = row_number() |> as.integer(),
       layer = lr$layer,
@@ -680,11 +696,15 @@ for (i in seq_len(nrow(d_layers_gaz))) {
 
   all_spatial[[lr$layer]]      <- sf_g |> select(id, layer, name, geometry)
   all_spatial_attr[[lr$layer]] <- build_spatial_attr(sf_g, lr$layer)
+  prev <- pins_prev |> filter(dataset_id == lr$dataset_id)
   gaz_pins[[lr$dataset_id]]    <- tibble(
     dataset_id = lr$dataset_id, layer = lr$layer, slug = pin$slug,
-    version = pin$version, sha256 = pin$sha256, n_features = nrow(sf_g))
-  cat(glue("- **{lr$layer}** (gazetteer `{pin$slug}` v{pin$version}): {nrow(sf_g)} features\n\n"))
+    version = pin$version, sha256 = pin$sha256, n_features = nrow(sf_g),
+    change = if (nrow(prev) == 0) "new" else if (identical(prev$sha256, pin$sha256)) "unchanged"
+             else glue("v{prev$version} -> v{pin$version}"))
+  cat(glue("- **{lr$layer}** (gazetteer `{pin$slug}` v{pin$version}): {nrow(sf_g)} features in the study area\n\n"))
 }
+sf_use_s2(s2_was)
 
 # which gazetteer version each layer came from, next to the manifest
 d_gaz_pins <- bind_rows(gaz_pins)
