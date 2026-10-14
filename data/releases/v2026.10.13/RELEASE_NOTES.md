@@ -60,6 +60,12 @@ CC BY 4.0), so the Explorer's Area filter and Regions lens can use them. The lay
 unchanged: `200NM EEZ` (0–200 NM), `12NM Territorial Sea` (0–12 NM) and `24NM Contiguous Zone`, the
 band from 12 to 24 NM. All three are named `Pacific Coast`.
 
+BOEM's 2023 Wind Planning Areas, which BOEM rescinded on 30 July 2025, are no longer an area layer:
+`spatial` and `sample_spatial` drop `BOEM Wind Planning Areas` (in v2026.10.08, 793 samples in 3
+areas). The Explorer draws BOEM's current wind leases, the rescinded planning areas and three other BOEM
+layers from the Ocean Metrics gazetteer instead; those are map layers only, not areas you can filter
+samples by.
+
 ## Seabird and marine mammal surveys of July 2021 and August 2022 now have their cruise
 
 `farallon_bird-mammal` matches each survey to the CalCOFI cruise its observers rode by the stations
@@ -110,7 +116,7 @@ farallon cruise with effort and no sightings.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.13 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.10.13
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.13 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.23354090
 
 Cite the source datasets you use alongside the release:
 
