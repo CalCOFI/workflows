@@ -1,0 +1,102 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_2022-edna",
+  "title": "CalCOFI October 2022 Vertebrate eDNA",
+  "description": "eDNA metabarcoding survey of vertebrates from water samples collected during the October 2022 CalCOFI cruise. Water filters from CalCOFI/GEMCAP stations off Southern California were run through one or two molecular assays: a mitochondrial D-loop assay (cetacean detections, incl. Delphinus and Megaptera novaeangliae) and a 12S rRNA \"MiFish\" assay (fish detections). Published as an intercalibration exercise (source datasetID \"CalCOFI_Intercal\") on GBIF/OBIS, linked to Patin et al. 2026 (Methods in Ecology and Evolution, https://doi.org/10.1111/2041-210x.70370). Sequence read counts are a semi-quantitative signal of PCR-amplified DNA, not abundance, and are not comparable between assays. Published as detections only: edna_presence = 1 and the read counts. The source archive holds positive detections only, so the absence of a row for a filter and taxon is not a non-detection for this dataset (a filter or assay run with no detection is simply missing, and absence cannot be inferred); this differs from sio_cetacean-edna, where 0 means not detected in a sequenced sample.\n",
+  "keywords": ["eDNA", "metabarcoding", "dolphins", "rare targets"],
+  "license": "CC-BY-4.0",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-122.8364, 33.8101, -119.4034, 36.3464]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2022-01-01T00:00:00Z",
+          "2022-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:doi": "10.15468/n52j6r",
+  "sci:citation": "Patin N, ODonnell G (2026). CalCOFI October 2022 Vertebrate eDNA. Version 1.2. Occurrence dataset. https://doi.org/10.15468/n52j6r\n",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "sample_measurement",
+      "description": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
+    {
+      "name": "taxon",
+      "description": "Taxonomic hierarchy for species via WoRMS and ITIS authorities (built from spp.duckdb via recursive CTEs)"
+    },
+    {
+      "name": "dataset_taxon",
+      "description": "Crosswalk from each dataset's own taxon vocabulary to the global `taxon_key`. `obs` resolves its taxon by joining this on (`dataset_key`, `ds_taxa_code`), so a dataset can keep its local codes without leaking them into the shared model."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Genomics & eDNA"],
+    "calcofi:variables": ["edna_presence", "dimensionless", "Genomics & eDNA", "edna_reads_12s", "reads", "Genomics & eDNA", "edna_reads_dloop", "reads", "Genomics & eDNA"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_2022-edna/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_2022-edna/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://creativecommons.org/licenses/by/4.0/",
+      "type": "text/html",
+      "title": "Creative Commons Attribution 4.0 International"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.15468/n52j6r",
+      "type": "text/html"
+    }
+  ]
+}

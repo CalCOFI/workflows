@@ -8,6 +8,7 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+<<<<<<< HEAD
 ## A `percent_volume` measurement type, ahead of the Hopkins Monterey Bay zooplankton (1955-1963)
 
 `stanford_hopkins-zooplankton` is ingested but held out (`in_release: false`): its sheets merge a
@@ -16,6 +17,92 @@ six Monterey Bay stations have no CalCOFI cruise key (Q08). Its registry rows sh
 observations behind them: `measurement_type` gains `percent_volume` (a taxon's share of a plankton
 sample's settled volume, 0-100), and `measurement_qual` gains the code set `hopkins-zooplankton`
 (`unit_unclear`, `single_transcription`).
+=======
+## CTD quality code 4 means "below detection limit"
+
+The provider defined CTD code 4 (Ben Gire, 2026-10-13): **below detection limit**, reported as 0. On the
+corrected chlorophyll-a and nitrate estimates only a negative value is set to 0 and coded 4; the code
+may be used on any CTD sensor series. `metadata/measurement_qual.csv` renames the code from
+`set_to_zero` to `below_detection` and says so. No value changes: the zeros still count in averages,
+integrated chlorophyll and anomalies. Cruises after 2107 are to be reprocessed with the same rule;
+earlier cruises, the 1993–2013 baseline included, keep their negatives or gaps for now.
+
+# v2026.10.13
+
+## CalCOFI 2607 (2026-07-3322): the corrected preliminary CTD files
+
+The CTD team re-published `20-2607SH_CTDPrelim.zip` on calcofi.org on 2026-10-12 (Ben Gire). The
+Shared Drive copy the pipeline reads was replaced with it the next day. The bins and columns are the
+same as before. Diffed per measurement type against the shards v2026.10.08 was cut from, **nothing
+outside 2607 changed** (0 of 4,931 `obs` and 0 of 6,093 `obs_ctd_full` cruise × type cells). In 2607:
+
+- **A new CTD quality code, 4**: a corrected chlorophyll-a or nitrate estimate that came out negative
+  is now 0 instead of blank. It is registered in `metadata/measurement_qual.csv` as `set_to_zero`, and
+  `qual_ok` keeps it: the zero is a real value and counts in averages, integrated chlorophyll and
+  anomalies. This fills about 1,000–2,900 bins per estimate (`est_chlorophyll_a_*`,
+  `est_nitrate_*`).
+- **The nitrate and chlorophyll estimates were recalibrated by the provider**: nitrate by up to
+  1.0 µM (`est_nitrate_sta_corr`), chlorophyll by up to 0.003 µg/L.
+- **Sensor-2 oxygen** (`oxygen_umol_kg_2_*`) was recalibrated (up to 1.06 µmol/kg), and 2,213 of its
+  values were blanked and flagged 9 on the early casts. **The averaged oxygen and temperature are
+  unchanged**: the pipeline already used sensor 1 alone on casts 1–6 (`flag_overrides.csv`, from the
+  provider's cruise note that the secondary temperature sensor was faulty; question Q37), and
+  rebuilds every pair with `combine_sensor_pair_sql()`.
+- **`btl_temperature` is new for 2607** (2,396 bins: the provider filled the file's `BTL_Temp`
+  column). Two bottles' nutrients moved out of their 1 m bins.
+- **Derived products:** `chl_integrated` changed on 72 casts (mean +0.01 mg/m², at most +0.75), and
+  `chl_integrated_depth` deepened on 54 casts (mean +5 m, at most +132 m), because the zeros now count
+  as good bins instead of ending the integral. The mixed-layer depths, `chl_max_depth`, `spiciness0`
+  and `sigma_theta_ave` are unchanged.
+
+## Anomalies for the derived CTD products, and a seasonal baseline
+
+Rasmus Swalethorp asked for both (2026-10-06, 2026-10-07). The `climatology` table (calcofi4db
+4.24.0) now carries:
+
+- **Per-cast baselines** for the derived products in `sample_measurement`: the three mixed-layer
+  depths (`mld_sigma_theta_002`, `mld_sigma_theta_0125`, `mld_temperature_02`), `chl_max_depth`,
+  `chl_max` and `chl_integrated`. They use the same rules (station, cruise month, 1993–2013, at least
+  5 cruises). Such a value has no depth, so its row's **`depth_bin` is NULL**. `relationships.json`
+  declares that column as `nullable_key_columns`.
+- **A seasonal baseline beside the monthly one**: new columns `quarter`, `season_mean`, `season_sd`,
+  `season_n`, `season_n_cruises`, by the quarter of the cruise's month (Q1 Jan–Mar … Q4 Oct–Dec).
+  They are set on every month of a quarter that has at least 5 cruises. Where only the season passes
+  (mostly the northern lines 60–73.3), the row has a seasonal mean and a **NULL `clim_mean`**.
+
+**`obs_env` / `obs_bio` `year` and `quarter` are the cruise's**, not the cast's calendar date. 2607's
+inshore 93.3 casts were worked on 30 June and now fall in Q3 with the rest of the July cruise, the
+same season their baseline is filed under.
+
+**Consumers:** a row that exists is no longer always a monthly baseline. Test `clim_mean IS NOT NULL`
+before subtracting. A per-bin join on `depth_bin = <n>` never matches a per-cast cell. Columns were
+appended, never renamed.
+
+## The US EEZ, territorial sea and contiguous zone are areas you can filter by
+
+`sample_spatial` had no memberships for the three US maritime zones, because the NOAA limits they
+were drawn from are lines (workflows#169). They are now polygons of the Pacific coast from the Marine
+Regions Maritime Boundaries Geodatabase (Flanders Marine Institute; EEZ v12, 12 NM and 24 NM v4;
+CC BY 4.0), so the Explorer's Area filter and Regions lens can use them. The layer ids and names are
+unchanged: `200NM EEZ` (0–200 NM), `12NM Territorial Sea` (0–12 NM) and `24NM Contiguous Zone`, the
+band from 12 to 24 NM. All three are named `Pacific Coast`.
+
+BOEM's 2023 Wind Planning Areas, which BOEM rescinded on 30 July 2025, are no longer an area layer:
+`spatial` and `sample_spatial` drop `BOEM Wind Planning Areas` (in v2026.10.08, 793 samples in 3
+areas). The Explorer draws BOEM's current wind leases, the rescinded planning areas and three other BOEM
+layers from the Ocean Metrics gazetteer instead; those are map layers only, not areas you can filter
+samples by.
+
+## Seabird and marine mammal surveys of July 2021 and August 2022 now have their cruise
+
+`farallon_bird-mammal` matches each survey to the CalCOFI cruise its observers rode by the stations
+occupied the same day. The track was the ichthyoplankton tows alone, so the two surveys on cruises
+without a tow, `CAC2021_7` (`2021-07-33P4`) and `CAC2022_8` (`2022-08-39C2`), had a NULL
+`cruise_key` (workflows#74). The track now includes the CTD casts. `Fronts_0711`, a CCE-LTER process
+cruise with no CalCOFI cruise, stays NULL. `CAC2021_7`'s 466 transects carry no observations in the
+source (question Q11, also open for January 2021 and October 2022), so 2021-07-33P4 is a third
+farallon cruise with effort and no sightings.
+>>>>>>> origin/main
 
 # v2026.10.08
 

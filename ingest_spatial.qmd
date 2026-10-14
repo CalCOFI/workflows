@@ -232,6 +232,23 @@ if (!file_exists(cacurrent_usaeez_geo) || overwrite) {
 }
 ```
 
+## US maritime zones as polygons: `MarineRegions_maritime-zones`
+
+The NOAA Office of Coast Survey limits (`NOAA_maritime-boundaries`) are lines, so
+the 12 NM territorial sea, 24 NM contiguous zone and 200 NM EEZ matched no sample
+in `sample_spatial` (workflows#169). Marine Regions publishes the same zones as
+polygons; `libs/download_maritime_zones.R` writes the Pacific-coast parts into one
+GeoJSON, flagged `ts` / `cz` / `eez` like the NOAA lines, so the registry's filter
+expressions are unchanged.
+
+```{r}
+#| label: maritime-zones
+
+source(here("libs/download_maritime_zones.R"))
+download_maritime_zones(
+  glue("{dir_spatial}/MarineRegions_maritime-zones/us-maritime-zones_pacific.geojson"))
+```
+
 ## Helper functions
 
 ```{r}
