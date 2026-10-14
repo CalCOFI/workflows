@@ -338,7 +338,7 @@ stopifnot(
   "crosswalk must cover all 24 printed log-sheet rows" =
     setequal(mt_taxon$raw_measurement_type,
              unique(na.omit(d_obs$raw_measurement_type))),
-  "every crosswalk row needs a worms_id: run scripts/fill_measurement_taxon_ids.R stanford_hopkins-zooplankton" =
+  "every crosswalk row needs a worms_id: fill it in metadata/measurement_taxon.csv (exact WoRMS match)" =
     !anyNA(mt_taxon$worms_id))
 
 ensure_taxon_xref(con, mt_taxon, tx_over, cache_csv = here("metadata/taxon_xref.csv"))
