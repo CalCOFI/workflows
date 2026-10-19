@@ -8,6 +8,17 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Each measurement key has an authored short title
+
+`measurements.json` gains `short_label` per key (calcofi.io issue #30, decision D13): the name a
+measurement page head shows beside its picture, such as "Dissolved oxygen (ml/L)", while `label`
+keeps the full name with its method notes. It is authored in a new `short_label` column of
+`metadata/measurement_face.csv` and validated by calcofi4db 4.26.0: at most 48 characters, unique
+across keys, no trailing punctuation. Until now calcofi.io cut `label` at its first comma or colon.
+Keys that would have shared a title are told apart by where they were measured, for example
+"Surface PAR (CTD cast)" and "Surface PAR (underway)". A key with no row in the face registry
+(`dissolved_iron`) has `short_label` null.
+
 # v2026.10.14
 
 ## BOEM wind leases, oil and gas leases, planning areas and Chumash Heritage are areas you can filter by
