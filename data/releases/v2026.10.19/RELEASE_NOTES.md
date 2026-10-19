@@ -69,7 +69,7 @@ on `chlorophyll_a` and `btl_chlorophyll_a`) cite a calcofi.org URL with a text f
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.19 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.10.19
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.19 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.23484176
 
 Cite the source datasets you use alongside the release:
 
