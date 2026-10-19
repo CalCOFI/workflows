@@ -7,14 +7,6 @@ section below plus a generated appendix (tables, rows, datasets, validation gate
 versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
-
-## The euphausiid dataset credits Mark D. Ohman as its PI
-
-`cce-lter_euphausiids` listed Rasmus Swalethorp and Linsey Sala as PIs and Mark D. Ohman and Moira
-Decima as creators. Mark D. Ohman's correction: PI Mark D. Ohman; creators Mark D. Ohman and Linsey
-Sala. The calcofi_bottle description now says what its "Cast" file is (the rosette cast the bottles
-came up on), since a reader took it for the CTD Cast Files dataset.
-
 ## Each measurement key has an authored short title
 
 `measurements.json` gains `short_label` per key (calcofi.io issue #30, decision D13): the name a
@@ -26,6 +18,13 @@ Keys that would have shared a title are told apart by where they were measured, 
 "Surface PAR (CTD cast)" and "Surface PAR (underway)". `dissolved_iron`, which had no row in the face
 registry, now has one (`face_kind` none: dissolved iron is defined by the filter, a mix of Fe(II),
 Fe(III) and organically bound iron, so there is no single thing to draw).
+
+## The euphausiid dataset credits Mark D. Ohman as its PI
+
+`cce-lter_euphausiids` listed Rasmus Swalethorp and Linsey Sala as PIs and Mark D. Ohman and Moira
+Decima as creators. Mark D. Ohman's correction: PI Mark D. Ohman; creators Mark D. Ohman and Linsey
+Sala. The calcofi_bottle description now says what its "Cast" file is (the rosette cast the bottles
+came up on), since a reader took it for the CTD Cast Files dataset.
 
 ## A `#` inside a registry field is no longer cut off as a comment
 
