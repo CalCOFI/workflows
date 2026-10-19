@@ -16,8 +16,17 @@ keeps the full name with its method notes. It is authored in a new `short_label`
 `metadata/measurement_face.csv` and validated by calcofi4db 4.26.0: at most 48 characters, unique
 across keys, no trailing punctuation. Until now calcofi.io cut `label` at its first comma or colon.
 Keys that would have shared a title are told apart by where they were measured, for example
-"Surface PAR (CTD cast)" and "Surface PAR (underway)". A key with no row in the face registry
-(`dissolved_iron`) has `short_label` null.
+"Surface PAR (CTD cast)" and "Surface PAR (underway)". `dissolved_iron`, which had no row in the face
+registry, now has one (`face_kind` none: dissolved iron is defined by the filter, a mix of Fe(II),
+Fe(III) and organically bound iron, so there is no single thing to draw).
+
+## A `#` inside a registry field is no longer cut off as a comment
+
+The registry readers skipped comments with `readr::read_csv(comment = "#")`, which cuts every line at
+its first `#`. The two `measurement_chem.csv` rows for chlorophyll-a's method product (pheophytin a,
+on `chlorophyll_a` and `btl_chlorophyll_a`) cite a calcofi.org URL with a text fragment
+(`#:~:text=…`), so they lost the fragment and their `note` ("what acid turns it into"). calcofi4db
+4.26.0 skips only the leading block of `#` lines, and both rows now read whole.
 
 # v2026.10.14
 
