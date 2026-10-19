@@ -7,6 +7,8 @@ section below plus a generated appendix (tables, rows, datasets, validation gate
 versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
+
+# v2026.10.19
 ## Each measurement key has an authored short title
 
 `measurements.json` gains `short_label` per key (calcofi.io issue #30, decision D13): the name a
