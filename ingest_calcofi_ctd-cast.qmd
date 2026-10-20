@@ -333,7 +333,8 @@ add_zip_meta <- function(d) {
       zip_type = case_when(
         str_detect(file_zip, "CTDFinal")         ~ "final",
         str_detect(file_zip, "CTDPrelim")        ~ "preliminary",
-        str_detect(file_zip, "CTDCast|CTD_Cast") ~ "raw",
+        # calcofi.org spells it `CTDcast` too (20-2208BH_CTDcast.zip, 2026-10)
+        str_detect(file_zip, regex("CTD_?Cast", ignore_case = TRUE)) ~ "raw",
         str_detect(file_zip, "CTDTest")          ~ "test",
         TRUE                                     ~ "unknown"))
 }
