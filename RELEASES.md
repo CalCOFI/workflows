@@ -8,6 +8,33 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CalCOFI 2607's second temperature sensor is judged by the provider's own flags, and the bottle's density and dynamic height are labelled DECODR's
+
+The 24 provisional flags on cruise 2026-07-3322 (casts 1-6, both directions, the secondary temperature
+sensor and the 11 series derived from it) are gone. We had set them on 2026-09-24 because the provider's
+cruise notes called the sensor faulty on all six casts; the provider's corrected file now carries its own
+codes (9 on casts 1U, 5U, 6D, 6U and 385 of the 515 bins of 5D) and Ben Gire wrote that the processed
+files are accurate. Casts 2-4 and the downcast of cast 1, which the provider leaves unflagged, therefore
+enter the sensor-pair averages again (the secondary reads about 0.15 degC from the primary there). Against
+v2026.10.19, from the provider's file: `temperature_ave` changes on 841 one-metre bins (at most 0.257
+degC), `salinity_ave_corr` on 889 (0.370), `oxygen_ml_l_ave_cruise_corr` on 889 (0.222 ml/L),
+`oxygen_ml_l_ave_sta_corr` on 194 (0.281 ml/L) and `oxygen_umol_kg_ave_sta_corr` on 194 (12.31 umol/kg);
+the derived `spiciness0` changes on 889 bins (0.269), `sigma_theta_ave` on 1,566 (see below), and the three
+mixed-layer depths on 8 casts each (at most 0.25 m). Of those bins, 151 (temperature), 157 (salinity and
+spiciness) and 41 (oxygen, sta_corr) sit at depths published in `obs`. The 12 sensor-2 series change only
+in `measurement_qual` on the bins the provider did not flag (9,864 values); no sensor-2 value changes, and
+nothing outside 2607 moves. **Consumers:** a 2607 anomaly or section built on these averages shifts by up
+to the amounts above. One caveat the provider's codes leave: where it flags the secondary temperature it
+does not flag `sigma_theta_2`, so on cast 2607 5D `sigma_theta_ave` is wrong at 32 published depths (by up
+to 5.7 kg/m3) until the CTD team writes that flag or the ingest inherits it from the sensor (question Q45,
+which also counts 4,947 such bins on 22 cruises already in v2026.10.19).
+
+The bottle database's `sigma_theta` and `r_dynamic_height` are now described as legacy DECODR values:
+computed by the bottle database's old DECODR algorithm, which does not reproduce a Sea-Bird or TEOS-10
+computation from the same temperature and salinity (Ben Gire, 2026-10-16). They are kept as published
+(Rasmus Swalethorp: "keep legacy, add modern, document"); no value changes. A TEOS-10 recomputation is
+planned as a separate dataset.
+
 # v2026.10.19
 ## Each measurement key has an authored short title
 
