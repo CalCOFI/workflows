@@ -32,7 +32,8 @@ calcofi:
     - {table: ship, shared: true, note: "ship registry; also modified by bottle/ctd ingests"}
     - {table: lookup}
     - {table: grid, shared: true, note: "spatial grid referenced across datasets"}
-    - {table: fish, note: "fish grown past the larval stage, per net and species code (SWFSC Fish)"}
+    - {table: fish, note: "fish larger than larval size (mostly juveniles), per net and species code, not counted in the larvae (SWFSC Fish)"}
+    - {table: ichthyo_net, note: "net side (S/P) and tow number per net, with SWFSC's NetId and TowId; what the SIO PIC Parent Net Event crosswalk joins on"}
   erd:
     color: "#cdebc6"
 ---
@@ -121,6 +122,11 @@ options(DT.options = list(scrollX = TRUE))
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
 
+# a local verification run (a worktree render into a private CALCOFI_STAGE_DIR)
+# sets CALCOFI_SKIP_GCS so nothing reaches a bucket: neither the source archive
+# (read_csv_files(sync_archive =)) nor the ingest mirror (sync_to_gcs, at the end)
+publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
+
 # define paths
 # provider/dataset/metadata read from this file's authoritative YAML block
 cc           <- read_calcofi_meta(here("ingest_swfsc_ichthyo.qmd"))
@@ -157,9 +163,10 @@ d <- read_csv_files(
   provider = provider,
   dataset = dataset,
   dir_data = dir_data,
-  sync_archive = TRUE,
+  sync_archive = publish_to_gcs,
   metadata_dir = here("metadata")
 ) # workflows/metadata/{provider}/{dataset}/
+if (!publish_to_gcs) cat("CALCOFI_SKIP_GCS set — source not archived (local verification run)\n")
 
 # show source files summary
 message(glue("Loaded {nrow(d$source_files)} tables from {d$paths$dir_csv}"))
@@ -273,34 +280,54 @@ species rows) is order-independent — it only appends to `species`.
 apply_data_corrections(con, verbose = TRUE)
 ```
 
-### Cruises SWFSC moved back to staging (Q09)
+### Cruises SWFSC moved back to staging (Q09, Q23)
 
 SWFSC's Ed Weber (2026-09-25, `swfsc_ichthyo_09`): cruises **198202JD** and **198212JD**
 (`1982-02-31JD`, `1982-12-31JD`) are partially sorted and "have been moved back to the staging
-schema", so they are **not part of the source**; every other tow without a row is a true zero and
-stays in the denominator. The 2026-09-26 export (`Cruise.csv` 694 rows) no longer contains them. The
-v2026.10.01 release was built from the earlier export and still carried them (1,128 sites, 1,112
-tows, 1,145 nets, 1,100 `obs` rows, all `abundance`, of which 1,055 on 1982-02 and 45 on
-1982-12). This chunk is the explicit exclusion: it stops the render if an export that still holds
-either cruise is read, rather than letting a partially sorted cruise be counted as zero catch.
+schema", so their ichthyoplankton are **not part of the source**; every other tow without a row is
+a true zero and stays in the denominator. The v2026.10.01 release was built from an earlier export
+and still carried them (1,128 sites, 1,112 tows, 1,145 nets, 1,100 `obs` rows). The 2026-09-26
+export (`Cruise.csv` 694 rows) dropped their `Cruise` rows too — and with them the reference row
+other datasets key events to: 40 euphausiid tows of February 1982 resolved no cruise
+(`swfsc_ichthyo_23`). Since the 2026-10-14 export the `Cruise` table is "the union of my stg and dbo
+cruises" (Ed Weber, 2026-10-14; 739 rows): both rows are back with no `Station`, `Tow` or `Net`
+row, beside 48 other cruises with no station (CUFES-only cruises, and cruises only the bottle and
+CTD sources sample). This chunk is the explicit exclusion: it stops the render if either staging
+cruise has an ichthyoplankton row — a partially sorted cruise must never be counted as zero catch —
+and reports whether its `Cruise` row is present, which is what lets the euphausiids key their 1982
+tows again.
 
 ```{r}
 #| label: exclude_staging_cruises
 
-# Q09: no row of these cruises may survive into the ingest. They are removed at
-# the source (SWFSC), so the check is on what was LOADED, before any key is minted.
+# Q09/Q23: a staging cruise MAY have a Cruise row (the reference other datasets
+# key events to, since the 2026-10-14 export) but no ichthyoplankton row. The
+# check is on what was LOADED, before any key is minted; site.cruise_uuid ->
+# cruise.cruise_uuid is the source's own link.
 q09_cruises <- tibble::tribble(
   ~ship_key, ~date_ym,        ~cruise,
   "JD",      "1982-02-01",    "198202JD",
   "JD",      "1982-12-01",    "198212JD")
 q09_in <- paste0("('", q09_cruises$ship_key, "', '", q09_cruises$date_ym, "')", collapse = ", ")
-n_q09  <- dbGetQuery(con, glue("
-  SELECT COUNT(*) FROM cruise
-  WHERE (ship_key, CAST(date_ym AS VARCHAR)) IN ({q09_in})"))[[1]]
+d_q09  <- dbGetQuery(con, glue("
+  SELECT c.ship_key, CAST(c.date_ym AS VARCHAR) AS date_ym, c.cruise_uuid,
+         (SELECT COUNT(*) FROM site s WHERE s.cruise_uuid = c.cruise_uuid)        AS n_site,
+         (SELECT COUNT(*) FROM site s JOIN tow t USING (site_uuid)
+           WHERE s.cruise_uuid = c.cruise_uuid)                                   AS n_tow,
+         (SELECT COUNT(*) FROM site s JOIN tow t USING (site_uuid)
+                                      JOIN net n USING (tow_uuid)
+           WHERE s.cruise_uuid = c.cruise_uuid)                                   AS n_net
+  FROM cruise c
+  WHERE (c.ship_key, CAST(c.date_ym AS VARCHAR)) IN ({q09_in})
+  ORDER BY 2"))
 stopifnot(
-  "cruises 198202JD / 198212JD are in the source export: SWFSC moved them back to staging (swfsc_ichthyo_09, 2026-09-25); re-sync the 2026-09-26 or later export" =
-    n_q09 == 0)
-cat(glue("Q09: {nrow(q09_cruises)} staging cruises ({paste(q09_cruises$cruise, collapse = ', ')}) absent from the source export"), "\n")
+  "a staging cruise (198202JD / 198212JD) has ichthyoplankton rows in the export: SWFSC moved them back to staging (swfsc_ichthyo_09, 2026-09-25) and a partially sorted cruise cannot be counted as zero catch" =
+    sum(d_q09$n_site, d_q09$n_tow, d_q09$n_net) == 0)
+cat(glue(
+  "Q09/Q23: {nrow(d_q09)} of {nrow(q09_cruises)} staging cruises ",
+  "({paste(q09_cruises$cruise, collapse = ', ')}) have a Cruise row (the reference other ",
+  "datasets key to); none has a Station, Tow or Net row"), "\n")
+d_q09 |> datatable(caption = "Staging cruises: Cruise row present, no ichthyoplankton rows")
 ```
 
 ### Create cruise_key (natural key)
@@ -458,15 +485,20 @@ tbl(con, "lookup") |>
   datatable(caption = "Lookup table with vocabularies")
 ```
 
-## Egg stages 12-15 are screened out (swfsc_ichthyo_02)
+## Egg stages 12-15 are screened out (swfsc_ichthyo_02, _22)
 
 The egg stage scale this ingest publishes is Moser & Ahlstrom (1985), stages 1-11. SWFSC
 (Ed Weber, 2026-09-25): "Stages 12-15 have been used for Dover Sole and sometimes Rex Sole but I
 do not have a reference. You or I could screen them out if wanted." Ben Best (2026-10-01): "we can
-filter out the observations with egg stages 12-15". So those egg-stage rows leave the `stage`
-distribution here, before consolidation, and are written to
-`data/flagged/egg_stage_12_15_screened.csv`. The eggs themselves are still counted: the egg
-abundance (`Eggs.csv`) is a separate total and is not touched.
+filter out the observations with egg stages 12-15". The 2026-09-26 export carried 669 such rows,
+most of them northern anchovy and Pacific sardine at stage 12 — "a lazy, stupid hack that they did
+to flag some records for DEPM" (Ed Weber, 2026-10-14, `swfsc_ichthyo_22`) — and since the
+2026-10-14 export SWFSC removes them at source, the Dover and Rex sole rows included ("I should
+probably do the filtering for Dover and Rex Sole on this end to be consistent? I did this."). This
+chunk is now the guard: any stage above 11 still leaves the `stage` distribution here, before
+consolidation, and is written to `data/flagged/egg_stage_12_15_screened.csv`, which is expected to
+come out empty. The eggs themselves are still counted: the egg abundance (`Eggs.csv`) is a separate
+total and is not touched.
 
 ```{r}
 #| label: screen_egg_stages
@@ -838,6 +870,10 @@ deprecated_tables <- c(deprecated_ichthyo, deprecated_lookup, not_ingested)
 # tables, beside the NODC code"). cruise_key stays YYYY-MM-NODC: ship_nodc is
 # untouched and still keys every cruise. The release copies it onto `cruise`.
 # Every SWFSC ship carries one; where it differs from the NODC code it is reported.
+# Since the 2026-10-14 export none does (Ed Weber, 2026-10-14: "NODC and ICES
+# codes now correspond completely"): FROSTI's NODC went OIFS -> 18DN, so its seven
+# cruises key 2003-07-18DN ... 2011-04-18DN (Ben, 2026-10-20, D1; RELEASES.md),
+# and the table below is expected empty.
 d_ices <- dbGetQuery(con, "
   SELECT ship_key, ship_name, ship_nodc, ship_ices FROM ship
   WHERE ship_ices IS DISTINCT FROM ship_nodc ORDER BY 1")
@@ -1686,13 +1722,16 @@ append_sample(con, glue("
   FROM site s
   LEFT JOIN (SELECT site_uuid, min(datetime_start_utc) AS dt FROM tow GROUP BY 1) td
          ON td.site_uuid = s.site_uuid"))
-# depth_max_m of a tow and of its nets: Net.NetDepth, the MAXIMUM POSSIBLE depth of
-# the net in m (nominal, not a measured depth; not wire-out) -- swfsc_ichthyo_08,
-# and Ben's reading 2026-10-04 (swfsc_ichthyo_19, proposed to Ed). Where the sea
-# floor is shallower the net did not reach it: 210 of 59,976 stations of the
-# 2026-09-26 export put it more than 10 m below the deepest GEBCO cell around them.
-# It is published as is (never clipped), and the release reports those stations in
-# their own line of the seafloor check (check_depth_vs_seafloor(nominal_datasets =)).
+# depth_max_m of a tow and of its nets: Net.NetDepth, "the estimated depth when
+# all wire is out. It is roughly the maximum depth of the tow but that estimate
+# might be a little off" (Ed Weber, 2026-10-14, swfsc_ichthyo_19; the wire-angle
+# method is in the two references on calcofi.org). An estimate, not a measured
+# depth, and not wire-out (swfsc_ichthyo_08). Where the sea floor is shallower
+# the net did not reach it: 210 of 59,976 stations put it more than 10 m below
+# the deepest GEBCO cell around them (data/flagged/netdepth_below_seafloor.csv,
+# sent to SWFSC to screen for errors). It is published as is (never clipped), and
+# the release reports those stations in their own line of the seafloor check
+# (check_depth_vs_seafloor(nominal_datasets =)).
 # A net column but a property of the tow: the tow takes it only where every net of
 # the tow agrees; a tow with no NetDepth (the surface Manta tows) keeps NULL.
 d_netdepth <- dbGetQuery(con, "
@@ -1714,7 +1753,7 @@ stopifnot(
     dbGetQuery(con, "SELECT COUNT(*) FROM net WHERE net_depth_m IS NOT NULL
                      AND (isnan(net_depth_m) OR net_depth_m <= 0)")[[1]] == 0)
 d_netdepth |>
-  datatable(caption = "Net.NetDepth (maximum possible net depth) -> sample.depth_max_m of tows and nets, by tow type")
+  datatable(caption = "Net.NetDepth (estimated depth with all wire out, roughly the tow's maximum) -> sample.depth_max_m of tows and nets, by tow type")
 
 append_sample(con, glue("
   SELECT {ns_key(ds_key, 'tow', 't.tow_uuid')} AS sample_key, 'tow' AS sample_type,
@@ -1827,14 +1866,15 @@ cat(glue("AphiaID aggregation: {format(n_rows_src, big.mark = ',')} source count
          "{format(n_obs_now, big.mark = ',')} obs rows ({n_rows_src - n_obs_now} summed into a ",
          "row of the same net and AphiaID)\n"))
 
-# fish — SWFSC's Fish table (Ed Weber 2026-09-26: "the Fish (i.e., grown out of
-# larvae size) table"; Ben 2026-10-04: wanted, in lower snake_case). Counts per net
-# and species code of fish past the larval stage. Published as its own table at
-# the source grain -- (sample_key of the net, species_id), with the taxon_key the
-# code resolves to -- and NOT projected into obs: no life_stage in the vocabulary
-# says "grown out of larvae" exactly (juvenile, or juvenile and adult?), and 2,923
-# of its net x species pairs also have a Larvae count, so whether a fish is also in
-# that count must be known before an abundance could be summed (swfsc_ichthyo_20).
+# fish — SWFSC's Fish table: "fish larger than larvae size. So generally juveniles
+# but not exclusively. They are not in both tables" (Ed Weber, 2026-10-14,
+# swfsc_ichthyo_20; Ben 2026-10-20, D3: keep it). Counts per net and species code
+# of fish larger than the larval size, ADDITIVE to the larval count of the same
+# net and code (never double-counted). Published as its own table at the source
+# grain -- (sample_key of the net, species_id), with the taxon_key the code
+# resolves to -- and NOT projected into obs: `juvenile` is in life_stage.csv, but
+# "not exclusively" makes it inexact, and a controlled-vocabulary value is filled
+# only on an exact match (metadata-registries skill).
 d_fish_orphan <- dbGetQuery(con, "
   SELECT COUNT(*) FILTER (WHERE n.net_uuid IS NULL) AS no_net,
          COUNT(*) FILTER (WHERE dt.taxon_key IS NULL) AS no_taxon
@@ -1866,6 +1906,56 @@ d_fish <- dbGetQuery(con, "
 cat(glue("fish: {format(d_fish$n, big.mark = ',')} rows, {format(d_fish$fish, big.mark = ',')} fish ",
          "on {format(d_fish$nets, big.mark = ',')} nets, {d_fish$codes} species codes\n"))
 
+# ichthyo_net — the two source columns the core projection drops (Ben 2026-10-20,
+# D2): Net.NetSide (S starboard / P port on the bongo pairs of CB and PV tows,
+# NULL on C1, CV and MT) and Tow.TowNumber (which of several tows of one type at
+# one station occupation; 1 on 74,264 of 74,385 tows, up to 50), with SWFSC's own
+# NetId and TowId and the tow type, one row per net keyed by the net's
+# sample_key. This is what the SIO Pelagic Invertebrate Collection's "Parent Net
+# Event" table is matched on (NetID_SWFSC where it has one, net type + side +
+# time otherwise), so a bongo pair never collapses to one tow. Declared in
+# core_relationships() (calcofi4db >= 4.27.0); published beside `fish`.
+invisible(dbExecute(con, glue("
+  CREATE OR REPLACE TABLE ichthyo_net AS
+  SELECT {ns_key(ds_key, 'net', 'n.net_uuid')} AS sample_key,
+         n.net_uuid, n.tow_uuid,
+         n.side AS net_side,
+         CAST(t.tow_number AS SMALLINT) AS tow_number,
+         t.tow_type_key AS tow_type
+  FROM net n JOIN tow t USING (tow_uuid)
+  ORDER BY sample_key")))
+d_inet <- dbGetQuery(con, "
+  SELECT COUNT(*) AS n, COUNT(DISTINCT sample_key) AS n_key,
+         COUNT(*) FILTER (WHERE net_side = 'S')     AS n_s,
+         COUNT(*) FILTER (WHERE net_side = 'P')     AS n_p,
+         COUNT(*) FILTER (WHERE net_side IS NULL)   AS n_no_side,
+         COUNT(*) FILTER (WHERE net_side NOT IN ('S', 'P')) AS n_bad_side,
+         COUNT(*) FILTER (WHERE tow_number IS NULL OR tow_number < 1) AS n_bad_tow_number,
+         COUNT(*) FILTER (WHERE tow_number > 1)     AS n_tow_number_gt1,
+         COUNT(*) FILTER (WHERE tow_type IS NULL)   AS n_no_type,
+         COUNT(*) FILTER (WHERE sample_key NOT IN
+           (SELECT sample_key FROM sample WHERE sample_type = 'net')) AS n_orphan
+  FROM ichthyo_net")
+stopifnot(
+  "ichthyo_net holds one row per net, keyed by the net's sample_key" =
+    d_inet$n == dbGetQuery(con, "SELECT COUNT(*) FROM net")[[1]] && d_inet$n_key == d_inet$n,
+  "every ichthyo_net row names a released net" = d_inet$n_orphan == 0,
+  "net_side is S, P or NULL" = d_inet$n_bad_side == 0,
+  "tow_number is a positive integer on every net" = d_inet$n_bad_tow_number == 0,
+  "every net carries its tow type" = d_inet$n_no_type == 0,
+  "the nets of one tow carry distinct sides (a bongo pair is one S and one P)" =
+    dbGetQuery(con, "SELECT COUNT(*) FROM (SELECT tow_uuid, net_side FROM ichthyo_net
+                     GROUP BY ALL HAVING COUNT(*) > 1)")[[1]] == 0)
+cat(glue(
+  "ichthyo_net: {format(d_inet$n, big.mark = ',')} nets; side S {format(d_inet$n_s, big.mark = ',')}, ",
+  "P {format(d_inet$n_p, big.mark = ',')}, none {format(d_inet$n_no_side, big.mark = ',')}; ",
+  "tow_number > 1 on {d_inet$n_tow_number_gt1} nets\n"))
+dbGetQuery(con, "
+  SELECT tow_type, net_side, COUNT(*) AS n_net, COUNT(DISTINCT tow_uuid) AS n_tow,
+         MAX(tow_number) AS tow_number_max
+  FROM ichthyo_net GROUP BY ALL ORDER BY 1, 2") |>
+  datatable(caption = "ichthyo_net: nets by tow type and side")
+
 # net effort, as SWFSC gives it (swfsc_ichthyo_03; Ed Weber 2026-09-26: "you should
 # trust us on the standard haul factor instead of calculating based on angles for
 # every 10-m of wire"). Nothing here recomputes it: std_haul_factor is Net.Shf,
@@ -1894,21 +1984,31 @@ d_prop_out <- dbGetQuery(con, "
 # positive zooplankton volumes"). obs stays positive-only by design: a tow with no
 # egg, larva or invertebrate row is a ZERO for every taxon, implied by its `sample`
 # rows and their effort, which every tow and net keeps (the denominator). Only the
-# two staging cruises were removed (exclude_staging_cruises); nothing marks a tow
-# "unsorted". Zooplankton volume is measured on the oblique tows (C1, CB) only.
+# two staging cruises are excluded (exclude_staging_cruises); nothing marks a tow
+# "unsorted". Zooplankton volume is measured on the oblique tows (C1, CB) only, and
+# on the STARBOARD net of a bongo pair: a port net carries none by design (Ed
+# Weber, 2026-10-14, swfsc_ichthyo_21: "I don't have any non-port bongo tows in
+# the db without zooplankton volumes"), so a zero tow counts as missing it only
+# when a non-port net lacks it; the five port-net-only CalBOBL tows of the
+# 2026-09-26 export are reported apart. The nine CalBOBL tows with no net were
+# "spoiled samples, spilled samples, or lost vials" and left the export on
+# 2026-10-14 (swfsc_ichthyo_21), so no_net is expected 0.
 d_zero <- dbGetQuery(con, "
   WITH caught AS (SELECT DISTINCT n.tow_uuid FROM ichthyo i JOIN net n USING (net_uuid)),
   z AS (
     SELECT t.tow_uuid, t.tow_type_key, COUNT(n.net_uuid) AS n_net,
-           MIN(n.volume_sampled) AS vol_min, MAX(n.totalplankton) AS tp_max
+           COUNT(n.net_uuid) FILTER (WHERE n.side IS DISTINCT FROM 'P') AS n_net_s,
+           MIN(n.volume_sampled) AS vol_min, MAX(n.totalplankton) AS tp_max,
+           MAX(n.totalplankton) FILTER (WHERE n.side IS DISTINCT FROM 'P') AS tp_max_s
     FROM tow t LEFT JOIN net n USING (tow_uuid)
     WHERE t.tow_uuid NOT IN (SELECT tow_uuid FROM caught)
     GROUP BY 1, 2)
   SELECT tow_type_key, COUNT(*) AS n_zero_tow,
-         COUNT(*) FILTER (WHERE n_net = 0)                     AS no_net,
-         COUNT(*) FILTER (WHERE n_net > 0 AND vol_min > 0)    AS volume_positive,
-         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max > 0)     AS zooplankton_positive,
-         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max IS NULL) AS zooplankton_missing
+         COUNT(*) FILTER (WHERE n_net = 0)                         AS no_net,
+         COUNT(*) FILTER (WHERE n_net > 0 AND vol_min > 0)        AS volume_positive,
+         COUNT(*) FILTER (WHERE n_net > 0 AND tp_max > 0)         AS zooplankton_positive,
+         COUNT(*) FILTER (WHERE n_net_s > 0 AND tp_max_s IS NULL) AS zooplankton_missing,
+         COUNT(*) FILTER (WHERE n_net > 0 AND n_net_s = 0)        AS port_net_only
   FROM z GROUP BY 1 ORDER BY 1")
 stopifnot(
   "every zero-catch tow that has a net has a positive volume sampled (true zero, in the denominator)" =
@@ -1920,8 +2020,9 @@ cat(glue(
   "{format(dbGetQuery(con, 'SELECT COUNT(*) FROM tow')[[1]], big.mark = ',')} tows caught nothing; ",
   "all {format(sum(d_zero$volume_positive), big.mark = ',')} with a net have a positive volume; ",
   "{sum(d_zero$no_net)} tow(s) have no net at all (no effort: not in any density denominator); ",
-  "oblique (C1/CB) zero tows with no zooplankton volume: ",
-  "{sum(d_zero$zooplankton_missing[d_zero$tow_type_key %in% c('C1', 'CB')])}\n",
+  "oblique (C1/CB) zero tows whose non-port net has no zooplankton volume: ",
+  "{sum(d_zero$zooplankton_missing[d_zero$tow_type_key %in% c('C1', 'CB')])} ",
+  "({sum(d_zero$port_net_only)} port-net-only zero tows carry none by design)\n",
   "net effort: {format(d_effort$n_net, big.mark = ',')} nets, none missing; ",
   "{nrow(d_prop_out)} with prop_sorted outside (0, 1]\n"))
 if (nrow(d_prop_out)) d_prop_out |> datatable(caption = "Nets whose proportion sorted is outside (0, 1] (reported to SWFSC)")
@@ -2027,9 +2128,9 @@ cat(glue("cruise_uuid <-> cruise_key check: {n_cruise_uuid_mismatch} mismatch(es
 # back out of the namespaced sample_key, the containment FK out of
 # parent_sample_key, and the net effort columns by pivoting sample_measurement
 # back out of long form. Exact for every column the core models, lossy for the
-# rest (net.side, tow.tow_number, the legacy site columns) — which the release
-# drops anyway. The real tables are DROPped: they are 213k/459k rows and are no
-# longer written to parquet.
+# rest (the legacy site columns) — net.side and tow.tow_number are published
+# through `ichthyo_net` above instead. The real tables are DROPped: they are
+# 213k/459k rows and are no longer written to parquet.
 compat <- list(
   site = compat_event_sql(ds_key, "site", "site_uuid", NULL,
     c(order_occ = "order_occ", longitude = "longitude", latitude = "latitude",
@@ -2083,11 +2184,11 @@ mismatches <- list(
 
 # write parquet files with manifest
 # core shards + the shared reference tables this ingest owns for the whole
-# database (grid/cruise/ship/lookup), and the dataset's own `fish` table. The
-# per-dataset site/tow/net/ichthyo tables are no longer written — they are VIEWs
-# over the core now.
+# database (grid/cruise/ship/lookup), and the dataset's own `fish` and
+# `ichthyo_net` tables. The per-dataset site/tow/net/ichthyo tables are no longer
+# written — they are VIEWs over the core now.
 tbls_out <- core_output_tables(
-  con, extra = c("grid", "cruise", "ship", "lookup", "dataset", "fish"))
+  con, extra = c("grid", "cruise", "ship", "lookup", "dataset", "fish", "ichthyo_net"))
 parquet_stats <- write_parquet_outputs(
   con              = con,
   output_dir       = dir_parquet,
@@ -2130,10 +2231,15 @@ metadata_path <- build_metadata_json(
 )
 
 # write relationships.json sidecar with PKs/FKs
-# `fish` (this dataset's own table) is declared in core_relationships() (calcofi4db
-# dev): key (sample_key, species_id), FKs to the net in `sample` and to `taxon`
-stopifnot("calcofi4db must declare fish's key (core_relationships)" =
-            identical(core_relationships("fish")$primary_keys$fish, c("sample_key", "species_id")))
+# `fish` and `ichthyo_net` (this dataset's own tables) are declared in
+# core_relationships(): fish keyed (sample_key, species_id) with FKs to the net in
+# `sample` and to `taxon`; ichthyo_net keyed sample_key with an FK to `sample`
+# (calcofi4db >= 4.27.0)
+stopifnot(
+  "calcofi4db must declare fish's key (core_relationships)" =
+    identical(core_relationships("fish")$primary_keys$fish, c("sample_key", "species_id")),
+  "calcofi4db must declare ichthyo_net's key (core_relationships, >= 4.27.0)" =
+    identical(core_relationships("ichthyo_net")$primary_keys$ichthyo_net, "sample_key"))
 build_relationships_json(
   rels = core_relationships(tbls_out),
   output_dir = dir_parquet,
@@ -2183,12 +2289,14 @@ gcs_ingest_prefix <- glue("ingest/{dir_label}")
 gcs_bucket <- "calcofi-db"
 
 # sync to GCS — only uploads new or changed files
-sync_results <- sync_to_gcs(
-  local_dir = dir_stage,
-  sidecar_dir = dir_parquet,
-  gcs_prefix = gcs_ingest_prefix,
-  bucket = gcs_bucket
-)
+if (publish_to_gcs) {
+  sync_results <- sync_to_gcs(
+    local_dir = dir_stage,
+    sidecar_dir = dir_parquet,
+    gcs_prefix = gcs_ingest_prefix,
+    bucket = gcs_bucket
+  )
+} else cat("CALCOFI_SKIP_GCS set — skipping the upload (local verification run)\n")
 ```
 
 ## Cleanup
