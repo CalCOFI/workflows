@@ -59,6 +59,9 @@ dataset once the DECODR source arrives.
   modern value beside it (Rasmus Swalethorp, 2026-10-16: "keep legacy, add modern,
   document"). Where the two disagree by more than 0.1 kg m⁻³ the bottle is listed for
   the provider ([Findings](#findings)).
+- **A known-wrong input is withheld by name.** Cruise 2021-05-3322's salinity column
+  holds sigma-theta (`calcofi_bottle` Q13), so its bottles get no derived value until
+  the provider answers (Ben Best, 2026-10-20); the notebook asserts none is emitted.
 
 ```{mermaid}
 graph LR
@@ -107,6 +110,15 @@ src_types <- c(temperature = "temperature", salinity = "salinity", legacy = "sig
 # release v2026.10.14 comparison over 199,918 bottles had a median of 0.0037 kg/m3
 # and a p95 of 0.0087, so 0.1 is about ten times the p95 and is not a rounding effect
 diff_list_kg_m3 <- 0.1
+
+# WITHHELD, by name: cruises whose source T or S is known to be wrong, so nothing is
+# derived from them until the provider answers. Ben Best, 2026-10-20: "a value we know is
+# wrong never enters a derived product".
+# - 2021-05-3322: on every bottle the published Salnty equals the bottle's own sigma_theta
+#   (24.19-27.06), so the salinity column holds sigma-theta; calcofi_bottle Q13 (proposed,
+#   high) asks the provider. Remove the entry when Q13 is answered and calcofi_bottle
+#   re-staged; this dataset's Q03 tracks it.
+withheld_cruises <- c("2021-05-3322" = "calcofi_bottle Q13: Salnty holds sigma-theta")
 
 if (overwrite) {
   for (f in c(db_path, paste0(db_path, ".wal"))) if (file_exists(f)) file_delete(f)
@@ -239,12 +251,29 @@ dbGetQuery(con, "
 
 ## Compute the Products
 
+The bottles of a **withheld** cruise (`withheld_cruises` in Setup) are set aside before
+anything is computed: their source salinity is known to be wrong (`calcofi_bottle` Q13),
+and a value we know is wrong never enters a derived product (Ben Best, 2026-10-20). They
+are listed below and in question Q03, and return when Q13 is answered.
+
 ```{r}
 #| label: compute
-d <- dbGetQuery(con, "
-  SELECT sample_key, temperature, q_temperature, salinity, q_salinity, legacy, q_legacy,
+d_all <- dbGetQuery(con, "
+  SELECT sample_key, cruise_key, temperature, q_temperature, salinity, q_salinity, legacy, q_legacy,
          depth_m, latitude, longitude
   FROM btl WHERE temperature IS NOT NULL AND salinity IS NOT NULL")
+is_withheld <- d_all$cruise_key %in% names(withheld_cruises)
+d_withheld  <- d_all[is_withheld, ]
+d           <- d_all[!is_withheld, ]
+d_withheld |>
+  count(cruise_key, name = "bottles") |>
+  mutate(reason = withheld_cruises[cruise_key],
+         salinity_equals_legacy_sigma = vapply(cruise_key, function(ck) with(
+           d_withheld[d_withheld$cruise_key == ck, ], sum(abs(salinity - legacy) < 0.01, na.rm = TRUE)),
+           numeric(1))) |>
+  datatable(caption = "Bottles withheld from the derivation (question Q03)", rownames = FALSE)
+stopifnot("every withheld cruise is still in the source (else drop it from the list)" =
+            all(names(withheld_cruises) %in% d_all$cruise_key))
 t0 <- Sys.time()
 r <- bottle_spice_sigma0(d$temperature, d$salinity, d$depth_m, d$longitude, d$latitude,
                          q_temperature = d$q_temperature, q_salinity = d$q_salinity)
@@ -265,6 +294,7 @@ is_flagged <- function(q) sub("\\.0+$", "", as.character(q)) %in% c("8", "9")
 flagged <- is_flagged(d$q_temperature) | is_flagged(d$q_salinity)
 placed  <- is.finite(d$depth_m) & is.finite(d$latitude) & is.finite(d$longitude)
 fa <- tibble(
+  withheld_cruise_bottles  = nrow(d_withheld),
   bottles_t_and_s          = nrow(d),
   t_or_s_flagged_8_9       = sum(flagged),
   t_flagged                = sum(is_flagged(d$q_temperature)),
@@ -401,7 +431,12 @@ n_obs <- dbGetQuery(con, "SELECT measurement_type, COUNT(*) AS n FROM obs GROUP 
 n_obs |> datatable(caption = "core projection: obs rows per type", rownames = FALSE)
 stopifnot(
   "one obs row per derived bottle and type" = all(n_obs$n == fa$derived),
-  "both types emitted" = nrow(n_obs) == 2)
+  "both types emitted" = nrow(n_obs) == 2,
+  "no row of a withheld cruise is emitted (calcofi_bottle Q13)" = dbGetQuery(con, glue("
+    SELECT COUNT(*) AS n FROM obs
+    WHERE cruise_key IN ({paste0(\"'\", names(withheld_cruises), \"'\", collapse = ', ')})
+       OR sample_key IN (SELECT sample_key FROM btl
+                         WHERE cruise_key IN ({paste0(\"'\", names(withheld_cruises), \"'\", collapse = ', ')}))"))$n == 0)
 ```
 
 ## Check Measurement Bounds
@@ -425,12 +460,12 @@ inputs (a temperature or salinity the legacy value was not computed from) — an
 below −3 kg m⁻³, which needs a practical salinity near 20, the same class of fault the
 CTD derived products list (`calcofi_ctd-derived` Q08).
 
-At the first render (2026-10-20) nearly all of both lists is one cruise: on every bottle
-of 2021-05-3322 the published salinity equals the bottle's own sigma-theta, so the
-`Salnty` column carries sigma-theta for that cruise. That is `calcofi_bottle` Q13
-(proposed: treat those salinities as invalid once the provider confirms); this dataset
-follows it rather than deciding it here, because its source code is blank (good, by
-`calcofi_bottle` Q01) and the values sit inside the generous bounds.
+Cruise 2021-05-3322 is not in these lists because it is **withheld** (see Compute the
+Products): at the first render (2026-10-20) it was 918 of the 928 bottles past 0.1 kg m⁻³
+and every bottle with spice below −3, because on every bottle the published salinity
+equals the bottle's own sigma-theta (`calcofi_bottle` Q13). Its source code is blank
+(good, by `calcofi_bottle` Q01) and the values sit inside the generous bounds, so no flag
+or bound would have caught it; the withholding is by name, until Q13 is answered.
 
 ```{r}
 #| label: findings
@@ -448,7 +483,7 @@ d_diff_sum |> mutate(across(ends_with("_abs"), ~ signif(.x, 3))) |>
 
 d_diff_odd <- d_diff |>
   filter(abs(diff) > diff_list_kg_m3) |>
-  left_join(dbGetQuery(con, "SELECT sample_key, cruise_key, datetime FROM btl"), by = "sample_key") |>
+  left_join(dbGetQuery(con, "SELECT sample_key, datetime FROM btl"), by = "sample_key") |>
   transmute(sample_key, cruise_key, date = as.Date(datetime), depth_m,
             temperature, q_temperature, salinity, q_salinity,
             sigma_theta_legacy = round(legacy, 3), q_legacy,
