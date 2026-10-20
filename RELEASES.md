@@ -8,6 +8,49 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## CalCOFI 2607's second temperature sensor is judged by the provider's own flags, and a sigma-theta computed from a flagged sensor is flagged
+
+The 24 provisional flags on cruise 2026-07-3322 (casts 1-6, both directions, the secondary temperature
+sensor and the 11 series derived from it) are gone. We had set them on 2026-09-24 because the provider's
+cruise notes called the sensor faulty on all six casts; the provider's corrected file now carries its own
+codes (9 on casts 1U, 5U, 6D, 6U and 385 of the 515 bins of 5D) and Ben Gire wrote that the processed
+files are accurate. Casts 2-4 and the downcast of cast 1, which the provider leaves unflagged, therefore
+enter the sensor-pair averages again (the secondary reads about 0.15 degC from the primary there). Against
+v2026.10.19, from the provider's file: `temperature_ave` changes on 841 one-metre bins (at most 0.257
+degC), `salinity_ave_corr` on 889 (0.370), `oxygen_ml_l_ave_cruise_corr` on 889 (0.222 ml/L),
+`oxygen_ml_l_ave_sta_corr` on 194 (0.281 ml/L) and `oxygen_umol_kg_ave_sta_corr` on 194 (12.31 umol/kg),
+and the derived `spiciness0` on 889 bins (0.269). Of those bins, 151 (temperature), 157 (salinity and
+spiciness) and 41 (oxygen, sta_corr) sit at depths published in `obs`. The 12 sensor-2 series change only
+in `measurement_qual` on the bins the provider did not flag (9,864 values); no sensor-2 value changes, and
+nothing else outside 2607 moves for this change. **Consumers:** a 2607 anomaly or section built on these
+averages shifts by up to the amounts above.
+
+Where the provider flags a temperature or salinity 8 or 9 it often leaves the sigma-theta computed from it
+unflagged (`SigThetaTS2Q` is blank on 2607 casts 1U, 5D and 6U where `Temp2Q` is 9), and the derived
+`sigma_theta_ave` and mixed-layer depths read only the sigma flags. A bad sensor's sigma-theta therefore
+entered the average. The ingest now writes the sensor's flag onto its sigma-theta (`sigma_theta_1` from
+`temperature_1` and `salinity_1`, `sigma_theta_2` from the second pair; 9 over 8; the provider's own 8/9 is
+kept), after the provider's flags and before anything is averaged, and `calcofi_ctd-derived` asserts that no
+`sigma_theta_ave` includes a sensor whose sigma, temperature or salinity is flagged. Against v2026.10.19 this
+touches 28 cruises and 194 casts, 2607 included, and no sigma value changes: `sigma_theta_1` gains a flag on
+4,994 values (419 at depths published in `obs`) and `sigma_theta_2` on 5,788 (not published in `obs`);
+`sigma_theta_ave` changes on 10,188 one-metre bins (at most 4.27 kg/m3, in 2005-07-32NM) and disappears on 413
+where both sensors are now flagged (825 changed or removed at depths published in `obs`, 24 of them removed);
+the per-cast `mld_sigma_theta_002` changes on 24 casts (at most 26.2 m) and `mld_sigma_theta_0125` on 31 (at
+most 59.9 m), and each vanishes on 3 casts. The largest effects outside 2607 are 2016-11-33P4, 2012-07-32I1,
+2018-02-3322, 2008-01-31JD, 2005-04-32NM, 2001-01-31JD, 2005-07-32NM and 2001-07-32NM. The `climatology`
+(1993-2013 baseline) moves on 336 monthly cells of `sigma_theta_ave` (at most 0.251 kg/m3), 221 of
+`sigma_theta_1` (0.174), 16 of `mld_sigma_theta_002` (5.95 m) and 23 of `mld_sigma_theta_0125` (6.36 m); no
+cell appears or disappears. **Consumers:** `sigma_theta_1` rows with `measurement_qual` 8 or 9 are now more
+numerous, so a query that does not apply `cc_qual_ok_sql()` / `qual_ok_sql()` / `qualOkSQL()` sees values it
+did not see flagged before, and a `sigma_theta_ave` anomaly on those cruises changes.
+
+The bottle database's `sigma_theta` and `r_dynamic_height` are now described as legacy DECODR values:
+computed by the bottle database's old DECODR algorithm, which does not reproduce a Sea-Bird or TEOS-10
+computation from the same temperature and salinity (Ben Gire, 2026-10-16). They are kept as published
+(Rasmus Swalethorp: "keep legacy, add modern, document"); no value changes. A TEOS-10 recomputation is
+planned as a separate dataset.
+
 # v2026.10.19
 ## Each measurement key has an authored short title
 

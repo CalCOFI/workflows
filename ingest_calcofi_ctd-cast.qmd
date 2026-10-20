@@ -3022,13 +3022,20 @@ provider flags at source. It is applied **after** the provider's flags and the a
 **before** any average, so an overridden sensor can never enter `temperature_ave` or anything built
 on it: the climatology, the transect shards, `measurements.json`, the derived dataset.
 
-The first entry (2026-09-24, questions.csv Q37) is cruise 2026-07-3322 casts 1–6. The provider's
-notes say the secondary temperature sensor was faulty there, and the data agree: sensor 2 sits a
-median 11 °C from sensor 1, up to 42 °C, against 0.002 °C on casts 7–72. Every series the provider
-builds from that temperature is flagged with it: conductivity-derived salinity, sigma-theta,
-potential temperature, and the sensor-2 oxygens, since oxygen concentration and saturation use the
-sensor's own temperature and salinity. The corrected forms of those series are included so the rule
-still holds when a bottle-merged file for the cruise arrives.
+The file is **header-only since 2026-10-20**, and the chunk below is the standing machinery for the
+next entry, not a leftover. Its one entry (2026-09-24, questions.csv Q37) flagged cruise 2026-07-3322
+casts 1-6 (both directions): the provider's cruise notes then said the secondary temperature sensor
+was faulty on all six, and sensor 2 sat a median 11 °C from sensor 1, up to 42 °C, against 0.002 °C on
+casts 7-72. It was provisional by design ("until the provider flags at source"), and the provider did:
+the provider's corrected file (12 October) carries its own codes, with the secondary temperature, and
+everything derived from it, flagged 9 where it was bad (casts 1U, 5U, 6D, 6U and part of 5D), and Ben
+Gire wrote (2026-10-13, 2026-10-14) that the processed files are accurate and that where one sensor is
+good and one bad the average takes the good one. Ben decided on 2026-10-20 (plan D6) that the provider's codes in the
+processed files are the record, so all 24 rows were dropped, including the downcast of cast 1 and casts
+2-4, which the provider leaves unflagged although sensor 2 reads about 0.15 °C from sensor 1 there. Those
+bins now enter the sensor-pair averages on the provider's word alone. A header-only file is valid: the
+asserts below hold on zero rows, and a new row (same columns, a reason, a source and a question that keeps
+it provisional) takes effect again with no code change.
 
 ```{r}
 #| label: apply_flag_overrides
@@ -3083,6 +3090,34 @@ datatable(d_override_report |> select(cruise_key, cast_min, cast_max, cast_dir, 
                                       qual_code, n_casts, n_flagged, reason, question),
           rownames = FALSE, options = list(pageLength = 12, scrollX = TRUE),
           caption = "Flag overrides (metadata/calcofi/ctd-cast/flag_overrides.csv) and what each flagged")
+```
+
+## Inherit Flags Into Sigma-Theta
+
+`SigThetaTS1Q` / `SigThetaTS2Q` are blank far more often than the `Temp` and `Salt` flags the sigma is
+computed from: on cruise 2026-07-3322 casts 1U, 5D and 6U the provider flags `Temp2Q` 9 and leaves
+`SigThetaTS2Q` empty, and across v2026.10.19 4,947 `sigma_theta_2` bins on 22 cruises were unflagged
+while their `Temp2Q` or `Salt2Q` was 8 or 9 (questions.csv Q45; Ben, 2026-10-20: the provider's flag
+outranks everything we derive). `calcofi_ctd-derived` averages sigma-theta from the two sigma flags
+alone, so a sigma computed from a bad sensor-2 temperature entered `sigma_theta_ave` and the
+mixed-layer depths. Each sigma series therefore takes the 8 or 9 of its own sensor's temperature or
+salinity (9 over 8; the provider's own 8/9 on the sigma is kept) after the provider's flags, the
+accepted ledger and the overrides, and before anything is averaged. The rule is
+`inherit_sensor_flags()` in `libs/ctd_flags.R`, tested in `tests/testthat/test-ctd_flags.R`.
+
+```{r}
+#| label: inherit_sigma_flags
+source(here("libs/ctd_flags.R"))
+sigma_inherit <- tibble::tribble(
+  ~derived,        ~from,
+  "sigma_theta_1", c("temperature_1", "salinity_1"),
+  "sigma_theta_2", c("temperature_2", "salinity_2"))
+n_sigma_inherited <- purrr::pmap_int(sigma_inherit, \(derived, from)
+  inherit_sensor_flags(con, derived, from))
+say(glue("sigma-theta flags inherited from the sensor: ",
+         "{paste0(sigma_inherit$derived, ' ', format(n_sigma_inherited, big.mark = ','), collapse = ', ')} value(s)"))
+stopifnot("a sigma-theta value computed from a sensor flagged 8/9 is not flagged" =
+  all(purrr::pmap_int(sigma_inherit, \(derived, from) count_uninherited_flags(con, derived, from)) == 0L))
 ```
 
 ## Withhold Series That Do Not Vary With Depth {#depth-constant}
