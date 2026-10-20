@@ -251,6 +251,7 @@ already rebuilt by the provider's flags in the ctd-cast ingest.
 #| label: compute
 types <- c(
   "pressure", "temperature_ave", "salinity_ave_corr", "sigma_theta_1", "sigma_theta_2",
+  "temperature_1", "temperature_2", "salinity_1", "salinity_2",   # the sensors sigma-theta is computed from (flag audit)
   "est_chlorophyll_a_sta_corr")
 pivot_sql <- function(ck) {
   # a 1 m bin can hold two scans (the file repeats a depth); the value is their mean
@@ -315,7 +316,18 @@ for (ck in cruises) {
     both_flagged_avg_present = sum(full & is_flagged(d$q_sigma_theta_1) & is_flagged(d$q_sigma_theta_2) &
                                      !is.na(d$sigma_theta_ave)),
     ts_flagged_spice_present = sum(full & (is_flagged(d$q_temperature_ave) | is_flagged(d$q_salinity_ave_corr)) &
-                                     !is.na(d$spiciness0)))
+                                     !is.na(d$spiciness0)),
+    # a sigma-theta sensor is bad when its own flag OR the temperature/salinity it is computed from is
+    # flagged 8/9 (ctd-cast inherits the latter onto the sigma flag; asserted here on what is averaged)
+    sigma_avg_has_flagged_sensor = {
+      bad1 <- is_flagged(d$q_sigma_theta_1) | is_flagged(d$q_temperature_1) | is_flagged(d$q_salinity_1)
+      bad2 <- is_flagged(d$q_sigma_theta_2) | is_flagged(d$q_temperature_2) | is_flagged(d$q_salinity_2)
+      a <- d$sigma_theta_ave
+      sum(full & !is.na(a) & (
+        (bad1 & bad2) |
+        (bad1 & !bad2 & (is.na(d$sigma_theta_2) | abs(a - d$sigma_theta_2) > 1e-9)) |
+        (bad2 & !bad1 & (is.na(d$sigma_theta_1) | abs(a - d$sigma_theta_1) > 1e-9))), na.rm = TRUE)
+    })
   b <- d[full & (!is.na(d$sigma_theta_ave) | !is.na(d$spiciness0)),
          c("sample_key", "depth_m", "sigma_theta_ave", "spiciness0")]
   if (nrow(b)) dbWriteTable(con, "bin_full", as.data.frame(b), append = TRUE)
@@ -395,7 +407,9 @@ cat(glue("computed {length(cruises)} cruises in {format(round(Sys.time() - t0, 1
 A value its provider flags 8/9 never enters a derived value. Where sensor 1's
 sigma-theta is flagged and sensor 2's is good, the average must be sensor 2 alone;
 where both are flagged there must be no average; where the temperature or salinity
-average is flagged there must be no spice.
+average is flagged there must be no spice. A sigma-theta sensor counts as flagged when the
+temperature or salinity it is computed from is flagged (ctd-cast writes that onto the sigma flag; this
+checks the average itself, so a provider that leaves `SigThetaTSnQ` blank cannot slip a bad sensor in).
 
 ```{r}
 #| label: flag-audit
@@ -405,7 +419,9 @@ stopifnot(
   "sensor 1 flagged, sensor 2 good: the average must be sensor 2" =
     fa$s1_flagged_s2_good == fa$avg_equals_s2,
   "both sigma-theta sensors flagged: no average may exist" = fa$both_flagged_avg_present == 0,
-  "a flagged temperature/salinity average must yield no spice" = fa$ts_flagged_spice_present == 0)
+  "a flagged temperature/salinity average must yield no spice" = fa$ts_flagged_spice_present == 0,
+  "sigma_theta_ave includes a sensor whose sigma, temperature or salinity is flagged 8/9" =
+    fa$sigma_avg_has_flagged_sensor == 0)
 ```
 
 ## Register Measurement Types

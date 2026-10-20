@@ -3092,6 +3092,34 @@ datatable(d_override_report |> select(cruise_key, cast_min, cast_max, cast_dir, 
           caption = "Flag overrides (metadata/calcofi/ctd-cast/flag_overrides.csv) and what each flagged")
 ```
 
+## Inherit Flags Into Sigma-Theta
+
+`SigThetaTS1Q` / `SigThetaTS2Q` are blank far more often than the `Temp` and `Salt` flags the sigma is
+computed from: on cruise 2026-07-3322 casts 1U, 5D and 6U the provider flags `Temp2Q` 9 and leaves
+`SigThetaTS2Q` empty, and across v2026.10.19 4,947 `sigma_theta_2` bins on 22 cruises were unflagged
+while their `Temp2Q` or `Salt2Q` was 8 or 9 (questions.csv Q45; Ben, 2026-10-20: the provider's flag
+outranks everything we derive). `calcofi_ctd-derived` averages sigma-theta from the two sigma flags
+alone, so a sigma computed from a bad sensor-2 temperature entered `sigma_theta_ave` and the
+mixed-layer depths. Each sigma series therefore takes the 8 or 9 of its own sensor's temperature or
+salinity (9 over 8; the provider's own 8/9 on the sigma is kept) after the provider's flags, the
+accepted ledger and the overrides, and before anything is averaged. The rule is
+`inherit_sensor_flags()` in `libs/ctd_flags.R`, tested in `tests/testthat/test-ctd_flags.R`.
+
+```{r}
+#| label: inherit_sigma_flags
+source(here("libs/ctd_flags.R"))
+sigma_inherit <- tibble::tribble(
+  ~derived,        ~from,
+  "sigma_theta_1", c("temperature_1", "salinity_1"),
+  "sigma_theta_2", c("temperature_2", "salinity_2"))
+n_sigma_inherited <- purrr::pmap_int(sigma_inherit, \(derived, from)
+  inherit_sensor_flags(con, derived, from))
+say(glue("sigma-theta flags inherited from the sensor: ",
+         "{paste0(sigma_inherit$derived, ' ', format(n_sigma_inherited, big.mark = ','), collapse = ', ')} value(s)"))
+stopifnot("a sigma-theta value computed from a sensor flagged 8/9 is not flagged" =
+  all(purrr::pmap_int(sigma_inherit, \(derived, from) count_uninherited_flags(con, derived, from)) == 0L))
+```
+
 ## Withhold Series That Do Not Vary With Depth {#depth-constant}
 
 A value can be physically possible, carry no provider flag and still not be a profile. The
