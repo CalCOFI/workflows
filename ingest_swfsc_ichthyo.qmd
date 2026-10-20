@@ -1914,7 +1914,7 @@ cat(glue("fish: {format(d_fish$n, big.mark = ',')} rows, {format(d_fish$fish, bi
 # sample_key. This is what the SIO Pelagic Invertebrate Collection's "Parent Net
 # Event" table is matched on (NetID_SWFSC where it has one, net type + side +
 # time otherwise), so a bongo pair never collapses to one tow. Declared in
-# core_relationships() (calcofi4db >= 4.27.0); published beside `fish`.
+# core_relationships() (calcofi4db >= 4.28.0); published beside `fish`.
 invisible(dbExecute(con, glue("
   CREATE OR REPLACE TABLE ichthyo_net AS
   SELECT {ns_key(ds_key, 'net', 'n.net_uuid')} AS sample_key,
@@ -2234,11 +2234,11 @@ metadata_path <- build_metadata_json(
 # `fish` and `ichthyo_net` (this dataset's own tables) are declared in
 # core_relationships(): fish keyed (sample_key, species_id) with FKs to the net in
 # `sample` and to `taxon`; ichthyo_net keyed sample_key with an FK to `sample`
-# (calcofi4db >= 4.27.0)
+# (calcofi4db >= 4.28.0)
 stopifnot(
   "calcofi4db must declare fish's key (core_relationships)" =
     identical(core_relationships("fish")$primary_keys$fish, c("sample_key", "species_id")),
-  "calcofi4db must declare ichthyo_net's key (core_relationships, >= 4.27.0)" =
+  "calcofi4db must declare ichthyo_net's key (core_relationships, >= 4.28.0)" =
     identical(core_relationships("ichthyo_net")$primary_keys$ichthyo_net, "sample_key"))
 build_relationships_json(
   rels = core_relationships(tbls_out),
