@@ -973,14 +973,17 @@ if (n_und < BOUNDS_UNDECLARED_MAX)
 # `seafloor_depth_m` (bilinear GEBCO 2025, positive down, land 0, NA outside the
 # raster) is stamped on `sample` so every consumer can make the same comparison.
 DEPTH_SEAFLOOR_OVER_MAX <- 694L  # ratchet: measured at v2026.08.25 (695 at v2026.08.14 incl. the CTD test cast); only ever DOWN
-# A NOMINAL depth is not a finding of the same kind: swfsc_ichthyo's tow and net
-# depth_max_m is SWFSC's Net.NetDepth, the MAXIMUM POSSIBLE depth of the net (Ben,
-# 2026-10-04; swfsc_ichthyo_19 asks Ed to confirm), and over a shallower floor the
-# net did not reach it. Those datasets' depths are measured apart
-# (check_depth_vs_seafloor(nominal_datasets =), calcofi4db dev) with their own
-# ratchet, so DEPTH_SEAFLOOR_OVER_MAX keeps meaning "a depth that cannot be right".
+# An ESTIMATED depth is not a finding of the same kind: swfsc_ichthyo's tow and net
+# depth_max_m is SWFSC's Net.NetDepth, "the estimated depth when all wire is out.
+# It is roughly the maximum depth of the tow but that estimate might be a little
+# off" (Ed Weber, 2026-10-14, swfsc_ichthyo_19; estimated from wire out and wire
+# angle, not measured), and over a shallower floor the net did not reach it. Those
+# datasets' depths are measured apart (check_depth_vs_seafloor(nominal_datasets =))
+# with their own ratchet, so DEPTH_SEAFLOOR_OVER_MAX keeps meaning "a depth that
+# cannot be right". The stations over are sent to SWFSC to screen
+# (data/flagged/netdepth_below_seafloor.csv, written by the ichthyo ingest).
 DEPTH_NOMINAL_DATASETS        <- c("swfsc_ichthyo")
-DEPTH_SEAFLOOR_NOMINAL_OVER_MAX <- 210L  # ratchet: measured on the 2026-09-26 ichthyo export (2026-10-04); only ever DOWN
+DEPTH_SEAFLOOR_NOMINAL_OVER_MAX <- 210L  # ratchet: measured on the 2026-09-26 ichthyo export (2026-10-04; NetDepth unchanged in the 2026-10-14 export); only ever DOWN
 
 gebco_tif <- path.expand(Sys.getenv(
   "CALCOFI_GEBCO_TIF",
@@ -1612,11 +1615,12 @@ d_cki <- check_cruise_key_integrity(
       # region-pooled phytoplankton. Baselines, not targets.
       calcofi_phyllosoma              = 44L,
       calcofi_phytoplankton           = 168L,
-      # euphausiids: 420 until v2026.10.01; +40 for the tows of cruise 198202JD, which SWFSC moved
-      # back to its staging schema (its 2026-09-26 export has no Cruise row for it), so the
-      # reference holds no cruise for that ship and month and resolve_cruise_key() leaves them
-      # NULL. Back to 420 when the provider restores the cruise row (swfsc_ichthyo Q23).
-      "cce-lter_euphausiids"          = 460L,
+      # euphausiids: 420 until v2026.10.01; 460 for v2026.10.05 - v2026.10.19 (+40 for the tows
+      # of cruise 198202JD, which SWFSC moved back to its staging schema, so its 2026-09-26 export
+      # had no Cruise row for it and resolve_cruise_key() left them NULL). Back to 420 with the
+      # 2026-10-14 export, whose Cruise table is the union of SWFSC's dbo and stg schemas and
+      # holds the row again (swfsc_ichthyo Q23, answered 2026-10-14).
+      "cce-lter_euphausiids"          = 420L,
       "cce-lter_picoplankton-bacteria" = 7216L,
       "cce-lter_zoodb"                = 111L,
       "cce-lter_zooscan"              = 421L,
@@ -1650,7 +1654,8 @@ core_keep <- c(
   "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
   "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
   "spatial", "spatial_attribute",
-  "fish")                                   # swfsc_ichthyo's own table (SWFSC Fish, 2026-10)
+  "fish",                                   # swfsc_ichthyo's own table (SWFSC Fish, 2026-10)
+  "ichthyo_net")                            # swfsc_ichthyo's net side + tow number per net (2026-10-20, D2)
 supplemental_keep <- supp_tbls                   # hosted, hidden by default (from the ingests)
 # drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
 # even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)

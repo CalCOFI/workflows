@@ -174,7 +174,7 @@ cat(glue(
 # — and require both components of that source to be real (NaN passes IS NOT
 # NULL, so it is tested explicitly). Since SWFSC removed the records with no start
 # position at source (questions Q04), every sample of this export has a start;
-# 37 have no stop and take the start.
+# 37 have no stop and take the start (kept, Ben 2026-10-20 D5; asked as Q14).
 #
 # Effort, per Ed Weber (SWFSC, 2026-09-25, questions Q01/Q02/Q05): minutes sampled
 # = stop - start; pump speed is m3/min and the sample's is the mean of its two
@@ -237,7 +237,8 @@ stopifnot(
     nrow(d_conc) == sum(d_cnt$cufes_uuid %in% d$cufes_uuid[d$conc_ok]))
 
 # effort inputs worth a provider's look: a pump speed that changes more than
-# two-fold within one sample (questions Q10) and samples under a minute
+# two-fold within one sample (questions Q10; the 40 m3/min stop speed of 202101
+# RL sample 100 was corrected at source on 2026-10-14) and samples under a minute
 d |>
   filter(stop_pump_speed / start_pump_speed > 2 | stop_pump_speed / start_pump_speed < 0.5 |
            duration_min < 1) |>
@@ -379,7 +380,10 @@ name into a real `taxon_key`, the canonical `measurement_type` (`abundance` or
 `egg_concentration`) and `life_stage` (`egg`), so both land in `obs` as ordinary
 taxon-resolved occurrences. The taxa are the export's own: each crosswalk row's
 `worms_id`/`itis_id` is asserted equal to the `AphiaId`/`Tsn` that SWFSC's
-`Species.csv` gives the same scientific name.
+`Species.csv` gives the same scientific name. "Squid eggs" are *Abraliopsis felis*
+(SWFSC code 9561, AphiaID 341849), "the only squid in this region that have pelagic
+eggs" (Ed Weber and Bill Watson, 2026-10-14, Q11); through release v2026.10.19 they
+were keyed to market squid, *Doryteuthis opalescens* (worms:574540).
 
 ```{r}
 #| label: emit_core
