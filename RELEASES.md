@@ -244,6 +244,18 @@ computation from the same temperature and salinity (Ben Gire, 2026-10-16). They 
 (Rasmus Swalethorp: "keep legacy, add modern, document"); no value changes. A TEOS-10 recomputation is
 planned as a separate dataset.
 
+## Eight CTD cruises from 1995–98 return: 9501JD, 9712SP and 9803SP–9812SP
+
+These cruises had no CTD casts in any earlier release. calcofi.org listed a final (`CTDFinalQC`) zip for
+each, but every one returned 404, so the ingest skipped it with only a warning, and it also skipped the
+cruise's `CTDFinalDB` copy on the Shared Drive (from JRW's pre-1998 archive) as a duplicate of the web
+final it never got. By 2026-10-20 calcofi.org lists only the raw zips for these cruises, so the
+`CTDFinalDB` copies are read (Ben Best, 2026-10-20). `19-9712SP_CTDFinalDB` writes cast 005d at 521 m
+twice, 9 s apart; that one scan is recorded in the duplicate-scan ratchet as new coverage
+(`1997-12-32QU` = 1). The ingest now stops when a web final it means to read fails to download while its
+Shared Drive copy is skipped, so a cruise cannot vanish this way again. Whether `CTDFinalDB` is the
+record for these cruises is ctd-cast Q46, open with the CTD team.
+
 # v2026.10.19
 ## Each measurement key has an authored short title
 

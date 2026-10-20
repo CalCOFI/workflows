@@ -775,6 +775,21 @@ d_zips_read |>
 say(glue("Download and extraction complete: archives in {dir_dl}, ",
          "extracted files in {dir_ext}"))
 
+# a GCS final is skipped above only because calcofi.org publishes a final for the
+# same cruise. If that web final then fails to download (calcofi.org lists some
+# archives that 404), the cruise has neither copy and vanishes from the release
+# without a word: 9501JD, 9712SP and 9803SP-9812SP were missing from every release
+# through v2026.10.19 this way. Stop instead.
+web_missing <- d_zips_read |>
+  filter(source == "web", zip_type %in% c("final", "preliminary"),
+         !file_exists(file.path(dir_dl, file_zip)))
+lost <- d_zips_skip |> filter(cruise_key %in% web_missing$cruise_key)
+if (nrow(lost) > 0)
+  stop(glue(
+    "calcofi.org final(s) failed to download for {paste(lost$cruise_key, collapse = ', ')}, ",
+    "whose Shared Drive final was skipped as their duplicate: read the Shared Drive copy ",
+    "(drop the cruise from cruises_web_final) or restore the web archive."))
+
 # A provider may re-publish a corrected archive under the same name — the 2607
 # preliminary file was, on 2026-09-14, after station numbers >= 100 had shipped cut
 # to three digits (CalCOFI/workflows#104). The Shared Drive stays the authoritative
@@ -2253,7 +2268,8 @@ CTD_DUP_SCAN_CRUISES <- c(
   "1501NH",  # db_csv/dualTCO/ re-processes casts 001-064 beside the 001-100 file
   "9510NH",  # db_csvs/GoerickeExtraCasts/ reuses cast numbers 005-061 for other casts
   "9504NH",  # db_csvs/RalfCasts/ reuses cast numbers 010-032 for other casts
-  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH")
+  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH",
+  "9712SP")  # 19-9712SP_CTDFinalDB cast 005d writes 521 m twice, 9 s apart (Q46)
 d_dup_scan <- dbGetQuery(con, "
   SELECT cruise_key, COUNT(*) AS n_dup_scans, COUNT(DISTINCT cast_key) AS n_casts
   FROM (SELECT cruise_key, cast_key, depth_m FROM ctd_raw GROUP BY ALL HAVING COUNT(*) > 1)
@@ -4810,7 +4826,10 @@ if (build_obs_ctd_full) {
     "2015-01-32NM" = 43253, "1995-10-32NM" = 2189, "1995-04-32NM" = 807,
     "2020-07-33P4" =   177, "2003-02-31JD" =   11, "2002-04-31JD" =   4,
     "1995-07-31JD" =     2, "2023-07-33P4" =    1, "2005-01-32NM" =   1,
-    "2006-04-32NM" =     1)
+    "2006-04-32NM" =     1,
+    # new coverage 2026-10-20, not a raised count: the cruise had no CTD in any
+    # earlier release (Q46)
+    "1997-12-32QU" =     1)
   d_dup_full <- dbGetQuery(con, "
     SELECT cruise_key, COUNT(*) AS n_dup_scans
     FROM (SELECT cruise_key, sample_key, depth_min_m FROM obs_ctd_full GROUP BY ALL
