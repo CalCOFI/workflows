@@ -1,0 +1,74 @@
+# descriptive metadata for calcofi_bottle-derived -- provider-editable (Google Sheet tab `metadata`, scripts/sync_dataset_meta_sheets.R); the structural keys stay in ingest_calcofi_bottle-derived.qmd
+  visibility: public
+  description: >
+    Hydrographic values DERIVED from the CalCOFI Bottle Database rather than
+    measured: spice (spiciness at 0 dbar) and the TEOS-10 sigma-theta at every
+    bottle with a temperature and a salinity, from the start of the record in
+    1949, computed from each bottle's own temperature and salinity after the
+    provider's quality flags are applied. The bottle database's own sigma-theta,
+    computed by the legacy DECODR software, stays in the CalCOFI Bottle Database
+    beside it.
+  abstract: >
+    Rasmus Swalethorp (CalCOFI-SIO) asked for values derived from the bottle
+    database to live in a dataset of their own, back-calculated to the beginning
+    of the record (2026-10-19), after Nastassia Patin asked for spice at each
+    bottle depth. The rule is one tested function in the calcofi4db R package
+    (bottle_spice_sigma0(), >= 4.27.0), and spice uses the same rule as the CTD
+    derived products, so the two series cannot disagree on a definition. The other
+    bottle-derived values (integrated C14 uptake, integrated chlorophyll) join this
+    dataset once the DECODR source is in hand.
+  # the dataset is computed by CalCOFI.io from the bottle database; its locator is the
+  # notebook that builds it -- source: https://calcofi.io/workflows/ingest_calcofi_bottle-derived.html
+  citation_main: "CalCOFI. (2026). CalCOFI Bottle Derived Hydrographic Products (from the CalCOFI Bottle Database 194903-202105). CalCOFI.io. https://calcofi.io/workflows/ingest_calcofi_bottle-derived.html"
+  link_calcofi_org: https://calcofi.org/data/oceanographic-data/bottle-database/
+  # the data these are computed from (this dataset's own page does not exist until it is published)
+  link_data_source: https://calcofi.org/data/oceanographic-data/bottle-database/
+  # a derived product inherits its source's terms, and the source states none yet:
+  # calcofi_bottle's license is empty pending its Q10 (proposed CC-BY-4.0). Left
+  # empty here too, see questions.csv Q01 -- never invented
+  license: ""
+  # the source states no PI; follows calcofi_bottle Q11, see questions.csv Q01
+  pi_names: ""
+  methods_md: |
+    **Input.** The CalCOFI Bottle Database as the `calcofi_bottle` ingest stages it:
+    each bottle's temperature (`T_degC`) and practical salinity (`Salnty`) with their
+    quality codes (`T_qual`, `S_qual`), the bottle's depth (`Depthm`) and its cast's
+    position. A bottle whose temperature or salinity the provider flags 8 (suspect)
+    or 9 (missing) gets no derived value; code 6 (data OK but taken from the CTD) and
+    an empty code are good.
+
+    **Pressure.** Sea pressure from the bottle's depth and latitude
+    (`gsw_p_from_z(-depth, latitude)`).
+
+    **Spice** (`spiciness0`, kg m-3): absolute salinity from practical salinity
+    (`gsw_SA_from_SP`), conservative temperature from in-situ temperature
+    (`gsw_CT_from_t`), then spiciness at 0 dbar (`gsw_spiciness0`; McDougall and
+    Krzysik 2015), by the same function as the CTD derived products
+    (`ctd_spice()`). Positive is spicy (warm, salty), negative minty. The key is the
+    same as the CTD series'; filter on `dataset_key` to keep the two apart.
+
+    **TEOS-10 sigma-theta** (`sigma_theta_teos10`, kg m-3): potential density
+    anomaly referenced to 0 dbar, `gsw_sigma0` of the same absolute salinity and
+    conservative temperature (IOC, SCOR and IAPSO 2010). The bottle database's own
+    `sigma_theta` was computed by the legacy DECODR software with the earlier
+    (UNESCO 1983) equation of state and is kept, unchanged, in `calcofi_bottle`;
+    the two differ by a median of about 0.004 kg m-3. Bottles where they differ by
+    more than 0.1 kg m-3 are listed for the provider (questions.csv Q03).
+
+    Every rule is a function in calcofi4db (`bottle_spice_sigma0()`, which calls
+    `ctd_spice()`) with unit tests that compare it to the Gibbs SeaWater toolbox
+    directly.
+
+    **References.** McDougall, T. J. and O. A. Krzysik (2015), Spiciness, J. Mar.
+    Res. 73, 141-152, doi:10.1357/002224015816665589. IOC, SCOR and IAPSO (2010),
+    The international thermodynamic equation of seawater - 2010 (TEOS-10), IOC
+    Manuals and Guides 56. McDougall, T. J. and P. M. Barker (2011), Getting started
+    with TEOS-10 and the Gibbs Seawater (GSW) Oceanographic Toolbox, SCOR/IAPSO
+    WG127. Kelley, D., C. Richards and WG127 (2023), gsw: Gibbs Sea Water Functions,
+    R package.
+  # GCMD Science Keywords; source: https://gcmd.earthdata.nasa.gov/KeywordViewer/ -- DENSITY as
+  # calcofi_ctd-derived (checked 2026-09-23), the other two as calcofi_bottle (checked 2026-09-05)
+  keywords_gcmd:
+    - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY"
+    - "EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE"
+    - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > OCEAN SALINITY"

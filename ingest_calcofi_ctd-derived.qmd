@@ -94,6 +94,8 @@ options(DT.options = list(scrollX = TRUE))
 stopifnot(
   "calcofi4db >= 4.16.0 carries the ctd_* derived-product rules" =
     exists("ctd_geostrophic", mode = "function"),
+  "calcofi4db >= 4.27.0 carries merge_source_datasets() (spiciness0 is shared with calcofi_bottle-derived)" =
+    exists("merge_source_datasets", mode = "function"),
   "calcofi4db with the provider's definitions (ctd_integrate(method =), the 3 m mean) is needed" =
     "method" %in% names(formals(ctd_integrate)) && formals(ctd_chl_max)$window_m == 3)
 
@@ -415,7 +417,10 @@ ingest owns these rows: a re-render rewrites their description, units and
 `_source_datasets` from the literal below, and carries every bound and vocabulary id
 forward), then `declare_measurement_fields()` for the registry-owned `derivation` /
 `is_canonical`, then `declare_measurement_bounds()`. `_source_datasets` is the dataset
-that **publishes** the rows, `calcofi_ctd-derived`; the source series and table they are
+that **publishes** the rows, `calcofi_ctd-derived`, merged into what the row already lists
+(`merge_source_datasets()`): `spiciness0` is also published per bottle by
+`calcofi_bottle-derived` (Ben Best, D8, 2026-10-20), which defers to this row's
+description, derivation and bound. The source series and table they are
 computed from are `_source_column` / `_source_table`. **No bound is invented or taken
 from the data**: each is derived from a bound the registry already declares, or from a
 constant the pipeline already enforces, and says which.
@@ -441,7 +446,7 @@ new_types <- tribble(
   ~measurement_type,      ~description, ~units, ~grain, ~category, ~units_nerc_p06, ~`_source_column`, ~is_canonical, ~derivation,
   "spiciness0", "Spice (spiciness at 0 dbar, TEOS-10); positive spicy (warm, salty), negative minty", "kg/m3", "obs",
     "Physical Oceanography", p06("sigma_theta_1"), "temperature_ave; salinity_ave_corr; pressure", TRUE,
-    "calcofi4db::ctd_spice(): gsw_SA_from_SP, gsw_CT_from_t, gsw_spiciness0 (McDougall & Krzysik 2015) on the sensor-pair averaged corrected temperature and salinity; final and preliminary_with_bottle casts only",
+    "calcofi4db::ctd_spice(): gsw_SA_from_SP, gsw_CT_from_t, gsw_spiciness0 (McDougall & Krzysik 2015). calcofi_ctd-derived: on the sensor-pair averaged corrected temperature and salinity of each 1 m bin, final and preliminary_with_bottle casts only. calcofi_bottle-derived: calcofi4db::bottle_spice_sigma0() on each bottle's own temperature and salinity at gsw_p_from_z(-depth, latitude); a bottle with T_qual or S_qual 8/9 has none",
   "sigma_theta_ave", "Potential density anomaly (sigma-theta), sensor-pair average by the provider's flags", "kg/m3", "obs",
     "Physical Oceanography", p06("sigma_theta_1"), "sigma_theta_1; sigma_theta_2", TRUE,
     "calcofi4db::ctd_sigma_theta_ave() = combine_sensor_pair() on sigma_theta_1/2: an 8/9-flagged sensor dropped, 1/2 select a sensor, else the mean; final and preliminary_with_bottle casts only",
@@ -469,7 +474,11 @@ new_types <- tribble(
   "chl_integrated_depth", "Depth reached by chl_integrated (200 m unless the cast is shallower)", "m", "sample",
     "Productivity & Pigments", p06("bottom_depth"), "est_chlorophyll_a_sta_corr", TRUE,
     "calcofi4db::ctd_integrate(): min(200, deepest good bin) (questions Q02)") |>
-  mutate(`_source_table` = "obs_ctd_full", `_source_datasets` = ds_key,
+  mutate(`_source_table` = "obs_ctd_full",
+         # this dataset, plus any other that publishes the same type (spiciness0 is also
+         # calcofi_bottle-derived's, D8 2026-10-20): a re-render must not narrow the row
+         `_source_datasets` = merge_source_datasets(
+           d_mt0$`_source_datasets`[match(measurement_type, d_mt0$measurement_type)], ds_key),
          `_qual_column` = NA_character_, `_prec_column` = NA_character_)
 d_meas_type <- read_measurement_type(meas_type_csv) |>
   upsert_measurement_types(select(new_types, -is_canonical, -derivation))
@@ -482,8 +491,9 @@ d_meas_type <- declare_measurement_fields(
          is_canonical = as.character(is_canonical)),
   meas_type_csv, overwrite = TRUE, quiet = TRUE)
 stopifnot(
-  "a ctd-derived type is registered under another dataset" = all(
-    filter(d_meas_type, measurement_type %in% new_types$measurement_type)$`_source_datasets` == ds_key))
+  "a ctd-derived type does not list this dataset" = all(vapply(
+    filter(d_meas_type, measurement_type %in% new_types$measurement_type)$`_source_datasets`,
+    function(x) ds_key %in% strsplit(x, ";", fixed = TRUE)[[1]], logical(1))))
 
 # spiciness0 over the registered temperature x salinity bounds at 0 dbar, rounded
 # outward: what the registry already calls physically possible (questions Q07)

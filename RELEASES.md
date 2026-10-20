@@ -8,6 +8,41 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset: `calcofi_bottle-derived`, spice and TEOS-10 sigma-theta at every bottle since 1949
+
+Rasmus Swalethorp asked for values derived from the bottle database to live in a dataset of their own,
+back-calculated to the start of the record (thread "calcofi derived data", 2026-10-19), after
+Nastassia Patin asked for spice at each bottle depth. `ingest_calcofi_bottle-derived.qmd` computes two
+values per bottle from the bottle's own temperature and salinity, at the sea pressure of its depth
+(`gsw_p_from_z(-depth, latitude)`):
+
+- **`spiciness0`** (kg m⁻³), the same key and the same rule (`ctd_spice()`) as the CTD derived
+  products. Filter on `dataset_key` to keep the bottle and CTD series apart. The registry row now lists
+  both datasets in `_source_datasets` (Ben Best, decision D8).
+- **`sigma_theta_teos10`** (kg m⁻³), new: potential density anomaly at 0 dbar by TEOS-10
+  (`gsw_sigma0`), NERC P01 `SIGTPR03`. The bottle database's own `sigma_theta` is DECODR's legacy value
+  and stays as it is in `calcofi_bottle`. The new key does not join its `variable`, because both come
+  from the same bottles.
+
+Flags come first: a bottle whose `T_qual` or `S_qual` is 8 or 9 gets neither value. Of 844,746 bottles
+with a temperature and a salinity, 2,155 are flagged, so **842,591 bottles** (1949-02-28 to
+2021-05-13) carry both values, 1,685,182 `obs_env` rows. The dataset emits no `sample`; every row sits
+on its `calcofi_bottle` bottle. `build_climatology()` takes every `obs_env` row, so both types get
+baseline cells under this `dataset_key`. The rule is calcofi4db's new `bottle_spice_sigma0()` (4.27.0),
+and its tests compare it to the Gibbs SeaWater functions directly. The declared bound for
+`sigma_theta_teos10` is −8 to 37 kg m⁻³: `gsw_sigma0` over the registered bottle temperature and
+salinity bounds (Q02). `spiciness0` keeps its −25 to 18 bound.
+
+Over 840,508 bottles that also have an unflagged legacy value, TEOS-10 minus legacy is a median
+0.0041 kg m⁻³ in absolute value (p99 0.0154). 928 bottles differ by more than 0.1. 918 of them are all
+of cruise 2021-05-3322, whose published salinity equals its own sigma-theta, so the salinity column
+carries sigma-theta. That is `calcofi_bottle` Q13, still open with the provider. The spice
+(−5.7 to −3) and TEOS-10 sigma-theta (17 to 21) computed from those bottles are published as the
+source states them and listed for the provider (Q03); nothing is deleted. Licence and PI inherit
+`calcofi_bottle`'s open questions (Q01). `ingest_calcofi_ctd-derived.qmd` now merges into
+`_source_datasets` rather than overwriting it, so re-rendering it no longer drops the bottle dataset
+from `spiciness0`.
+
 # v2026.10.19
 ## Each measurement key has an authored short title
 
