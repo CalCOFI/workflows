@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.20
+
 ## SWFSC's 14 October export: squid eggs are *Abraliopsis felis*, FROSTI's cruises key by 18DN, and each net carries its side and tow number
 
 Ed Weber's 2026-10-14 export of the SWFSC CalCOFI database answers the ten questions of
@@ -246,7 +248,11 @@ planned as a separate dataset.
 
 ## Eight CTD cruises from 1995–98 return: 9501JD, 9712SP and 9803SP–9812SP
 
-These cruises had no CTD casts in any earlier release. calcofi.org listed a final (`CTDFinalQC`) zip for
+These cruises had no CTD casts in any earlier release; they return with 368 casts and 320,384 `obs_env`
+rows from `calcofi_ctd-cast` (1995-01-31JD 134 casts and 125,232 rows; 1997-12-32QU 18 and 15,975;
+1998-03-32QU 32 and 21,352; 1998-05-32QU 38 and 28,329; 1998-08-32QU 38 and 34,877; 1998-10-32QU 38
+and 33,764; 1998-11-32QU 38 and 34,591; 1998-12-32QU 32 and 26,264). No other 1995–98 cruise changed
+against v2026.10.19. calcofi.org listed a final (`CTDFinalQC`) zip for
 each, but every one returned 404, so the ingest skipped it with only a warning, and it also skipped the
 cruise's `CTDFinalDB` copy on the Shared Drive (from JRW's pre-1998 archive) as a duplicate of the web
 final it never got. By 2026-10-20 calcofi.org lists only the raw zips for these cruises, so the
@@ -255,6 +261,17 @@ twice, 9 s apart; that one scan is recorded in the duplicate-scan ratchet as new
 (`1997-12-32QU` = 1). The ingest now stops when a web final it means to read fails to download while its
 Shared Drive copy is skipped, so a cruise cannot vanish this way again. Whether `CTDFinalDB` is the
 record for these cruises is ctd-cast Q46, open with the CTD team.
+
+## Known issue: sixteen underway and meteorology keys carry no category
+
+Re-running the `calcofi_mets` ingest for this release blanked the `category` of its own rows in
+`metadata/measurement_type.csv`: the notebook rebuilds the rows it owns and carried only the bounds
+and `derivation` across the rebuild. So in this release's `measurement_type` table and
+`measurements.json`, 16 keys have a NULL category. No value changed. calcofi.io gives such a key its
+dataset's category, Meteorology & Sea State, which is right for seven of them; until the next
+release, which carries the fix, `sst_c`, `sss_psu`, `tsg1_temp_c`, `tsg1_salinity_psu`, `oxygen`,
+`uws_flow` and `bottom_depth_m` show there instead of under Physical Oceanography, `par_surf` instead
+of Productivity & Pigments, and `sw_ph` instead of Carbonate System.
 
 # v2026.10.19
 ## Each measurement key has an authored short title
