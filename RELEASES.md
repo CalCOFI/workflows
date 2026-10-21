@@ -42,7 +42,13 @@ corrected file re-published under the same name lands beside the old one. `metad
 which bytes a release read. Every failed download is listed in the render, and one that leaves its
 cruise with no final or preliminary archive stops it unless a provider question names it.
 
-## The PIC zooplankton dataset links its collection, and four provider questions are filed
+## Farallon's seabird data are CC BY 4.0, the PIC dataset links its collection, and eight questions are filed
+
+`farallon_bird-mammal` was recorded under `custom` terms, pointing at the Farallon Institute's Data
+Sharing Agreement (23 July 2025); the agreement releases the data under CC BY 4.0, so the licence
+is now `CC-BY-4.0`, and the dataset carries the agreement's requested attribution statement as its
+`acknowledgement`.
+
 
 `sio_pic-zooplankton` names the Pelagic Invertebrate Collection's page as its data source, as
 promised with the front-door review. Its question Q07 (preservative and net side) is answered by
@@ -50,7 +56,13 @@ Linsey Sala's Parent Net Event table and the net crosswalk (workflows#198). New 
 MOCNESS mouth area for gear M2 (Ed Weber, `swfsc_ichthyo`), cruise 1501NH's dual processing and reused
 cast numbers (CTD team, `calcofi_ctd-cast`, workflows#134), and bottle cast 24415 of cruise
 1986-03-32NM, whose position falls on land near Paso Robles (`calcofi_bottle`, a likely 1° longitude
-typo; the position is published as given).
+typo; the position is published as given). Four more came out of measuring the bottle provider's
+zero rule and the TEOS-10 sigma-theta: `est_nitrate_cruise_corr` is 0 on every row of cruises 2301,
+2304, 2307 and 2411, which looks like a placeholder and gives anomalies of -4 to -12 µmol/L
+(`calcofi_ctd-cast` Q48); the July baseline of `est_chlorophyll_a_cruise_corr` is dominated by
+values above 20 µg/L from 2000-10 and 2001-07 (Q49); bottle nitrate's code 4 on 277 zeros of
+2015-01 (`calcofi_bottle` Q16); and two surface salinities on 2020-07-33P4 (Q17). All four series
+are published as given until the provider answers.
 
 ## The sixteen METS keys get their category back
 
