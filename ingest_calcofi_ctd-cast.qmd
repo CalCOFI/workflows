@@ -185,8 +185,11 @@ if (length(dirs_in_dl) > 0)
 # the inputs — deleting the wrangling DB before knowing whether the heavy path
 # will run would throw away the one table the Gantt appendix reads.
 
-# source archival handled by sync_gd_to_gcs.qmd (rclone): ~18 GB of archives is
-# still too large to push through the GD FUSE mount with sync_to_gcs()
+# source archival: every archive this notebook reads is kept by content on GCS by
+# archive_sources() in [archive_sources] below, and named in metadata.json sources[].
+# sync_gd_to_gcs.qmd (rclone) mirrors the Shared Drive to _sync/, but on the Mac mini
+# dir_data is a plain folder nothing syncs back, so a zip fetched from calcofi.org
+# existed only there until 2026-10-21
 
 # load metadata
 # read_measurement_type(), NOT read_csv(): the registry stores empty cells that a
@@ -703,14 +706,19 @@ download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
   } else if (is.na(url)) {
     # primed source vanished between the prime and here — do not silently proceed
     # with a missing archive
-    warning(glue("Expected primed zip is missing: {file_zip}"))
+    d_dl_fail <<- bind_rows(d_dl_fail, tibble(
+      file_zip = file_zip, zip_type = zip_type, url = url, reason = "primed zip missing"))
     return(invisible(NULL))
   } else {
     say(glue("Downloading: {file_zip}"))
     tryCatch(
       download.file(url, dest_file, mode = "wb"),
       error = function(e) {
-        warning(glue("Failed to download {file_zip}: {e$message}"))
+        # a warning() is invisible in the rendered page and a render with warnings
+        # still succeeds: the same nine calcofi.org zips failed this way at every
+        # release from August to 2026-10-20. Record it; [download_and_unzip] decides.
+        d_dl_fail <<- bind_rows(d_dl_fail, tibble(
+          file_zip = file_zip, zip_type = zip_type, url = url, reason = conditionMessage(e)))
         if (file_exists(dest_file)) {
           file_delete(dest_file)
         }
@@ -767,6 +775,8 @@ download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
   write_lines(stamp_now, stamp_file)
 }
 
+d_dl_fail <- tibble(file_zip = character(), zip_type = character(),
+                    url = character(), reason = character())
 d_zips_read |>
   pwalk(function(url, file_zip, zip_type, ...) {
     download_and_unzip(url, file_zip, dir_dl, dir_ext, zip_type, unzip = TRUE)
@@ -789,6 +799,34 @@ if (nrow(lost) > 0)
     "calcofi.org final(s) failed to download for {paste(lost$cruise_key, collapse = ', ')}, ",
     "whose Shared Drive final was skipped as their duplicate: read the Shared Drive copy ",
     "(drop the cruise from cruises_web_final) or restore the web archive."))
+
+# every failed archive is shown, and one that leaves its cruise with no final or
+# preliminary archive on disk stops the render, unless it is known and has a question
+# for the provider: CTD_DL_FAIL_KNOWN maps file_zip to that question's label
+CTD_DL_FAIL_KNOWN <- c()
+cruises_on_disk <- d_zips_read |>
+  filter(zip_type %in% c("final", "preliminary"),
+         file_exists(file.path(dir_dl, file_zip))) |>
+  pull(cruise_key) |>
+  unique()
+d_dl_fail <- d_dl_fail |>
+  left_join(d_zips_read |> select(file_zip, cruise_key), by = "file_zip") |>
+  mutate(cruise_covered = cruise_key %in% cruises_on_disk,
+         question       = unname(CTD_DL_FAIL_KNOWN[file_zip]))
+if (nrow(d_dl_fail) > 0) {
+  dt(d_dl_fail, caption = paste(
+    "Archives that failed to download or went missing; a cruise left with no final or",
+    "preliminary archive stops the render unless the archive has a provider question"),
+    fname = "ctd_zips_failed")
+} else say("every archive to read is on disk")
+uncovered <- d_dl_fail |>
+  filter(zip_type %in% c("final", "preliminary"), !cruise_covered, is.na(question))
+if (nrow(uncovered) > 0)
+  stop(glue(
+    "{nrow(uncovered)} archive(s) failed and left their cruise with no CTD data: ",
+    "{paste(uncovered$file_zip, collapse = ', ')}. Restore the file to dir_dl from ",
+    "gs://calcofi-files-public/archive/sources/{provider}/{dataset}/, or file a ",
+    "provider question and add the file to CTD_DL_FAIL_KNOWN."))
 
 # A provider may re-publish a corrected archive under the same name — the 2607
 # preliminary file was, on 2026-09-14, after station numbers >= 100 had shipped cut
@@ -4929,6 +4967,34 @@ parquet_stats |>
   dt(fname = "ctd_parquet_stats")
 ```
 
+## Archive the Sources {#archive-sources}
+
+Every archive read above is kept on GCS by its content, at
+`gs://calcofi-files-public/archive/sources/calcofi/ctd-cast/{md5}/{file}`, by
+`calcofi4db::archive_sources()`: an object already there costs a listing, one the
+Shared Drive mirror (`_sync/`) holds is copied server side, and anything else is
+uploaded. A provider re-publishing a corrected archive under the same name gets a
+second object beside the first. `metadata.json` `sources[]` then names each archive
+with its `md5`, its calcofi.org `url` and its `archive` copy, so the sidecars say
+which bytes a release read.
+
+```{r}
+#| label: archive_sources
+
+d_src <- d_zips_read |>
+  filter(file_exists(file.path(dir_dl, file_zip)))
+src_stamp <- archive_sources(
+  files         = file.path(dir_dl, d_src$file_zip),
+  provider      = provider,
+  dataset       = dataset,
+  urls          = d_src$url,
+  mirror_prefix = glue("_sync/{provider}/{dataset}/download"))
+src_stamp |>
+  count(action) |>
+  dt(caption = "Source archives by what archiving them took this render",
+     fname = "ctd_sources_archived")
+```
+
 ## Write Metadata JSON
 
 ```{r}
@@ -4945,7 +5011,8 @@ metadata_path <- build_metadata_json(
   provider             = provider,
   dataset              = dataset,
   workflow_url         = cc$workflow_url,
-  tables_owned         = tables_owned
+  tables_owned         = tables_owned,
+  sources              = src_stamp |> select(-action)
 )
 
 # write relationships.json sidecar with PKs/FKs
