@@ -16,7 +16,7 @@ nets <- data.frame(
   latitude     = c(32.9, 32.9, 33.0),
   longitude    = c(-117.5, -117.5, -118.0),
   tow_type     = c("CB", "CB", "C1"),
-  net_side     = c("S", "P", "S"))
+  net_side     = c("S", "P", NA))
 
 pic <- function(...) {
   d <- data.frame(
@@ -56,7 +56,7 @@ test_that("the preservative picks the net within a bongo tow", {
   expect_equal(m$status, c("matched", "matched"))
 })
 
-test_that("a single-net tow gives its net whatever the side", {
+test_that("a single-net tow with no side gives its net to either side", {
   m <- pic_match_nets(
     pic(site_key = "090.0 060.0", datetime_utc = utc("1960-05-01 13:00"),
         latitude = 33, longitude = -118, tow_type = "C1", net_side = "P"), nets)
@@ -112,4 +112,50 @@ test_that("a station match outranks a closer space-time match", {
   m <- pic_match_nets(pic(), nets2)
   expect_equal(m$net_key, "n_bs")
   expect_equal(m$match_method, "station")
+})
+
+test_that("a record whose best net went to a closer claim falls back to its next tow", {
+  # a second CalBOBL tow at the same station, 3 h later
+  nets2 <- rbind(nets, data.frame(
+    net_key = c("n_b2s", "n_b2p"), tow_key = "t_b2", site_key = "093.3 030.0",
+    datetime_utc = utc("2024-03-26 21:00"), latitude = 32.9, longitude = -117.5,
+    tow_type = "CB", net_side = c("S", "P")))
+  # both records are nearest the first tow; record 2 is nearer, so record 1
+  # takes the second tow's starboard net
+  m <- pic_match_nets(rbind(
+    pic(pic_id = 1L, datetime_utc = utc("2024-03-26 19:00")),
+    pic(pic_id = 2L, datetime_utc = utc("2024-03-26 18:10"))), nets2)
+  expect_equal(m$status, c("matched", "matched"))
+  expect_equal(m$net_key, c("n_b2s", "n_bs"))
+  expect_equal(m$tow_key, c("t_b2", "t_b"))
+  expect_equal(m$dt_hr, c(2, 1/6))
+})
+
+test_that("a record with candidates but no net on its side is no_net, not conflict", {
+  # a two-net tow whose nets carry no port side
+  nets_s <- transform(nets, net_side = ifelse(net_key == "n_bp", NA, net_side))
+  m <- pic_match_nets(pic(net_side = "P"), nets_s)
+  expect_equal(m$status, "no_net")
+  expect_equal(m$net_rule, "side_absent")
+  expect_equal(m$tow_key, "t_b")
+})
+
+test_that("duplicate PIC records point to the first; NA keys never duplicate", {
+  d <- data.frame(
+    pic_id = c(5L, 3L, 9L, 4L, 7L),
+    a      = c("x", "x", "y", NA, NA),
+    b      = c(1, 1, 1, 2, 2))
+  expect_equal(pic_duplicate_of(d, c("a", "b")), c(3L, NA, NA, NA, NA))
+})
+
+test_that("a bongo tow holding only its starboard net never gives it to an ethanol record", {
+  # regression: v2026.10.21 dry run, ethanol records took the starboard net of
+  # one-net CalBOBL tows and pushed the formaldehyde record to conflict
+  nets_s <- nets[nets$net_key != "n_bp", ]
+  m <- pic_match_nets(rbind(
+    pic(pic_id = 1L, net_side = "P", datetime_utc = utc("2024-03-26 18:00")),
+    pic(pic_id = 2L, net_side = "S", datetime_utc = utc("2024-03-26 18:00"))), nets_s)
+  expect_equal(m$status, c("no_net", "matched"))
+  expect_equal(m$net_rule, c("side_absent", "side"))
+  expect_equal(m$net_key, c(NA, "n_bs"))
 })

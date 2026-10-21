@@ -42,7 +42,13 @@ which NetId a PIC record belongs to. Here the match is **per net**:
   3. the station match ranks first, then the nearest time, then distance;
   4. the preservative picks the net: formaldehyde is the starboard net, ethanol
      the port net; a tow with a single net gives that net;
-  5. each SWFSC net goes to one PIC record only; a losing claim is a `conflict`.
+  5. each SWFSC net goes to one PIC record and each record to one net: pairs
+     are taken in rank order while both are free, so a record whose nearest
+     net went to a closer record falls back to its next candidate; one left
+     with none is a `conflict`;
+  6. a PNE record identical to an earlier one (expedition, station, date,
+     time, net type, preservative) is a `duplicate`, pointing to that record
+     in `duplicate_of`, and is not matched.
 - **Checks.** The time difference of station matches must sit at zero
   (it would show a time-zone slip). The 139 PNE records that already carry
   SWFSC's NetId must be reproduced wherever their nets are in the release.
@@ -196,15 +202,22 @@ nets |>
 ```{r}
 #| label: match
 
+# identical PNE records describe one net event: match the first only
+pne$duplicate_of <- pic_duplicate_of(
+  pne, c("expedition_code", "site_key", "date", "start_hhmm", "net_type", "preservative"))
+
 m <- pic_match_nets(
-  pic  = pne |> filter(year >= 1951) |>
+  pic  = pne |> filter(year >= 1951, is.na(duplicate_of)) |>
     select(pic_id, site_key, datetime_utc, latitude, longitude, tow_type, net_side),
   nets = nets |> filter(!is.na(datetime_utc)) |>
     select(net_key, tow_key, site_key, datetime_utc, latitude, longitude, tow_type, net_side))
 
 xwalk <- pne |>
   left_join(m, by = "pic_id") |>
-  mutate(status = if_else(year < 1951, "pre_1951", status)) |>
+  mutate(status = case_when(
+    year < 1951           ~ "pre_1951",
+    !is.na(duplicate_of)  ~ "duplicate",
+    TRUE                  ~ status)) |>
   left_join(
     nets |> select(net_key, net_uuid, cruise_key, swfsc_site_key = site_key,
                    swfsc_tow_type = tow_type, swfsc_net_side = net_side,
@@ -231,7 +244,7 @@ ichthyoplankton, from 1951.
 #| label: match-sorted
 
 xwalk |>
-  filter(!status %in% c("pre_1951", "not_sorted")) |>
+  filter(!status %in% c("pre_1951", "not_sorted", "duplicate")) |>
   count(net_type, status, name = "records") |>
   pivot_wider(names_from = status, values_from = records, values_fill = 0) |>
   mutate(total = rowSums(across(where(is.numeric))),
@@ -251,7 +264,7 @@ xwalk |>
 #| label: match-decade
 
 xwalk |>
-  filter(!status %in% c("pre_1951", "not_sorted")) |>
+  filter(!status %in% c("pre_1951", "not_sorted", "duplicate")) |>
   mutate(decade = 10 * (year %/% 10)) |>
   count(decade, status, name = "records") |>
   pivot_wider(names_from = status, values_from = records, values_fill = 0) |>
@@ -317,7 +330,9 @@ chk |>
 `no_candidate`: no SWFSC tow of that type at that station within 36 h, nor
 within 5 km and 12 h. `no_net`: the tow was found but its net could not be
 picked (a two-net bongo with no preservative, or no net on that side).
-`conflict`: another PIC record claimed the same net more closely.
+`conflict`: every net the record could take went to a closer PIC record.
+`duplicate`: the record repeats an earlier one (`duplicate_of`) field for
+field, so only the earlier one is matched.
 
 ```{r}
 #| label: unmatched-cruises
@@ -366,7 +381,8 @@ out <- xwalk |>
     start_hhmm, site_key, latitude, longitude, net_type, preservative,
     status, net_uuid, net_key, cruise_key, swfsc_site_key, swfsc_tow_type,
     swfsc_net_side, swfsc_datetime_utc, match_method, net_rule,
-    dt_hr = round(dt_hr, 2), dist_km = round(dist_km, 2), netid_swfsc_given = netid_swfsc)
+    dt_hr = round(dt_hr, 2), dist_km = round(dist_km, 2), netid_swfsc_given = netid_swfsc,
+    duplicate_of)
 
 csv <- path(dir_out, glue("sio_pic-zooplankton_pne_to_swfsc_ichthyo_net_{v}.csv"))
 write_csv(out, csv, na = "")
@@ -378,8 +394,8 @@ out |> filter(status == "matched") |> head(500) |>
 
 ## Next steps
 
-- Linsey Sala and Ed Weber review the `no_candidate`, `no_net` and `conflict`
-  rows; Ed can screen them against the SWFSC database.
+- Linsey Sala and Ed Weber review the `no_candidate`, `no_net`, `conflict`
+  and `duplicate` rows; Ed can screen them against the SWFSC database.
 - Once agreed, the NetIds can go into the PIC database (`NetID_SWFSC`) and the
   `sio_pic-zooplankton` ingest can read the PNE table and carry the NetId, so
   the release links PIC and SWFSC nets directly.

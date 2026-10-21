@@ -84,10 +84,14 @@ pic_local_to_utc <- function(date, hhmm) {
 #' `space_time`: within `max_km` km and `max_hr_space` hours. Among candidate
 #' tows the station match ranks first, then the smallest time difference, then
 #' distance. Within the chosen tow the net is the one on the PIC record's side;
-#' a tow with a single net gives that net whatever its side (`single_net`); a
-#' two-net tow with no side on the PIC record gives no net (`side_unknown`).
-#' Each SWFSC net goes to one PIC record only: the best-ranked claim keeps it,
-#' the others become `conflict`.
+#' a tow with a single net gives that net when the net or the record has no
+#' side (`single_net`); a record whose side the tow lacks gets no net
+#' (`side_absent`), and a two-net tow with no side on the record gives no net
+#' (`side_unknown`).
+#' Each SWFSC net goes to one PIC record only and each record to one net: the
+#' (record, net) pairs are taken in rank order while both are free, so a record
+#' whose best net went to a closer claim falls back to its next candidate; a
+#' record left with none is `conflict`.
 #'
 #' @param pic data.frame: `pic_id`, `site_key`, `datetime_utc`, `latitude`,
 #'   `longitude`, `tow_type`, `net_side`
@@ -138,33 +142,54 @@ pic_match_nets <- function(
           (cand$method == "space_time" & cand$dt_hr <= max_hr_space & !is.na(cand$dist_km) & cand$dist_km <= max_km)
   cand <- cand[keep %in% TRUE, ]
 
-  # best tow per PIC record
+  # the net each candidate tow offers the PIC record: the net on its side, or
+  # a single-net tow's only net; an unknown side never pairs with an unknown side
+  cand <- merge(cand, p[, c("pic_id", "net_side")], by = "pic_id")
   cand$rank_m <- ifelse(cand$method == "station", 1L, 2L)
-  cand <- cand[order(cand$pic_id, cand$rank_m, cand$dt_hr, cand$dist_km), ]
-  best <- cand[!duplicated(cand$pic_id), c("pic_id", "tow_key", "method", "dt_hr", "dist_km", "rank_m")]
-
-  # pick the net within the tow
-  best <- merge(best, p[, c("pic_id", "net_side")], by = "pic_id")
-  n_per_tow <- table(nets$tow_key)
-  best$n_nets <- as.integer(n_per_tow[best$tow_key])
-  # an unknown side never pairs with an unknown side
+  n_per_tow   <- table(nets$tow_key)
+  cand$n_nets <- as.integer(n_per_tow[cand$tow_key])
   side_id <- function(tow, side) ifelse(is.na(side), NA, paste(tow, side))
-  best$net_key  <- nets$net_key[match(
-    side_id(best$tow_key, best$net_side), side_id(nets$tow_key, nets$net_side),
+  cand$net_key <- nets$net_key[match(
+    side_id(cand$tow_key, cand$net_side), side_id(nets$tow_key, nets$net_side),
     incomparables = NA)]
-  single        <- best$n_nets == 1 & is.na(best$net_key)
-  single_net    <- nets$net_key[match(best$tow_key, nets$tow_key)]
-  best$net_key[single] <- single_net[single]
-  best$net_rule <- ifelse(
-    !is.na(best$net_key) & !single, "side",
+  # a tow's only net goes to a record of either side only when that net has no
+  # side (C1, CalVET, Manta) or the record has none: a bongo tow whose port net
+  # SWFSC does not hold gives its starboard net to the formaldehyde record only
+  single_net  <- nets$net_key[match(cand$tow_key, nets$tow_key)]
+  single_side <- nets$net_side[match(cand$tow_key, nets$tow_key)]
+  single      <- cand$n_nets == 1 & is.na(cand$net_key) &
+    (is.na(single_side) | is.na(cand$net_side))
+  cand$net_key[single] <- single_net[single]
+  cand$net_rule <- ifelse(
+    !is.na(cand$net_key) & !single, "side",
     ifelse(single, "single_net",
-      ifelse(is.na(best$net_side), "side_unknown", "side_absent")))
+      ifelse(is.na(cand$net_side), "side_unknown", "side_absent")))
 
-  # one PIC record per SWFSC net: best-ranked claim keeps it
-  best <- best[order(best$rank_m, best$dt_hr, best$dist_km, best$pic_id), ]
-  dup  <- !is.na(best$net_key) & duplicated(best$net_key)
-  best$status <- ifelse(dup, "conflict", ifelse(is.na(best$net_key), "no_net", "matched"))
-  best$net_key[dup] <- NA
+  # one PIC record per SWFSC net and one net per PIC record: take the pairs in
+  # rank order (station first, then time, then distance), keeping a pair only
+  # while both its record and its net are free, so a record whose best net is
+  # taken falls back to its next candidate
+  cand <- cand[order(cand$rank_m, cand$dt_hr, cand$dist_km, cand$pic_id), ]
+  cand$taken <- rep(FALSE, nrow(cand))
+  pairs  <- which(!is.na(cand$net_key))
+  used_p <- new.env(hash = TRUE, size = length(pairs))
+  used_n <- new.env(hash = TRUE, size = length(pairs))
+  for (k in pairs) {
+    pk <- as.character(cand$pic_id[k]); nk <- cand$net_key[k]
+    if (is.null(used_p[[pk]]) && is.null(used_n[[nk]])) {
+      used_p[[pk]] <- TRUE; used_n[[nk]] <- TRUE; cand$taken[k] <- TRUE }
+  }
+
+  # per record: the pair it took, else its best candidate
+  cand$status <- ifelse(cand$taken, "matched", ifelse(is.na(cand$net_key), "no_net", "conflict"))
+  has_net     <- tapply(!is.na(cand$net_key), cand$pic_id, any)
+  cand$o      <- ifelse(cand$taken, 0L, ifelse(!is.na(cand$net_key), 1L, 2L))
+  best <- cand[order(cand$pic_id, cand$o, cand$rank_m, cand$dt_hr, cand$dist_km), ]
+  best <- best[!duplicated(best$pic_id), ]
+  # a record with no net-bearing candidate is no_net; one whose nets all went
+  # to closer claims is conflict
+  best$status[best$status == "no_net" & has_net[as.character(best$pic_id)]] <- "conflict"
+  best$net_key[best$status != "matched"] <- NA
 
   out <- data.frame(pic_id = pic$pic_id, stringsAsFactors = FALSE)
   i   <- match(out$pic_id, best$pic_id)
@@ -177,5 +202,25 @@ pic_match_nets <- function(
   out$status       <- ifelse(
     is.na(pic$tow_type), "not_sorted",
     ifelse(is.na(i), "no_candidate", best$status[i]))
+  out
+}
+
+#' First PIC record each record duplicates
+#'
+#' Two records with the same values in every `keys` column describe one net
+#' event; the first by `pic_id` is kept and the others point to it.
+#'
+#' @param pic data.frame with `pic_id` and the `keys` columns
+#' @param keys character column names; a record with any NA key is never a
+#'   duplicate
+#' @return integer `pic_id` of the first record with the same keys, NA for the
+#'   first itself and for a record with no duplicate
+pic_duplicate_of <- function(pic, keys) {
+  o   <- order(pic$pic_id)
+  key <- do.call(paste, c(lapply(pic[o, keys, drop = FALSE], as.character), sep = "\r"))
+  key[!stats::complete.cases(pic[o, keys, drop = FALSE])] <- NA
+  first <- pic$pic_id[o][match(key, key, incomparables = NA)]
+  first[first == pic$pic_id[o]] <- NA
+  out <- rep(NA_integer_, nrow(pic)); out[o] <- as.integer(first)
   out
 }
