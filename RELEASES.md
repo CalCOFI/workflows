@@ -19,6 +19,15 @@ unchanged. `sst_c`, `sss_psu`, `tsg1_temp_c`, `tsg1_salinity_psu`, `oxygen`, `uw
 `bottom_depth_m` return to Physical Oceanography, `par_surf` to Productivity & Pigments and `sw_ph`
 to Carbonate System.
 
+## TEOS-10 sigma-theta has a face of its own, and the face registries are checked at release
+
+`sigma_theta_teos10` was registered as a stand-in for `sigma_theta`'s face while carrying its own
+NERC P01 (SIGTPR03). A stand-in borrows the lender's chain, so calcofi.io's face check refused it at
+the v2026.10.20 deploy, and the key has no face on calcofi.io until the next release. It now takes
+`scale`, like `sigma_theta`. `release_database.qmd` runs `validate_measurement_faces()` with the
+measurement type registry before it builds `measurements.json` and stops on any finding, including
+the new `standsin_own_p01` rule (calcofi4db 4.28.1).
+
 # v2026.10.20
 
 ## SWFSC's 14 October export: squid eggs are *Abraliopsis felis*, FROSTI's cruises key by 18DN, and each net carries its side and tow number
