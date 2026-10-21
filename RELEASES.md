@@ -42,6 +42,15 @@ corrected file re-published under the same name lands beside the old one. `metad
 which bytes a release read. Every failed download is listed in the render, and one that leaves its
 cruise with no final or preliminary archive stops it unless a provider question names it.
 
+The rebuild was diffed against v2026.10.20 before release (`diff_stage_vs_release()`): the headline
+`obs` rows are identical, and `obs_ctd_full` differs by five values, the station-corrected nitrate
+and four oxygen estimates of a single upcast scan (cast `0604_014u`, cruise 2006-04-32NM, 403 m),
+which the rebuild no longer emits; no value or quality flag changed anywhere else. Its `obs_id`
+sequence shifts by those five rows, which is why 22 cruise partitions have new signatures with the
+same content. Why that one scan dropped is not yet known. The ingest recorded 295 source archives;
+two of them, the raw-cast zips of 2208BH and 1203NH, are 196-byte error pages saved in October 2025
+in place of the archive (the ingest does not read raw-cast zips, so no data are affected).
+
 ## Farallon's seabird data are CC BY 4.0, the PIC dataset links its collection, and eight questions are filed
 
 `farallon_bird-mammal` was recorded under `custom` terms, pointing at the Farallon Institute's Data
