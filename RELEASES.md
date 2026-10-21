@@ -8,6 +8,17 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The sixteen METS keys get their category back
+
+v2026.10.20 shipped 16 `calcofi_mets` keys with a NULL category (its known issue). The ingest rebuilds
+the `measurement_type` rows it owns and carried only the bounds and `derivation` across the rebuild;
+it now carries every registry column, so a blank is filled from the registry and a value the
+notebook sets still wins, and it stops if an owned row comes out with a blank where it went in with a
+value. `metadata/measurement_type.csv` was never committed blank, so the next re-ingest writes it
+unchanged. `sst_c`, `sss_psu`, `tsg1_temp_c`, `tsg1_salinity_psu`, `oxygen`, `uws_flow` and
+`bottom_depth_m` return to Physical Oceanography, `par_surf` to Productivity & Pigments and `sw_ph`
+to Carbonate System.
+
 # v2026.10.20
 
 ## SWFSC's 14 October export: squid eggs are *Abraliopsis felis*, FROSTI's cruises key by 18DN, and each net carries its side and tow number

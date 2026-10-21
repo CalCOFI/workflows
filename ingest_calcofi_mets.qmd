@@ -925,9 +925,11 @@ mets_owned <- d_meas_type |>
   pull(measurement_type)
 
 # capture curated columns BEFORE the drop — they exist only in the CSV, and the
-# rebuild below cannot reconstruct them (see the rows_patch note further down)
-curated_cols <- c("valid_min", "valid_max",
-                  "valid_depth_min_m", "valid_depth_max_m", "derivation")
+# rebuild below cannot reconstruct them (see the rows_patch note further down).
+# every column but the key: a named list (the bounds and derivation only) lost
+# category on the v2026.10.20 re-run, and the release shipped 16 METS keys with
+# a NULL category; a column added to the registry later is carried the same way
+curated_cols <- setdiff(names(d_meas_type), "measurement_type")
 prior_curated <- d_meas_type |>
   filter(measurement_type %in% mets_owned) |>
   select(measurement_type, any_of(curated_cols))
@@ -968,6 +970,23 @@ d_meas_type <- d_meas_type |>
 if (length(mets_owned) && nrow(prior_curated))
   d_meas_type <- d_meas_type |>
     rows_patch(prior_curated, by = "measurement_type", unmatched = "ignore")
+
+# no owned row may come out with a blank where it went in with a value
+lost <- prior_curated |>
+  pivot_longer(-measurement_type, names_to = "col", values_to = "before",
+               values_transform = as.character) |>
+  filter(!is.na(before)) |>
+  left_join(
+    d_meas_type |>
+      filter(measurement_type %in% mets_owned) |>
+      select(measurement_type, all_of(curated_cols)) |>
+      pivot_longer(-measurement_type, names_to = "col", values_to = "after",
+                   values_transform = as.character),
+    by = c("measurement_type", "col")) |>
+  filter(is.na(after))
+stopifnot(
+  "a METS measurement_type row lost a curated value in the rebuild" =
+    nrow(lost) == 0)
 # na = "" is load-bearing: write_csv's default writes the literal string "NA"
 # into every empty _qual_column/_prec_column, rewriting all ~198 rows on every
 # run. read_csv maps "NA" back to NA so it is functionally benign, but it buries
