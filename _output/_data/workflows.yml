@@ -1,5 +1,5 @@
-generated: '2026-09-27'
-n_total: 61
+generated: '2026-10-21'
+n_total: 64
 n_meta: 32
 categories:
 - id: ingest
@@ -11,16 +11,58 @@ categories:
   groups:
   - label: CalCOFI
     items:
+    - url: ingest_calcofi_2022-edna.html
+      title: ingest_calcofi_2022-edna
+      dataset_name: CalCOFI October 2022 Vertebrate eDNA
+      description: 'eDNA metabarcoding survey of vertebrates from water samples collected
+        during the October 2022 CalCOFI cruise. Water filters from CalCOFI/GEMCAP
+        stations off Southern California were run through one or two molecular assays:
+        a mitochondrial D-loop assay (cetacean detections, incl. Delphinus and Megaptera
+        novaeangliae) and a 12S rRNA "MiFish" assay (fish detections). Published as
+        an intercalibration exercise (source datasetID "CalCOFI_Intercal") on GBIF/OBIS,
+        linked to Patin et al. 2026 (Methods in Ecology and Evolution, https://doi.org/10.1111/2041-210x.70370).
+        Sequence read counts are a semi-quantitative signal of PCR-amplified DNA,
+        not abundance, and are not comparable between assays. Published as detections
+        only: edna_presence = 1 and the read counts. The source archive holds positive
+        detections only, so the absence of a row for a filter and taxon is not a non-detection
+        for this dataset (a filter or assay run with no detection is simply missing,
+        and absence cannot be inferred); this differs from sio_cetacean-edna, where
+        0 means not detected in a sequenced sample.'
+      coverage: 2022-10 to 2022-10
+      bbox: 33.8–36.3°N, 122.8–119.4°W
+      color: '#bbe0f0'
+      link_data_source: https://www.gbif.org/dataset/10524092-539d-4ea4-8539-2e91ad8581a9
+      provider: calcofi
     - url: ingest_calcofi_bottle.html
       title: ingest_calcofi_bottle
       dataset_name: CalCOFI Bottle Database
-      description: Hydrographic bottle data including temperature, salinity, oxygen,
-        nutrients, pigments, and C14 from CalCOFI cruises.
+      description: 'Hydrographic bottle data including temperature, salinity, oxygen,
+        nutrients, pigments, and C14 from CalCOFI cruises. The provider publishes
+        it as two linked files: Cast, one row per hydrographic cast (the rosette the
+        bottles came up on: date, position, weather, bottom depth), and Bottle, one
+        row per bottle depth. That cast is not the CTD Cast Files dataset (calcofi_ctd-cast),
+        although both come from the same station visit.'
       coverage: 1949-02 to 2021-05
       bbox: 18.4–47.9°N, 164.1–106.0°W
       color: '#f5cad9'
       link_calcofi_org: https://calcofi.org/data/oceanographic-data/bottle-database/
       link_data_source: https://calcofi.org/downloads/database/CalCOFI_Database_194903-202105_csv_16October2023.zip
+      provider: calcofi
+    - url: ingest_calcofi_bottle-derived.html
+      title: ingest_calcofi_bottle-derived
+      dataset_name: CalCOFI Bottle Derived Hydrographic Products
+      description: 'Hydrographic values DERIVED from the CalCOFI Bottle Database rather
+        than measured: spice (spiciness at 0 dbar) and the TEOS-10 sigma-theta at
+        every bottle with a temperature and a salinity, from the start of the record
+        in 1949, computed from each bottle''s own temperature and salinity after the
+        provider''s quality flags are applied. The bottle database''s own sigma-theta,
+        computed by the legacy DECODR software, stays in the CalCOFI Bottle Database
+        beside it.'
+      coverage: 1949-02 to 2021-02
+      bbox: 18.4–47.9°N, 164.1–106.0°W
+      color: '#d3dcf2'
+      link_calcofi_org: https://calcofi.org/data/oceanographic-data/bottle-database/
+      link_data_source: https://calcofi.org/data/oceanographic-data/bottle-database/
       provider: calcofi
     - url: ingest_calcofi_ctd-cast.html
       title: ingest_calcofi_ctd-cast
@@ -43,12 +85,14 @@ categories:
       dataset_name: CalCOFI CTD Derived Hydrographic Products
       description: 'Hydrographic products DERIVED from the CalCOFI CTD cast profiles
         rather than measured: spice (spiciness at 0 dbar, TEOS-10) and the sensor-pair
-        averaged sigma-theta at every published CTD depth; per cast, the mixed-layer
-        depth by three criteria, the depth and value of the chlorophyll-a maximum
-        and the chlorophyll-a integrated over 0-200 m; and the relative geostrophic
-        velocity between adjacent stations of each CalCOFI line, referenced to 500
-        dbar. Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files
-        after the provider''s quality flags are applied.'
+        averaged sigma-theta at every published CTD depth; and, per cast, the mixed-layer
+        depth (the CalCOFI legacy definition, with two alternative criteria beside
+        it), the depth and value of the chlorophyll-a maximum and the chlorophyll-a
+        integrated over the top 200 m, by the definitions of the CalCOFI CTD team.
+        Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files after
+        the provider''s quality flags are applied.'
+      coverage: 1993-08 to 2026-07
+      bbox: 29.8–37.8°N, 126.5–117.3°W
       color: '#cfe8dc'
       link_calcofi_org: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
       link_data_source: https://calcofi.org/data/oceanographic-data/ctd-cast-files/
@@ -56,8 +100,14 @@ categories:
     - url: ingest_calcofi_dic.html
       title: ingest_calcofi_dic
       dataset_name: CalCOFI DIC
-      description: Discrete profile dissolved inorganic carbon (DIC) and total alkalinity
+      description: 'Discrete profile dissolved inorganic carbon (DIC) and total alkalinity
         (TA) from CalCOFI Niskin bottle samples, quality-controlled using WOCE flagging.
+        Values on a Niskin the bottle database also carries are published once, on
+        that bottle. Values on a sample that matches no bottle cast are published
+        too, wherever the source gives the sample a depth, on the sample''s own key:
+        they are not linked to a bottle cast (the source names none), and the date
+        of most of them is month-precision only (see questions calcofi_dic_01 and
+        calcofi_dic_07).'
       coverage: 1983-03 to 2021-07
       bbox: 28.1–37.0°N, 125.1–117.3°W
       color: '#ffd2bb'
@@ -110,8 +160,13 @@ categories:
       title: ingest_swfsc_cufes
       dataset_name: CalCOFI Underway CUFES Fish Eggs
       description: 'Continuous Underway Fish Egg Sampler (CUFES) egg counts (sardine,
-        anchovy, jack mackerel, hake, squid, other) with underway environmental conditions,
-        from CalCOFI cruises (1996-present). Source: NOAA CoastWatch ERDDAP erdCalCOFIcufes.'
+        anchovy, jack mackerel, hake, squid, other) and eggs per cubic metre pumped,
+        from CalCOFI cruises since 1996. Sampling is ongoing; the processed record
+        reaches April 2022 and SWFSC''s processing lags its staffing (Ed Weber, 2026-10-14).
+        Squid eggs are Abraliopsis felis, the only squid in the region with pelagic
+        eggs. Source: SWFSC''s CSV export of its CalCOFI database (Cufes.csv, linked
+        to the cruise list by CruiseId); until release v2026.10.01 the same records
+        were read from NOAA CoastWatch ERDDAP erdCalCOFIcufes.'
       coverage: 1996-03 to 2022-04
       bbox: 29.8–54.7°N, 134.1–117.2°W
       color: '#f0e8bb'
@@ -120,49 +175,27 @@ categories:
     - url: ingest_swfsc_ichthyo.html
       title: ingest_swfsc_ichthyo
       dataset_name: SWFSC Ichthyoplankton
-      description: Ichthyoplankton (fish eggs and larvae) collected by bongo and manta
-        net tows on CalCOFI cruises, processed by SWFSC.
+      description: 'Ichthyoplankton (fish eggs and larvae) collected by bongo and
+        manta net tows on CalCOFI cruises, processed by SWFSC. Counts are per net,
+        with SWFSC''s own effort (volume filtered, standard haul factor, proportion
+        sorted). A tow with no egg, larva or invertebrate record is a true zero: it
+        stays as a sample with its effort, and abundance rows are positive only. Counts
+        of species codes that share a WoRMS AphiaID are summed per net; each code
+        keeps its own name. A tow''s and net''s maximum depth is SWFSC''s NetDepth,
+        the estimated depth of the net when all wire is out (roughly the tow''s maximum
+        depth, from wire out and wire angle), not a measured depth: over a shallower
+        sea floor the net did not reach it. Egg stages 12-15 are removed at source.
+        Fish larger than larval size (mostly juveniles), counted in addition to the
+        larvae, are in their own table, fish. Each net''s side of a bongo pair and
+        its tow number are in ichthyo_net. MOCNESS tows are not in the source.'
       coverage: 1951-01 to 2023-01
       bbox: 0.0–54.4°N, 179.8–77.2°W
       color: '#cdebc6'
       link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/fish-eggs-larvae/
+      link_data_source: https://www.fisheries.noaa.gov/inport/item/20691
       provider: swfsc
   - label: SIO
     items:
-    - url: ingest_sio_cetacean-edna.html
-      title: ingest_sio_cetacean-edna
-      dataset_name: CalCOFI Cetacean eDNA Detections (NCOG samples)
-      description: Cetacean species detections from environmental DNA (eDNA) in seawater
-        samples collected by the NOAA CalCOFI Genomics Program (NCOG) at 10-40 m (a
-        few deeper) on CalCOFI cruises, 2014-2016. Seven dolphin and whale species
-        detected by metabarcoding; samples that failed PCR are kept as sampling effort
-        with no detection. Staged from the CalCOFI marine mammal Shiny app repository
-        (CalCOFI/marmam-app).
-      color: '#e4dcef'
-      link_data_source: https://github.com/CalCOFI/marmam-app/tree/main/data/edna_data
-      provider: sio
-    - url: ingest_sio_cetacean-sightings.html
-      title: ingest_sio_cetacean-sightings
-      dataset_name: CalCOFI Cetacean Visual Line-Transect Sightings
-      description: Cetacean (whale, dolphin, porpoise) sightings and on-effort visual
-        line-transect survey segments from quarterly CalCOFI cruises, 2004-2022 (effort
-        through 2021). Curated by the Scripps Whale Acoustics Lab (Hildebrand / Baumann-Pickering)
-        and staged from the CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app).
-      color: '#d6e2f0'
-      link_data_source: https://github.com/CalCOFI/marmam-app/tree/main/data/whale_visual_data
-      provider: sio
-    - url: ingest_sio_cetacean-sonobuoy.html
-      title: ingest_sio_cetacean-sonobuoy
-      dataset_name: CalCOFI Sonobuoy Baleen Whale Call Detections
-      description: Hourly presence of blue, fin and humpback whale calls in sonobuoy
-        recordings from CalCOFI cruises, 2004-2012. Each record is one hour of a DIFAR
-        or omnidirectional sonobuoy deployment near a CalCOFI station, scanned by
-        an analyst as 60-second spectrogram windows, with the call types heard. Curated
-        by the Scripps Whale Acoustics Lab (Baumann-Pickering) and staged from the
-        CalCOFI marine mammal Shiny app repository (CalCOFI/marmam-app).
-      color: '#d3ebe9'
-      link_data_source: https://github.com/CalCOFI/marmam-app/tree/main/data/acoustic_data
-      provider: sio
     - url: ingest_sio_mesopelagic-fish.html
       title: ingest_sio_mesopelagic-fish
       dataset_name: UCSD SIO Mesopelagic Fish
@@ -204,6 +237,20 @@ categories:
       bbox: 28.0–46.6°N, 133.5–117.3°W
       color: '#d2f0bb'
       link_data_source: https://portal.edirepository.org/nis/mapbrowse?scope=knb-lter-cce&identifier=313
+      provider: cce-lter
+    - url: ingest_cce-lter_iron.html
+      title: ingest_cce-lter_iron
+      dataset_name: CCE-LTER Dissolved Iron (CalCOFI Cruises)
+      description: Dissolved iron (Fe) concentrations from CalCOFI cruises in the
+        southern California Current System, Nov. 2002 - July 2004 (completed). Surface
+        (0 m) samples collected with a pole sampler, analyzed by FeLume flow-injection
+        analysis. The source also carries total iron (no real values) and a shipboard
+        iron-addition bioassay response (Chla response to Fe+, units unconfirmed);
+        neither is released yet.
+      coverage: 2002-11 to 2004-07
+      bbox: 29.9–35.1°N, 124.3–117.3°W
+      color: '#f0e0c0'
+      link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.21.3
       provider: cce-lter
     - url: ingest_cce-lter_picoplankton-bacteria.html
       title: ingest_cce-lter_picoplankton-bacteria
@@ -278,10 +325,14 @@ categories:
     - url: ingest_farallon_bird-mammal.html
       title: ingest_farallon_bird-mammal
       dataset_name: CalCOFI Bird & Mammal Census
-      description: Bird and mammal observations along CalCOFI (and NMFS, CPR) cruise
+      description: 'Bird and mammal observations along CalCOFI (and NMFS, CPR) cruise
         transects, 1987-present. Transect effort, counts, and species live from NOAA
         ERDDAP (CAC_FI_SBAS_tr / CAC_FI_SBAS_obs / CAC_FI_SBAS_sp); behavior lookups
-        curated via CCE-LTER DataZoo 255 (PI Bill Sydeman).
+        curated via CCE-LTER DataZoo 255 (PI Bill Sydeman). On CalCOFI cruises the
+        Scripps Whale Acoustics Lab runs its own cetacean line-transect survey (sio_cetacean-sightings)
+        with an independent observer team: both datasets are kept, so a cetacean group
+        seen by both teams appears once in each, and summing the two counts the same
+        animals twice.'
       coverage: 1987-05 to 2022-10
       bbox: 29.8–37.8°N, 126.5–117.2°W
       color: '#f0d2e8'
@@ -389,7 +440,7 @@ categories:
   title: Other notebooks
   blurb: Exploratory analyses and legacy load scripts, kept for reference.
   layout: list
-  count: 23
+  count: 26
   groups:
   - label: ''
     items:
@@ -413,6 +464,8 @@ categories:
       title: explore_dumping
     - url: explore_gdatasets.html
       title: explore_gdatasets
+    - url: explore_grid_voronoi.html
+      title: explore_grid_voronoi
     - url: explore_grid-res.html
       title: explore_grid-res
     - url: explore_interpolate-larvae.html
@@ -425,10 +478,14 @@ categories:
       title: explore_pg_contour2
     - url: explore_scripps.ucsd.edu_pelagic-invertebrate-collection.html
       title: explore_scripps.ucsd.edu_pelagic-invertebrate-collection
+    - url: explore_sio_pic-zooplankton_ichthyo-nets.html
+      title: explore_sio_pic-zooplankton_ichthyo-nets
     - url: explore_station-grid.html
       title: explore_station-grid
     - url: explore_station-vector.html
       title: explore_station-vector
+    - url: explore_stations-lines-weas.html
+      title: explore_stations-lines-weas
     - url: ingest_ices.dk_ship-ices.html
       title: ingest_ices.dk_ship-ices
     - url: load_bottle-stations.html
@@ -442,6 +499,8 @@ categories:
 dag_mermaid: |-
   graph LR
     deploy_consumers(["deploy_consumers"]):::release
+    ingest_calcofi_2022_edna(["ingest_calcofi_2022_edna"]):::c_ingest_calcofi_2022_edna
+    ingest_calcofi_bottle_derived(["ingest_calcofi_bottle_derived"]):::c_ingest_calcofi_bottle_derived
     ingest_calcofi_bottle(["ingest_calcofi_bottle"]):::c_ingest_calcofi_bottle
     ingest_calcofi_ctd_cast(["ingest_calcofi_ctd_cast"]):::c_ingest_calcofi_ctd_cast
     ingest_calcofi_ctd_derived(["ingest_calcofi_ctd_derived"]):::c_ingest_calcofi_ctd_derived
@@ -450,14 +509,12 @@ dag_mermaid: |-
     ingest_calcofi_phyllosoma(["ingest_calcofi_phyllosoma"]):::c_ingest_calcofi_phyllosoma
     ingest_calcofi_phytoplankton(["ingest_calcofi_phytoplankton"]):::c_ingest_calcofi_phytoplankton
     ingest_cce_lter_euphausiids(["ingest_cce_lter_euphausiids"]):::c_ingest_cce_lter_euphausiids
+    ingest_cce_lter_iron(["ingest_cce_lter_iron"]):::c_ingest_cce_lter_iron
     ingest_cce_lter_picoplankton_bacteria(["ingest_cce_lter_picoplankton_bacteria"]):::c_ingest_cce_lter_picoplankton_bacteria
     ingest_cce_lter_zoodb(["ingest_cce_lter_zoodb"]):::c_ingest_cce_lter_zoodb
     ingest_cce_lter_zooscan(["ingest_cce_lter_zooscan"]):::c_ingest_cce_lter_zooscan
     ingest_cdfw_dungeness_crab(["ingest_cdfw_dungeness_crab"]):::c_ingest_cdfw_dungeness_crab
     ingest_farallon_bird_mammal(["ingest_farallon_bird_mammal"]):::c_ingest_farallon_bird_mammal
-    ingest_sio_cetacean_edna(["ingest_sio_cetacean_edna"]):::c_ingest_sio_cetacean_edna
-    ingest_sio_cetacean_sightings(["ingest_sio_cetacean_sightings"]):::c_ingest_sio_cetacean_sightings
-    ingest_sio_cetacean_sonobuoy(["ingest_sio_cetacean_sonobuoy"]):::c_ingest_sio_cetacean_sonobuoy
     ingest_sio_mesopelagic_fish(["ingest_sio_mesopelagic_fish"]):::c_ingest_sio_mesopelagic_fish
     ingest_sio_pic_zooplankton(["ingest_sio_pic_zooplankton"]):::c_ingest_sio_pic_zooplankton
     ingest_spatial(["ingest_spatial"]):::ingest
@@ -472,6 +529,8 @@ dag_mermaid: |-
     release_database(["release_database"]):::release
     test_release(["test_release"]):::release
     test_release --> deploy_consumers
+    ingest_swfsc_ichthyo --> ingest_calcofi_2022_edna
+    ingest_calcofi_bottle --> ingest_calcofi_bottle_derived
     ingest_swfsc_ichthyo --> ingest_calcofi_bottle
     ingest_swfsc_ichthyo --> ingest_calcofi_ctd_cast
     ingest_calcofi_ctd_cast --> ingest_calcofi_ctd_derived
@@ -480,14 +539,13 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_calcofi_phyllosoma
     ingest_swfsc_ichthyo --> ingest_calcofi_phytoplankton
     ingest_swfsc_ichthyo --> ingest_cce_lter_euphausiids
+    ingest_swfsc_ichthyo --> ingest_cce_lter_iron
     ingest_swfsc_ichthyo --> ingest_cce_lter_picoplankton_bacteria
     ingest_swfsc_ichthyo --> ingest_cce_lter_zoodb
     ingest_swfsc_ichthyo --> ingest_cce_lter_zooscan
     ingest_swfsc_ichthyo --> ingest_cdfw_dungeness_crab
     ingest_swfsc_ichthyo --> ingest_farallon_bird_mammal
-    ingest_swfsc_ichthyo --> ingest_sio_cetacean_edna
-    ingest_swfsc_ichthyo --> ingest_sio_cetacean_sightings
-    ingest_swfsc_ichthyo --> ingest_sio_cetacean_sonobuoy
+    ingest_calcofi_ctd_cast --> ingest_farallon_bird_mammal
     ingest_swfsc_ichthyo --> ingest_sio_mesopelagic_fish
     ingest_swfsc_ichthyo --> ingest_sio_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
@@ -500,6 +558,8 @@ dag_mermaid: |-
     test_release --> publish_to_erddap
     test_release --> publish_to_netcdf
     test_release --> publish_to_obis
+    ingest_calcofi_2022_edna --> release_database
+    ingest_calcofi_bottle_derived --> release_database
     ingest_calcofi_bottle --> release_database
     ingest_calcofi_ctd_cast --> release_database
     ingest_calcofi_ctd_derived --> release_database
@@ -508,14 +568,12 @@ dag_mermaid: |-
     ingest_calcofi_phyllosoma --> release_database
     ingest_calcofi_phytoplankton --> release_database
     ingest_cce_lter_euphausiids --> release_database
+    ingest_cce_lter_iron --> release_database
     ingest_cce_lter_picoplankton_bacteria --> release_database
     ingest_cce_lter_zoodb --> release_database
     ingest_cce_lter_zooscan --> release_database
     ingest_cdfw_dungeness_crab --> release_database
     ingest_farallon_bird_mammal --> release_database
-    ingest_sio_cetacean_edna --> release_database
-    ingest_sio_cetacean_sightings --> release_database
-    ingest_sio_cetacean_sonobuoy --> release_database
     ingest_sio_mesopelagic_fish --> release_database
     ingest_sio_pic_zooplankton --> release_database
     ingest_spatial --> release_database
@@ -523,6 +581,8 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> release_database
     release_database --> test_release
     classDef release fill:#f06595,stroke:#00000033,color:#10161c;
+    classDef c_ingest_calcofi_2022_edna fill:#bbe0f0,stroke:#00000033,color:#10161c;
+    classDef c_ingest_calcofi_bottle_derived fill:#d3dcf2,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_bottle fill:#f5cad9,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_ctd_cast fill:#e0ccf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_ctd_derived fill:#cfe8dc,stroke:#00000033,color:#10161c;
@@ -531,14 +591,12 @@ dag_mermaid: |-
     classDef c_ingest_calcofi_phyllosoma fill:#e0bbf0,stroke:#00000033,color:#10161c;
     classDef c_ingest_calcofi_phytoplankton fill:#b5e8b0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_euphausiids fill:#d2f0bb,stroke:#00000033,color:#10161c;
+    classDef c_ingest_cce_lter_iron fill:#f0e0c0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_picoplankton_bacteria fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zoodb fill:#d9c2f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zooscan fill:#c2e8f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cdfw_dungeness_crab fill:#f5d5b8,stroke:#00000033,color:#10161c;
     classDef c_ingest_farallon_bird_mammal fill:#f0d2e8,stroke:#00000033,color:#10161c;
-    classDef c_ingest_sio_cetacean_edna fill:#e4dcef,stroke:#00000033,color:#10161c;
-    classDef c_ingest_sio_cetacean_sightings fill:#d6e2f0,stroke:#00000033,color:#10161c;
-    classDef c_ingest_sio_cetacean_sonobuoy fill:#d3ebe9,stroke:#00000033,color:#10161c;
     classDef c_ingest_sio_mesopelagic_fish fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_sio_pic_zooplankton fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef ingest fill:#cdd9e5,stroke:#00000033,color:#10161c;
