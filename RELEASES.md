@@ -8,6 +8,13 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## v2026.10.20 again, with its two metadata defects fixed
+
+This release re-cuts v2026.10.20 a day later from the same ingested shards, so every data table holds
+the same rows. Only the two sections below differ: the measurement type registry, where 16 METS keys
+get back the category v2026.10.20 lost, and the measurements catalog's faces, where TEOS-10
+sigma-theta gets one. Cite this release, not v2026.10.20, for the categories and faces.
+
 ## The sixteen METS keys get their category back
 
 v2026.10.20 shipped 16 `calcofi_mets` keys with a NULL category (its known issue). The ingest rebuilds
