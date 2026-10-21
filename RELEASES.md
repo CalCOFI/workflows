@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.21
+
 ## The October 2022 eDNA survey moves to its corrected v1.3, and every CTD source archive is kept
 
 This release fixes v2026.10.20's two metadata defects, takes the provider's corrected eDNA archive
