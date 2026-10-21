@@ -8,12 +8,49 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
-## v2026.10.20 again, with its two metadata defects fixed
+## The October 2022 eDNA survey moves to its corrected v1.3, and every CTD source archive is kept
 
-This release re-cuts v2026.10.20 a day later from the same ingested shards, so every data table holds
-the same rows. Only the two sections below differ: the measurement type registry, where 16 METS keys
-get back the category v2026.10.20 lost, and the measurements catalog's faces, where TEOS-10
-sigma-theta gets one. Cite this release, not v2026.10.20, for the categories and faces.
+This release fixes v2026.10.20's two metadata defects, takes the provider's corrected eDNA archive
+and closes the gap that let calcofi.org's 1995-98 CTD files disappear with no copy kept. The
+sections below give each change; the bottle, ichthyoplankton, zooplankton and other datasets carry
+the same rows as v2026.10.20. Cite this release, not v2026.10.20, for the measurement categories and
+faces.
+
+## eDNA: archive v1.3, the ASVs assigned to taxa, and the provider's answers
+
+`calcofi_2022-edna` now reads `dwca-calcofi_october2022_edna-v1.3.zip` (IPT, published 2026-10-19),
+in which Garret O'Donnell corrected the "Total number of OTUs or ASVs assigned to taxa": through v1.2
+it was a summed read count, so it was held back (question Q04). It is published as two new types,
+`edna_asvs_dloop` and `edna_asvs_12s`: the distinct sequences over a filter's libraries of each assay,
+not the sum of the per-library values, because PCR replicates share sequences. A filter with one
+library of an assay carries exactly the provider's number, which the ingest asserts. The occurrence
+and DNA tables are unchanged from v1.2. The citation names Version 1.3; the dataset links the
+bioinformatics scripts (github.com/CalCOFI/eDNA_patch) beside the paper. Questions Q04, Q06, Q07,
+Q08 and Q10 are answered: the archive carries detections only, because edna2obis drops blanks and
+filters with no detection, and it stays that way, as the provider publishes it.
+
+## Every CTD archive the ingest reads is kept on GCS, and a failed download stops the render
+
+calcofi.org listed FinalQC zips for nine cruises that returned 404, and the CTD ingest only warned;
+v2026.10.20 recovered eight of them from our archived FinalDB copies. Two gaps let that happen. On
+the Mac mini, where releases are cut, the downloads folder is not synced back to GCS, so a zip fetched
+from calcofi.org existed on one machine. And a failed download was a `warning()`, which a rendered
+notebook hides. Now `calcofi4db::archive_sources()` (4.29.0) keeps each archive the ingest reads,
+once by content, at `gs://calcofi-files-public/archive/sources/calcofi/ctd-cast/{md5}/{file}`; a
+corrected file re-published under the same name lands beside the old one. `metadata.json`
+`sources[]` names each archive's `md5`, calcofi.org `url` and `archive` copy, so the sidecars record
+which bytes a release read. Every failed download is listed in the render, and one that leaves its
+cruise with no final or preliminary archive stops it unless a provider question names it.
+
+## The PIC zooplankton dataset links its collection, and four provider questions are filed
+
+`sio_pic-zooplankton` names the Pelagic Invertebrate Collection's page as its data source, as
+promised with the front-door review. Its question Q07 (preservative and net side) is answered by
+Linsey Sala's Parent Net Event table and the net crosswalk (workflows#198). New questions: the
+MOCNESS mouth area for gear M2 (Ed Weber, `swfsc_ichthyo`), cruise 1501NH's dual processing and reused
+cast numbers (CTD team, `calcofi_ctd-cast`, workflows#134), and bottle cast 24415 of cruise
+1986-03-32NM, whose position falls on land near Paso Robles (`calcofi_bottle`, a likely 1° longitude
+typo; the position is published as given).
 
 ## The sixteen METS keys get their category back
 
