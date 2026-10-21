@@ -803,7 +803,7 @@ if (nrow(lost) > 0)
 # every failed archive is shown, and one that leaves its cruise with no final or
 # preliminary archive on disk stops the render, unless it is known and has a question
 # for the provider: CTD_DL_FAIL_KNOWN maps file_zip to that question's label
-CTD_DL_FAIL_KNOWN <- c()
+CTD_DL_FAIL_KNOWN <- character()
 cruises_on_disk <- d_zips_read |>
   filter(zip_type %in% c("final", "preliminary"),
          file_exists(file.path(dir_dl, file_zip))) |>
