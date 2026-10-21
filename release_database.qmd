@@ -2811,6 +2811,20 @@ if (file.exists(meta_json_path)) {
   # file and silently drop the column, so the page heads would fall back to the cut label
   stopifnot("measurement_face.csv short_label needs calcofi4db >= 4.26.0; pull and install ../calcofi4db" =
     packageVersion("calcofi4db") >= "4.26.0")
+  # the five face registries are validated here, not first at deploy: v2026.10.20 shipped
+  # sigma_theta_teos10 as a stand-in with its own P01, and calcofi.io's face check refused it only
+  # at deploy_consumers step 7 (standsin_own_p01 needs calcofi4db >= 4.28.1)
+  stopifnot("standsin_own_p01 needs calcofi4db >= 4.28.1; pull and install ../calcofi4db" =
+    packageVersion("calcofi4db") >= "4.28.1")
+  d_face_chk <- validate_measurement_faces(
+    here("metadata/measurement_chem.csv"), here("metadata/measurement_method.csv"),
+    here("metadata/measurement_scale.csv"), here("metadata/measurement_why.csv"),
+    here("metadata/measurement_face.csv"),
+    measurement_type_path = here("metadata/measurement_type.csv"))
+  if (nrow(d_face_chk)) {
+    print(as.data.frame(d_face_chk))
+    stop(nrow(d_face_chk), " measurement face registry finding(s); resolve them in metadata/")
+  }
   meas_rec  <- build_measurements_catalog(
     con_wdl, datasets_rec,
     measurement_type = cat_registries$measurement_type,
