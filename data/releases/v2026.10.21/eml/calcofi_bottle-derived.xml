@@ -1,0 +1,718 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<eml:eml xmlns:eml="https://eml.ecoinformatics.org/eml-2.2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:stmml="http://www.xml-cml.org/schema/stmml-1.2" packageId="calcofi_bottle-derived.v2026.10.21" system="calcofi.io" xsi:schemaLocation="https://eml.ecoinformatics.org/eml-2.2.0 https://eml.ecoinformatics.org/eml-2.2.0/eml.xsd">
+  <dataset>
+    <alternateIdentifier>https://calcofi.io/datasets/calcofi_bottle-derived/</alternateIdentifier>
+    <shortName>Bottle Derived Products</shortName>
+    <title>CalCOFI Bottle Derived Hydrographic Products</title>
+    <creator>
+      <organizationName>California Cooperative Oceanic Fisheries Investigations</organizationName>
+    </creator>
+    <pubDate>2026-10-21</pubDate>
+    <language>eng</language>
+    <abstract>
+      <para>Hydrographic values DERIVED from the CalCOFI Bottle Database rather than measured: spice (spiciness at 0 dbar) and the TEOS-10 sigma-theta at every bottle with a temperature and a salinity, from the start of the record in 1949, computed from each bottle's own temperature and salinity after the provider's quality flags are applied. The bottle database's own sigma-theta, computed by the legacy DECODR software, stays in the CalCOFI Bottle Database beside it.</para>
+    </abstract>
+    <keywordSet>
+      <keyword>EARTH SCIENCE &gt; OCEANS &gt; SALINITY/DENSITY &gt; DENSITY</keyword>
+      <keyword>EARTH SCIENCE &gt; OCEANS &gt; OCEAN TEMPERATURE &gt; WATER TEMPERATURE</keyword>
+      <keyword>EARTH SCIENCE &gt; OCEANS &gt; SALINITY/DENSITY &gt; OCEAN SALINITY</keyword>
+      <keywordThesaurus>GCMD Science Keywords</keywordThesaurus>
+    </keywordSet>
+    <keywordSet>
+      <keyword>Physical Oceanography</keyword>
+      <keyword>sigma_theta_teos10</keyword>
+      <keyword>kg/m3</keyword>
+      <keyword>http://vocab.nerc.ac.uk/collection/P01/current/SIGTPR03/</keyword>
+      <keyword>spiciness0</keyword>
+    </keywordSet>
+    <distribution scope="document">
+      <online>
+        <url function="information">https://calcofi.io/datasets/calcofi_bottle-derived/</url>
+      </online>
+    </distribution>
+    <coverage>
+      <geographicCoverage>
+        <geographicDescription>18.4–47.9°N, 164.1–106.0°W</geographicDescription>
+        <boundingCoordinates>
+          <westBoundingCoordinate>-164.0833</westBoundingCoordinate>
+          <eastBoundingCoordinate>-105.9667</eastBoundingCoordinate>
+          <northBoundingCoordinate>47.9167</northBoundingCoordinate>
+          <southBoundingCoordinate>18.4167</southBoundingCoordinate>
+        </boundingCoordinates>
+      </geographicCoverage>
+      <temporalCoverage>
+        <rangeOfDates>
+          <beginDate>
+            <calendarDate>1949</calendarDate>
+          </beginDate>
+          <endDate>
+            <calendarDate>2021</calendarDate>
+          </endDate>
+        </rangeOfDates>
+      </temporalCoverage>
+    </coverage>
+    <contact>
+      <organizationName>CalCOFI</organizationName>
+      <electronicMailAddress>data@calcofi.io</electronicMailAddress>
+    </contact>
+    <methods>
+      <methodStep>
+        <description>
+          <para>Input. The CalCOFI Bottle Database as the calcofi_bottle ingest stages it: each bottle's temperature (T_degC) and practical salinity (Salnty) with their quality codes (T_qual, S_qual), the bottle's depth (Depthm) and its cast's position. A bottle whose temperature or salinity the provider flags 8 (suspect) or 9 (missing) gets no derived value; code 6 (data OK but taken from the CTD) and an empty code are good.</para>
+          <para>Pressure. Sea pressure from the bottle's depth and latitude (gsw_p_from_z(-depth, latitude)).</para>
+          <para>Spice (spiciness0, kg m-3): absolute salinity from practical salinity (gsw_SA_from_SP), conservative temperature from in-situ temperature (gsw_CT_from_t), then spiciness at 0 dbar (gsw_spiciness0; McDougall and Krzysik 2015), by the same function as the CTD derived products (ctd_spice()). Positive is spicy (warm, salty), negative minty. The key is the same as the CTD series'; filter on dataset_key to keep the two apart.</para>
+          <para>TEOS-10 sigma-theta (sigma_theta_teos10, kg m-3): potential density anomaly referenced to 0 dbar, gsw_sigma0 of the same absolute salinity and conservative temperature (IOC, SCOR and IAPSO 2010). The bottle database's own sigma_theta was computed by the legacy DECODR software with the earlier (UNESCO 1983) equation of state and is kept, unchanged, in calcofi_bottle; the two differ by a median of about 0.004 kg m-3. Bottles where they differ by more than 0.1 kg m-3 are listed for the provider (questions.csv Q03).</para>
+          <para>Withheld. A cruise whose input is known to be wrong gets no derived value until the provider answers: cruise 2021-05-3322, whose published salinity equals its own sigma-theta, so the salinity column holds sigma-theta (calcofi_bottle Q13; this dataset's Q03).</para>
+          <para>Every rule is a function in calcofi4db (bottle_spice_sigma0(), which calls ctd_spice()) with unit tests that compare it to the Gibbs SeaWater toolbox directly.</para>
+          <para>References. McDougall, T. J. and O. A. Krzysik (2015), Spiciness, J. Mar. Res. 73, 141-152, doi:10.1357/002224015816665589. IOC, SCOR and IAPSO (2010), The international thermodynamic equation of seawater - 2010 (TEOS-10), IOC Manuals and Guides 56. McDougall, T. J. and P. M. Barker (2011), Getting started with TEOS-10 and the Gibbs Seawater (GSW) Oceanographic Toolbox, SCOR/IAPSO WG127. Kelley, D., C. Richards and WG127 (2023), gsw: Gibbs Sea Water Functions, R package.</para>
+        </description>
+      </methodStep>
+    </methods>
+    <dataTable>
+      <entityName>obs</entityName>
+      <entityDescription>The occurrence-headline long table: one scalar measurement per row, environmental (realm = 'env') and biological (realm = 'bio') together. Biological taxon is the global taxon_key; sub-occurrence detail (length/stage bins, behavior) lives in obs_attribute, and event-level effort in sample_measurement.</entityDescription>
+      <physical>
+        <objectName>data_0.parquet</objectName>
+        <size unit="bytes">24609693</size>
+        <authentication method="SHA-256">4de73fc02da3927d984f7369a6c6f4b36081369ce79471faab20b604be417f3f</authentication>
+        <dataFormat>
+          <externallyDefinedFormat>
+            <formatName>Apache Parquet</formatName>
+          </externallyDefinedFormat>
+        </dataFormat>
+        <distribution>
+          <online>
+            <url function="download">https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_bottle-derived/4f8d256e5eb2cfceb9d25495/data_0.parquet</url>
+          </online>
+        </distribution>
+      </physical>
+      <attributeList>
+        <attribute>
+          <attributeName>obs_id</attributeName>
+          <attributeLabel>Observation ID</attributeLabel>
+          <attributeDefinition>Surrogate key, renumbered globally when the release concatenates the per-dataset shards.</attributeDefinition>
+          <storageType>BIGINT</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>integer</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>realm</attributeName>
+          <attributeLabel>Realm</attributeLabel>
+          <attributeDefinition>env for physical/chemical measurements, bio for organism observations.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>env for physical/chemical measurements, bio for organism observations.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>dataset_key</attributeName>
+          <attributeLabel>Dataset Key</attributeLabel>
+          <attributeDefinition>Provenance stamp: provider_dataset.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Provenance stamp: provider_dataset.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>sample_key</attributeName>
+          <attributeLabel>Sample Key</attributeLabel>
+          <attributeDefinition>The sampling event this observation came from; joins sample.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>The sampling event this observation came from; joins sample.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>grid_key</attributeName>
+          <attributeLabel>Grid Key</attributeLabel>
+          <attributeDefinition>CalCOFI station grid cell, denormalized from sample so rollups need no join. NULL for region-pooled data.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>CalCOFI station grid cell, denormalized from sample so rollups need no join. NULL for region-pooled data.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>cruise_key</attributeName>
+          <attributeLabel>Cruise Key</attributeLabel>
+          <attributeDefinition>Cruise, denormalized from sample so rollups need no join.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Cruise, denormalized from sample so rollups need no join.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>latitude</attributeName>
+          <attributeLabel>Latitude</attributeLabel>
+          <attributeDefinition>Observation latitude (WGS84).</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>degree</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>longitude</attributeName>
+          <attributeLabel>Longitude</attributeLabel>
+          <attributeDefinition>Observation longitude (WGS84).</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>degree</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>datetime</attributeName>
+          <attributeLabel>Datetime</attributeLabel>
+          <attributeDefinition>Observation time (UTC). NULL for region-pooled data with no event time.</attributeDefinition>
+          <storageType>TIMESTAMP</storageType>
+          <measurementScale>
+            <dateTime>
+              <formatString>YYYY-MM-DDThh:mm:ss</formatString>
+            </dateTime>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>depth_min_m</attributeName>
+          <attributeLabel>Depth Min</attributeLabel>
+          <attributeDefinition>Shallowest depth this observation represents.</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>meter</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>depth_max_m</attributeName>
+          <attributeLabel>Depth Max</attributeLabel>
+          <attributeDefinition>Deepest depth this observation represents; equal to depth_min_m for point measurements (bottle, CTD scan).</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>meter</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>taxon_key</attributeName>
+          <attributeLabel>Taxon Key</attributeLabel>
+          <attributeDefinition>Global taxon key, worms:&lt;AphiaID&gt; or itis:&lt;TSN&gt; for birds. NULL for env rows. Joins taxon.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Global taxon key, worms:&lt;AphiaID&gt; or itis:&lt;TSN&gt; for birds. NULL for env rows. Joins taxon.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>life_stage</attributeName>
+          <attributeLabel>Life Stage</attributeLabel>
+          <attributeDefinition>Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Life stage where the source resolves one (larva, adult, juvenile, egg, phyllosoma).</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>measurement_type</attributeName>
+          <attributeLabel>Measurement Type</attributeLabel>
+          <attributeDefinition>Measured quantity; joins the measurement_type vocabulary.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Measured quantity; joins the measurement_type vocabulary.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>measurement_value</attributeName>
+          <attributeLabel>Measurement Value</attributeLabel>
+          <attributeDefinition>The measured value, in the units measurement_type declares.</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>measurement_qual</attributeName>
+          <attributeLabel>Measurement Qualifier</attributeLabel>
+          <attributeDefinition>Source quality flag, verbatim.</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Source quality flag, verbatim.</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>measurement_prec</attributeName>
+          <attributeLabel>Measurement Precision</attributeLabel>
+          <attributeDefinition>Source-reported precision where available.</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>hex_id</attributeName>
+          <attributeLabel>Hex ID</attributeLabel>
+          <attributeDefinition>H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with h3_cell_to_parent(hex_id, res) — there is no per-resolution column ladder.</attributeDefinition>
+          <storageType>UBIGINT</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>whole</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+      </attributeList>
+    </dataTable>
+    <dataTable>
+      <entityName>measurement_type</entityName>
+      <attributeList>
+        <attribute>
+          <attributeName>measurement_type</attributeName>
+          <attributeLabel>Measurement Type</attributeLabel>
+          <attributeDefinition>Measurement Type</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Measurement Type</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>description</attributeName>
+          <attributeLabel>Description</attributeLabel>
+          <attributeDefinition>Description</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Description</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>units</attributeName>
+          <attributeLabel>Units</attributeLabel>
+          <attributeDefinition>Units</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Units</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>valid_min</attributeName>
+          <attributeLabel>Valid Min</attributeLabel>
+          <attributeDefinition>Valid Min</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>valid_max</attributeName>
+          <attributeLabel>Valid Max</attributeLabel>
+          <attributeDefinition>Valid Max</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>valid_depth_min_m</attributeName>
+          <attributeLabel>Valid Depth Min M</attributeLabel>
+          <attributeDefinition>Valid Depth Min M</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>valid_depth_max_m</attributeName>
+          <attributeLabel>Valid Depth Max M</attributeLabel>
+          <attributeDefinition>Valid Depth Max M</attributeDefinition>
+          <storageType>DOUBLE</storageType>
+          <measurementScale>
+            <ratio>
+              <unit>
+                <standardUnit>dimensionless</standardUnit>
+              </unit>
+              <numericDomain>
+                <numberType>real</numberType>
+              </numericDomain>
+            </ratio>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>derivation</attributeName>
+          <attributeLabel>Derivation</attributeLabel>
+          <attributeDefinition>Derivation</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Derivation</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>is_canonical</attributeName>
+          <attributeLabel>Is Canonical</attributeLabel>
+          <attributeDefinition>Is Canonical</attributeDefinition>
+          <storageType>BOOLEAN</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Is Canonical</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>_source_column</attributeName>
+          <attributeLabel> Source Column</attributeLabel>
+          <attributeDefinition>Source Column</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Source Column</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>_source_table</attributeName>
+          <attributeLabel> Source Table</attributeLabel>
+          <attributeDefinition>Source Table</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Source Table</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>_source_datasets</attributeName>
+          <attributeLabel> Source Datasets</attributeLabel>
+          <attributeDefinition>Source Datasets</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Source Datasets</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>_qual_column</attributeName>
+          <attributeLabel> Qual Column</attributeLabel>
+          <attributeDefinition>Qual Column</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Qual Column</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>_prec_column</attributeName>
+          <attributeLabel> Prec Column</attributeLabel>
+          <attributeDefinition>Prec Column</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Prec Column</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>grain</attributeName>
+          <attributeLabel>Grain</attributeLabel>
+          <attributeDefinition>Grain</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Grain</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>denominator</attributeName>
+          <attributeLabel>Denominator</attributeLabel>
+          <attributeDefinition>Denominator</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Denominator</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>category</attributeName>
+          <attributeLabel>Category</attributeLabel>
+          <attributeDefinition>Category</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Category</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>variable</attributeName>
+          <attributeLabel>Variable</attributeLabel>
+          <attributeDefinition>Variable</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Variable</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>nerc_p01</attributeName>
+          <attributeLabel>Nerc P01</attributeLabel>
+          <attributeDefinition>Nerc P01</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Nerc P01</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>units_nerc_p06</attributeName>
+          <attributeLabel>Units Nerc P06</attributeLabel>
+          <attributeDefinition>Units Nerc P06</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Units Nerc P06</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>provider</attributeName>
+          <attributeLabel>Provider</attributeLabel>
+          <attributeDefinition>Provider</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Provider</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+        <attribute>
+          <attributeName>dataset</attributeName>
+          <attributeLabel>Dataset</attributeLabel>
+          <attributeDefinition>Dataset</attributeDefinition>
+          <storageType>VARCHAR</storageType>
+          <measurementScale>
+            <nominal>
+              <nonNumericDomain>
+                <textDomain>
+                  <definition>Dataset</definition>
+                </textDomain>
+              </nonNumericDomain>
+            </nominal>
+          </measurementScale>
+        </attribute>
+      </attributeList>
+    </dataTable>
+  </dataset>
+  <additionalMetadata>
+    <metadata>
+      <calcofi>
+        <datasetCitation>CalCOFI. (2026). CalCOFI Bottle Derived Hydrographic Products (from the CalCOFI Bottle Database 194903-202105). CalCOFI.io. https://calcofi.io/workflows/ingest_calcofi_bottle-derived.html</datasetCitation>
+        <datasetKey>calcofi_bottle-derived</datasetKey>
+        <datasetPage>https://calcofi.io/datasets/calcofi_bottle-derived/</datasetPage>
+        <release>v2026.10.21</release>
+        <releaseCitation>CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.21 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.10.21</releaseCitation>
+        <sourceAccessed>2026-10-21</sourceAccessed>
+      </calcofi>
+    </metadata>
+  </additionalMetadata>
+</eml:eml>

@@ -1,0 +1,74 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "calcofi_bottle-derived",
+  "title": "CalCOFI Bottle Derived Hydrographic Products",
+  "description": "Hydrographic values DERIVED from the CalCOFI Bottle Database rather than measured: spice (spiciness at 0 dbar) and the TEOS-10 sigma-theta at every bottle with a temperature and a salinity, from the start of the record in 1949, computed from each bottle's own temperature and salinity after the provider's quality flags are applied. The bottle database's own sigma-theta, computed by the legacy DECODR software, stays in the CalCOFI Bottle Database beside it.\n",
+  "keywords": ["EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY", "EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE", "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > OCEAN SALINITY"],
+  "license": "other",
+  "providers": [
+    {
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "roles": ["producer", "licensor"],
+      "url": "https://calcofi.org"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-164.0833, 18.4167, -105.9667, 47.9167]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "1949-01-01T00:00:00Z",
+          "2021-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:citation": "CalCOFI. (2026). CalCOFI Bottle Derived Hydrographic Products (from the CalCOFI Bottle Database 194903-202105). CalCOFI.io. https://calcofi.io/workflows/ingest_calcofi_bottle-derived.html",
+  "table:tables": [
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Physical Oceanography"],
+    "calcofi:variables": ["sigma_theta_teos10", "kg/m3", "http://vocab.nerc.ac.uk/collection/P01/current/SIGTPR03/", "Physical Oceanography", "spiciness0", "kg/m3", "Physical Oceanography"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_bottle-derived/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/calcofi_bottle-derived/",
+      "type": "text/html",
+      "title": "Dataset page"
+    }
+  ]
+}
