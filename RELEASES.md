@@ -16,6 +16,17 @@ reprocessed with Kraken, which will replace them. Q49 (the contaminated July bas
 `est_chlorophyll_a_cruise_corr`) stays open; it is on the team's cruise processing issues log, and
 `est_chlorophyll_a_sta_corr` is the series to use for anomalies meanwhile. No data change.
 
+## Every live dataset carries a standing consent question
+
+Each of the 20 released datasets now has one question asking its PI whether CalCOFI.io may publish
+it as shown, under its licence (`related_field = consent`), so a PI's yes is recorded where the
+provider Sheets already sync, with who, when and the email it came in. Ten are answered: seven are
+openly licensed at their public source and three have a yes by email (Rasmus Swalethorp for the
+bottle- and CTD-derived products, CDFW for the Dungeness crab megalopae). Nine are open and go to
+their PIs through Betty Huang and Erin Satterthwaite; the PIC net-tow dataset waits until Linsey Sala
+is ready. The provider Sheets were also brought up to date with answers recorded since September. No
+data change.
+
 # v2026.10.21
 
 ## The October 2022 eDNA survey moves to its corrected v1.3, and every CTD source archive is kept
