@@ -27,6 +27,10 @@
 #   Rscript scripts/sync_dataset_meta_sheets.R pull [provider]              # dry run: reads the sheet, prints the diff
 #   Rscript scripts/sync_dataset_meta_sheets.R pull [provider] --execute    # applies the diff to the sidecar(s)
 #
+# A pull never blanks a value git holds, nor puts back a value the sidecar had
+# at an earlier commit (the sheet is behind git; dm_stale_note()); a push
+# refuses while a tab holds an edit no pull has brought in (--force overrides).
+#
 # `provider` is a metadata/provider.csv slug; omit it to act on every active
 # provider that already has a sheet_id in metadata/questions_sheets.yml, OR that
 # has at least one dataset_meta.yml sidecar (a holding, with no questions.csv and
@@ -127,8 +131,9 @@ dm_split_header <- function(lines) {
 }
 
 #' Parse a `indent`-space-indented YAML mapping's lines into ordered key
-#' entries (comment lines immediately above a key travel with it), plus any
-#' trailing dangling comment with no key below it.
+#' entries (comment and blank lines immediately above a key travel with it, so
+#' a rewrite keeps the file's layout), plus any trailing dangling lines with no
+#' key below them.
 dm_parse_kv_block <- function(lines, indent = 2L) {
   pad <- strrep(" ", indent)
   key_re  <- paste0("^", pad, "([A-Za-z_][A-Za-z0-9_]*):")
@@ -143,12 +148,19 @@ dm_parse_kv_block <- function(lines, indent = 2L) {
     if (grepl(key_re, ln)) {
       key  <- sub(paste0(key_re, ".*$"), "\\1", ln)
       full <- c(pending, ln); pending <- character(0); i <- i + 1L
-      while (i <= n && grepl(cont_re, lines[i])) { full <- c(full, lines[i]); i <- i + 1L }
+      # a block value runs on across blank lines (its paragraph breaks) while the
+      # next non-blank line is still indented under the key
+      repeat {
+        j <- i
+        while (j <= n && !nzchar(trimws(lines[j]))) j <- j + 1L
+        if (j > n || !grepl(cont_re, lines[j])) break
+        full <- c(full, lines[seq(i, j)]); i <- j + 1L
+      }
       entries[[length(entries) + 1L]] <- list(key = key, lines = full)
     } else if (grepl(com_re, ln)) {
       pending <- c(pending, ln); i <- i + 1L
     } else if (!nzchar(trimws(ln))) {
-      i <- i + 1L
+      pending <- c(pending, ""); i <- i + 1L
     } else {
       stop("dm_parse_kv_block: unrecognized line: '", ln, "'", call. = FALSE)
     }
@@ -209,13 +221,16 @@ dm_yaml_folded_lines <- function(field, value, indent = 2L) {
 dm_replace_entry_value <- function(entries, field, new_value, indent = 2L) {
   idx <- which(vapply(entries, `[[`, "", "key") == field)
   if (!length(idx)) {
-    entries[[length(entries) + 1L]] <- list(key = field, lines = dm_yaml_scalar_line(field, new_value, indent))
+    # a file that separates its entries by blank lines gets one before the new entry too
+    sep <- if (any(vapply(entries, function(e) !nzchar(e$lines[1]), logical(1)))) "" else character(0)
+    entries[[length(entries) + 1L]] <- list(key = field, lines = c(sep, dm_yaml_scalar_line(field, new_value, indent)))
     return(entries)
   }
   e <- entries[[idx[1]]]
   com_re <- paste0("^", strrep(" ", indent), "#")
   comment_lines <- character(0); rest <- e$lines
-  while (length(rest) && grepl(com_re, rest[1])) { comment_lines <- c(comment_lines, rest[1]); rest <- rest[-1] }
+  while (length(rest) && (grepl(com_re, rest[1]) || !nzchar(trimws(rest[1])))) {
+    comment_lines <- c(comment_lines, rest[1]); rest <- rest[-1] }
   was_folded <- length(rest) && grepl(":\\s*>\\s*$", rest[1])
   new_lines <- if (was_folded) dm_yaml_folded_lines(field, new_value, indent) else dm_yaml_scalar_line(field, new_value, indent)
   e$lines <- c(comment_lines, new_lines)
@@ -227,14 +242,16 @@ dm_replace_entry_value <- function(entries, field, new_value, indent = 2L) {
 #' `edited:` map, re-serializing only that key (machine-owned, not prose).
 dm_set_edited <- function(entries, changes, indent = 2L) {
   idx <- which(vapply(entries, `[[`, "", "key") == "edited")
-  existing <- list()
+  existing <- list(); lead <- character(0)
   if (length(idx)) {
-    txt <- paste(dm_dedent(entries[[idx[1]]]$lines, indent), collapse = "\n")
+    old  <- entries[[idx[1]]]$lines
+    lead <- old[seq_len(match(TRUE, grepl("^\\s*edited:", old)) - 1L)]  # its comments and blank lines
+    txt <- paste(dm_dedent(old, indent), collapse = "\n")
     existing <- yaml::yaml.load(txt)$edited %||% list()
   }
   for (f in names(changes)) existing[[f]] <- changes[[f]]
   pad <- strrep(" ", indent)
-  lines <- paste0(pad, "edited:")
+  lines <- c(lead, paste0(pad, "edited:"))
   for (f in names(existing)) {
     lines <- c(lines, paste0(pad, "  ", f, ":"),
                paste0(pad, "    by: ", dm_yaml_scalar(existing[[f]]$by %||% "")),
@@ -344,9 +361,14 @@ dm_validate_field <- function(field, value, licenses = NULL) {
 #'   provider-facing rows for THIS dataset_key, from the sheet
 #' @param licenses active license ids (metadata/license.csv), or NULL to skip
 #' @param today Date, used only when a row has a value but no edited_date
+#' @param history the sidecar as parsed lists at its earlier commits
+#'   (dm_sidecar_history()); a sheet value equal to one of them is the sheet
+#'   being behind git, not an edit
 #' @return list(lines=<new sidecar text>, diffs=data.frame(field,old,new),
-#'   errors=character() — validation failures, nothing written for those)
-dm_apply_pull_dataset <- function(sidecar_lines, sheet_rows, licenses = NULL, today = Sys.Date()) {
+#'   errors=character() — validation failures, nothing written for those,
+#'   kept=data.frame(field,old,new,note) — sheet values git keeps over)
+dm_apply_pull_dataset <- function(sidecar_lines, sheet_rows, licenses = NULL, today = Sys.Date(),
+                                  history = list()) {
   split  <- dm_split_header(sidecar_lines)
   ind    <- dm_detect_indent(split$body)
   parsed <- dm_parse_kv_block(split$body, indent = ind)
@@ -356,6 +378,8 @@ dm_apply_pull_dataset <- function(sidecar_lines, sheet_rows, licenses = NULL, to
   rows <- sheet_rows[sheet_rows$field %in% editable_fields, , drop = FALSE]
 
   diffs <- data.frame(field = character(), old = character(), new = character(), stringsAsFactors = FALSE)
+  kept  <- data.frame(field = character(), old = character(), new = character(), note = character(),
+                      stringsAsFactors = FALSE)
   errors <- character(0)
   changes <- list()
   entries <- parsed$entries
@@ -367,6 +391,12 @@ dm_apply_pull_dataset <- function(sidecar_lines, sheet_rows, licenses = NULL, to
     # Sheets strips trailing whitespace from a cell, and an empty `·`-separated part
     # (a creator with no e-mail) leaves one: whitespace at a line end is never a change
     if (identical(dm_norm_ws(new_v), dm_norm_ws(old_v))) next
+    stale <- dm_stale_note(new_v, old_v, field, history, dm_sidecar_field_value)
+    if (!is.null(stale)) {
+      kept <- rbind(kept, data.frame(field = field, old = old_v, new = new_v, note = stale,
+                                     stringsAsFactors = FALSE))
+      next
+    }
     v <- dm_validate_field(field, new_v, licenses)
     if (!v$ok) { errors <- c(errors, paste0(field, ": ", paste(v$msg, collapse = "; "))); next }
     entries <- dm_replace_entry_value(entries, field, new_v, indent = ind)
@@ -379,7 +409,38 @@ dm_apply_pull_dataset <- function(sidecar_lines, sheet_rows, licenses = NULL, to
 
   if (length(changes)) entries <- dm_set_edited(entries, changes, indent = ind)
   new_lines <- dm_render_sidecar(split$header, entries, parsed$trailing)
-  list(lines = new_lines, diffs = diffs, errors = errors)
+  list(lines = new_lines, diffs = diffs, errors = errors, kept = kept)
+}
+
+#' Why a sheet value is the sheet being behind git rather than an edit, or
+#' NULL when it is an edit. A blank cell never blanks a value git holds, and a
+#' value the sidecar held at an earlier commit is one git has since changed
+#' (2026-10-22: every metadata tab was behind git, and a pull would have
+#' blanked 102 fields and put back Farallon's corrected licence).
+dm_stale_note <- function(new_v, old_v, field, history, value_fn) {
+  if (!nzchar(dm_norm_ws(new_v)) && nzchar(dm_norm_ws(old_v)))
+    return("sheet blank, git holds a value: the sheet is behind git, push")
+  past <- vapply(history, function(h) dm_norm_ws(value_fn(h, field)), character(1))
+  if (dm_norm_ws(new_v) %in% past)
+    return("an earlier git value of this field: the sheet is behind git, push")
+  NULL
+}
+
+#' Parse a sidecar's text into a list (the same reading dm_apply_pull_dataset() does).
+dm_parse_sidecar_lines <- function(lines) {
+  split <- dm_split_header(lines)
+  yaml::yaml.load(paste(dm_dedent(split$body, dm_detect_indent(split$body)), collapse = "\n")) %||% list()
+}
+
+#' The sidecar at each earlier commit that touched it, parsed, newest first
+#' (HEAD's own version included; the working copy is the current value).
+dm_sidecar_history <- function(path, repo = here::here()) {
+  rel  <- sub(paste0("^", normalizePath(repo), "/"), "", normalizePath(path))
+  revs <- system2("git", c("-C", repo, "log", "--format=%H", "--", shQuote(rel)), stdout = TRUE)
+  lapply(revs, function(r) tryCatch(
+    dm_parse_sidecar_lines(system2("git", c("-C", repo, "show", shQuote(paste0(r, ":", rel))),
+                                   stdout = TRUE, stderr = FALSE)),
+    error = function(e) list()))
 }
 
 # ---- holdings tab ------------------------------------------------------------
@@ -408,12 +469,15 @@ dm_holdings_editable_cols <- function() c("status", "priority", "owner", "next_s
 
 #' Apply one holding's pulled sheet row to its sidecar text (status/priority/
 #' owner/next_step only — the same line-level replace as the metadata tab).
-dm_apply_holdings_pull <- function(sidecar_lines, row, statuses = calcofi4db::holding_statuses()) {
+dm_apply_holdings_pull <- function(sidecar_lines, row, statuses = calcofi4db::holding_statuses(),
+                                   history = list()) {
   split  <- dm_split_header(sidecar_lines)
   ind    <- dm_detect_indent(split$body)
   parsed <- dm_parse_kv_block(split$body, indent = ind)
   entries <- parsed$entries
   diffs <- data.frame(field = character(), old = character(), new = character(), stringsAsFactors = FALSE)
+  kept  <- data.frame(field = character(), old = character(), new = character(), note = character(),
+                      stringsAsFactors = FALSE)
   errors <- character(0)
   cur <- yaml::yaml.load(paste(dm_dedent(split$body, ind), collapse = "\n")) %||% list()
 
@@ -424,11 +488,18 @@ dm_apply_holdings_pull <- function(sidecar_lines, row, statuses = calcofi4db::ho
       new_v <- trimws(row[[f]] %||% "")
       old_v <- as.character(cur[[f]] %||% "")
       if (identical(new_v, old_v)) next
+      stale <- dm_stale_note(new_v, old_v, f, history, function(h, f) as.character(h[[f]] %||% ""))
+      if (!is.null(stale)) {
+        kept <- rbind(kept, data.frame(field = f, old = old_v, new = new_v, note = stale,
+                                       stringsAsFactors = FALSE))
+        next
+      }
       entries <- dm_replace_entry_value(entries, f, new_v, indent = ind)
       diffs <- rbind(diffs, data.frame(field = f, old = old_v, new = new_v, stringsAsFactors = FALSE))
     }
   }
-  list(lines = dm_render_sidecar(split$header, entries, parsed$trailing), diffs = diffs, errors = errors)
+  list(lines = dm_render_sidecar(split$header, entries, parsed$trailing), diffs = diffs, errors = errors,
+       kept = kept)
 }
 
 # ---- protection / validation request-shapes (Sheets API) --------------------
@@ -651,7 +722,7 @@ dm_ensure_provider_sheet <- function(provider, sheets_yml_path = SHEETS_YML, sha
 
 #' Push provider(s) `metadata` tab (dry run touches no network).
 gs_push_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = FALSE,
-                                       metadata_dir = METADATA_DIR) {
+                                       metadata_dir = METADATA_DIR, force = FALSE) {
   sidecars <- dm_provider_sidecars(provider, metadata_dir)
   if (!length(sidecars)) { dcat("{provider}: no dataset_meta.yml sidecars — nothing to push"); return(invisible(NULL)) }
 
@@ -667,6 +738,17 @@ gs_push_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, ex
   # creates the spreadsheet (folder + README + shares) when this provider has
   # none yet; a no-op returning the existing id otherwise
   ss <- dm_ensure_provider_sheet(provider, sheets_yml_path)
+  if (DM_TAB %in% googlesheets4::sheet_names(ss)) {
+    sheet_df <- googlesheets4::range_read(ss, sheet = DM_TAB, col_types = "c")
+    unpulled <- do.call(rbind, lapply(names(sidecars), function(dk) {
+      r <- sheet_df[sheet_df$dataset_key == dk, , drop = FALSE]
+      if (!nrow(r)) return(NULL)
+      res <- dm_apply_pull_dataset(readLines(sidecars[[dk]]$path, warn = FALSE), r,
+                                   history = dm_sidecar_history(sidecars[[dk]]$path))
+      if (nrow(res$diffs)) cbind(dataset_key = dk, res$diffs) else NULL
+    }))
+    dm_refuse_unpulled(paste(provider, DM_TAB), unpulled, force)
+  }
   googlesheets4::sheet_write(rows, ss = ss, sheet = DM_TAB)
   props <- googlesheets4::sheet_properties(ss); sid <- props$id[props$name == DM_TAB]
   reqs <- c(dm_delete_protection_requests(dm_tab_protected_range_ids(ss, sid)),
@@ -695,12 +777,14 @@ gs_pull_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, ex
   active_licenses <- active_licenses$license[active_licenses$status == "active"]
 
   sidecars <- dm_provider_sidecars(provider, metadata_dir)
-  any_diff <- FALSE
+  any_diff <- FALSE; n_kept <- 0L
   for (dk in names(sidecars)) {
     p <- sidecars[[dk]]$path
     rows <- sheet_df[sheet_df$dataset_key == dk, , drop = FALSE]
     if (!nrow(rows)) next
-    res <- dm_apply_pull_dataset(readLines(p, warn = FALSE), rows, licenses = active_licenses)
+    res <- dm_apply_pull_dataset(readLines(p, warn = FALSE), rows, licenses = active_licenses,
+                                 history = dm_sidecar_history(p))
+    n_kept <- n_kept + nrow(res$kept)
     if (length(res$errors)) { any_diff <- TRUE; dcat("{dk}: REFUSED — {paste(res$errors, collapse='; ')}") }
     if (nrow(res$diffs)) {
       any_diff <- TRUE
@@ -708,12 +792,29 @@ gs_pull_metadata_provider <- function(provider, sheets_yml_path = SHEETS_YML, ex
       if (isTRUE(execute)) { writeLines(res$lines, p); cat("  wrote ", p, "\n") }
     }
   }
+  if (n_kept > 0)
+    dcat("{provider}: the {DM_TAB} tab is behind git on {n_kept} field(s); git kept its values. ",
+         "Run `push {provider} --execute` once this pull is applied.")
   if (!isTRUE(execute)) cat("\ndry run — pass --execute to write\n")
   invisible(any_diff)
 }
 
+#' A push rewrites a whole tab, so it refuses while the tab holds an edit no
+#' pull has brought into git (a stale value is not an edit; dm_stale_note()).
+#' `unpulled` is those edits as a data.frame (NULL or no rows when there are none).
+dm_refuse_unpulled <- function(label, unpulled, force = FALSE) {
+  if (is.null(unpulled) || !nrow(unpulled)) return(invisible(FALSE))
+  print(as.data.frame(unpulled), row.names = FALSE)
+  if (!isTRUE(force))
+    stop(label, ": the sheet holds ", nrow(unpulled), " edit(s) not in git (above). ",
+         "Run the pull with --execute first, or pass --force to overwrite them.", call. = FALSE)
+  dcat("{label}: --force: overwriting {nrow(unpulled)} sheet edit(s) not in git")
+  invisible(TRUE)
+}
+
 #' Push the `holdings` tab (the calcofi sheet only).
-gs_push_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, metadata_dir = METADATA_DIR) {
+gs_push_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, metadata_dir = METADATA_DIR,
+                             force = FALSE) {
   holdings <- dm_all_holding_sidecars(metadata_dir)
   if (!length(holdings)) { dcat("holdings: no holding sidecars found — nothing to push"); return(invisible(NULL)) }
   rows <- do.call(rbind, Map(dm_holdings_row, names(holdings), holdings))
@@ -724,6 +825,17 @@ gs_push_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, meta
   if (is.null(entry$sheet_id) || !nzchar(entry$sheet_id))
     stop(HOLDINGS_PROVIDER, ": no sheet_id in ", sheets_yml_path, call. = FALSE)
   ss <- googlesheets4::as_sheets_id(entry$sheet_id)
+  if (HOLDINGS_TAB %in% googlesheets4::sheet_names(ss)) {
+    sheet_df <- googlesheets4::range_read(ss, sheet = HOLDINGS_TAB, col_types = "c")
+    unpulled <- do.call(rbind, lapply(names(holdings), function(dk) {
+      r <- sheet_df[sheet_df$dataset_key == dk, , drop = FALSE]
+      if (!nrow(r)) return(NULL)
+      res <- dm_apply_holdings_pull(readLines(holdings[[dk]]$path, warn = FALSE), as.list(r[1, ]),
+                                    history = dm_sidecar_history(holdings[[dk]]$path))
+      if (nrow(res$diffs)) cbind(dataset_key = dk, res$diffs) else NULL
+    }))
+    dm_refuse_unpulled(HOLDINGS_TAB, unpulled, force)
+  }
   googlesheets4::sheet_write(rows, ss = ss, sheet = HOLDINGS_TAB)
   props <- googlesheets4::sheet_properties(ss); sid <- props$id[props$name == HOLDINGS_TAB]
   reqs <- c(dm_delete_protection_requests(dm_tab_protected_range_ids(ss, sid)),
@@ -748,7 +860,8 @@ gs_pull_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, meta
     p <- holdings[[dk]]$path
     row <- sheet_df[sheet_df$dataset_key == dk, , drop = FALSE]
     if (!nrow(row)) next
-    res <- dm_apply_holdings_pull(readLines(p, warn = FALSE), as.list(row[1, ]))
+    res <- dm_apply_holdings_pull(readLines(p, warn = FALSE), as.list(row[1, ]),
+                                  history = dm_sidecar_history(p))
     if (length(res$errors)) { any_diff <- TRUE; dcat("{dk}: REFUSED — {paste(res$errors, collapse='; ')}") }
     if (nrow(res$diffs)) {
       any_diff <- TRUE
@@ -766,7 +879,7 @@ gs_pull_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, meta
 
 .main <- function(args = commandArgs(trailingOnly = TRUE)) {
   flags <- args[grepl("^--", args)]; pos <- args[!grepl("^--", args)]
-  execute <- "--execute" %in% flags
+  execute <- "--execute" %in% flags; force <- "--force" %in% flags
   if (!length(pos)) stop("usage: Rscript scripts/sync_dataset_meta_sheets.R <push|pull> [provider] [--execute]", call. = FALSE)
   mode <- pos[1]; provider_arg <- if (length(pos) >= 2) pos[2] else NULL
   if (!mode %in% c("push", "pull")) stop("unknown mode '", mode, "' — expected push or pull", call. = FALSE)
@@ -777,11 +890,11 @@ gs_pull_holdings <- function(sheets_yml_path = SHEETS_YML, execute = FALSE, meta
   if (mode == "pull" || execute) options(dm.auth_user = dm_auth())
 
   for (pv in providers) {
-    if (mode == "push") gs_push_metadata_provider(pv, execute = execute)
+    if (mode == "push") gs_push_metadata_provider(pv, execute = execute, force = force)
     else                gs_pull_metadata_provider(pv, execute = execute)
   }
   if (is.null(provider_arg) || provider_arg == HOLDINGS_PROVIDER) {
-    if (mode == "push") gs_push_holdings(execute = execute)
+    if (mode == "push") gs_push_holdings(execute = execute, force = force)
     else                gs_pull_holdings(execute = execute)
   }
 }

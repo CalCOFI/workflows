@@ -168,6 +168,113 @@ test_that("no row lost on a second push: qs_apply_pull never drops or adds rows"
   expect_equal(nrow(res$df), nrow(csv_df))
 })
 
+# a stale sheet never reverts git (2026-10-22) ------------------------------
+# the provider sheets had fallen behind git: answers recorded in the repo since
+# September still read open/proposed there, and a pull would have reverted them
+
+test_that("a blank sheet cell never blanks a value git holds", {
+  csv_df <- fixture_csv_df()
+  sheet_df <- data.frame(
+    id = "test_ds_03", answer = NA, status = "answered", answered_date = NA, who = NA,
+    stringsAsFactors = FALSE)
+  res <- qs_apply_pull(csv_df, sheet_df)
+  expect_equal(res$df, csv_df)
+  expect_setequal(res$diffs$field, c("answer", "answered_date", "who"))
+  expect_true(all(res$diffs$action == "keep"))
+  expect_match(res$diffs$note, "behind git")
+})
+
+test_that("a status never moves back: answered -> open and proposed -> open are kept", {
+  csv_df <- fixture_csv_df()
+  sheet_df <- data.frame(
+    id = c("test_ds_02", "test_ds_03"), answer = c(NA, "settled: Y"),
+    status = c("open", "open"), answered_date = c(NA, "2026-07-15"),
+    who = c(NA, "provider Z"), stringsAsFactors = FALSE)
+  res <- qs_apply_pull(csv_df, sheet_df)
+  expect_equal(res$df$status, c("open", "proposed", "answered"))
+  expect_equal(res$diffs$action, c("keep", "keep"))
+  expect_match(res$diffs$note[1], "proposed -> open")
+  expect_length(res$flips, 0)   # git's own answer repeated is not a new answer
+})
+
+test_that("answered -> wontfix on a closed row is a conflict (a stale sheet can hold either)", {
+  csv_df <- fixture_csv_df()
+  sheet_df <- data.frame(
+    id = "test_ds_03", answer = "settled: Y", status = "wontfix",
+    answered_date = "2026-07-15", who = "provider Z", stringsAsFactors = FALSE)
+  res <- qs_apply_pull(csv_df, sheet_df)
+  expect_equal(res$df$status[3], "answered")
+  expect_equal(res$diffs$action, "conflict")
+})
+
+test_that("a different answer on a row git already closed is a conflict, not applied", {
+  csv_df <- fixture_csv_df()
+  sheet_df <- data.frame(
+    id = "test_ds_03", answer = "an older wording", status = "answered",
+    answered_date = "2026-07-15", who = "provider Z", stringsAsFactors = FALSE)
+  res <- qs_apply_pull(csv_df, sheet_df)
+  expect_equal(res$df, csv_df)
+  expect_equal(res$diffs$action, "conflict")
+})
+
+test_that("a closed row's blank who is still filled from the sheet", {
+  csv_df <- fixture_csv_df(); csv_df$who[3] <- NA
+  sheet_df <- data.frame(
+    id = "test_ds_03", answer = "settled: Y", status = "answered",
+    answered_date = "2026-07-15", who = "provider Z", stringsAsFactors = FALSE)
+  res <- qs_apply_pull(csv_df, sheet_df)
+  expect_equal(res$df$who[3], "provider Z")
+  expect_equal(res$diffs$action, "apply")
+})
+
+test_that("an open row with a partial note is not auto-flipped when the sheet repeats the note", {
+  csv_df <- fixture_csv_df(); csv_df$answer[1] <- "partial: depends on the CTD team"
+  sheet_df <- data.frame(
+    id = "test_ds_01", answer = "partial: depends on the CTD team", status = "open",
+    answered_date = NA, who = NA, stringsAsFactors = FALSE)
+  res <- qs_apply_pull(csv_df, sheet_df)
+  expect_length(res$flips, 0)
+  expect_equal(nrow(res$diffs), 0)
+  expect_equal(res$df, csv_df)
+})
+
+test_that("an open row with a partial note is auto-flipped when the provider writes a new answer", {
+  csv_df <- fixture_csv_df(); csv_df$answer[1] <- "partial: depends on the CTD team"
+  sheet_df <- data.frame(
+    id = "test_ds_01", answer = "yes, use the corrected series", status = "open",
+    answered_date = NA, who = "Jane", stringsAsFactors = FALSE)
+  expect_warning(res <- qs_apply_pull(csv_df, sheet_df), "auto-flipped")
+  expect_equal(res$df$status[1], "answered")
+  expect_equal(res$df$answer[1], "yes, use the corrected series")
+})
+
+# qs_unpulled_edits (the push guard) --------------------------------------------
+
+test_that("qs_unpulled_edits lists provider edits and conflicts, not a stale sheet", {
+  csv_df <- fixture_csv_df()
+  sheet_df <- data.frame(
+    id = c("test_ds_01", "test_ds_02", "test_ds_03"),
+    answer = c("provider typed this", NA, "an older wording"),
+    status = c("open", "open", "answered"),           # row 2 reverted: stale, not an edit
+    answered_date = c(NA, NA, "2026-07-15"), who = c(NA, NA, "provider Z"),
+    stringsAsFactors = FALSE)
+  d <- qs_unpulled_edits(csv_df, sheet_df)
+  expect_setequal(d$id, c("test_ds_01", "test_ds_03"))
+  expect_setequal(d$action, c("apply", "conflict"))
+})
+
+test_that("qs_unpulled_edits is empty for a sheet in step with git, and ignores deleted ids", {
+  csv_df <- fixture_csv_df()
+  sheet_df <- csv_df[, c("id", qs_editable_cols())]
+  sheet_df <- rbind(sheet_df, data.frame(id = "test_ds_99", answer = "gone from git",
+    status = "answered", answered_date = NA, who = NA))
+  expect_equal(nrow(qs_unpulled_edits(csv_df, sheet_df)), 0)
+})
+
+test_that("qs_status_rank orders open < proposed < answered = wontfix", {
+  expect_equal(qs_status_rank(c("open", "proposed", "answered", "wontfix")), c(0L, 1L, 2L, 2L))
+})
+
 # qs_write_questions_csv -------------------------------------------------------
 
 test_that("qs_write_questions_csv round-trips and passes read_questions()", {

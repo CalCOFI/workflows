@@ -11,8 +11,14 @@
 #
 #   Rscript scripts/sync_questions_sheets.R push [provider]              # dry run: plan only, no network
 #   Rscript scripts/sync_questions_sheets.R push [provider] --execute    # create/update the sheet(s)
+#                                                                         (refuses while the sheet holds
+#                                                                         unpulled edits; --force overrides)
 #   Rscript scripts/sync_questions_sheets.R pull [provider]              # dry run: reads the sheet, prints the diff
 #   Rscript scripts/sync_questions_sheets.R pull [provider] --execute    # applies the diff to questions.csv
+#
+# A pull never blanks a value git holds or moves a status back; a sheet behind
+# git is reported ("kept from git") and fixed by a push. A push never erases a
+# provider's unpulled edit. See qs_apply_pull() and qs_unpulled_edits().
 #
 # `provider` is a metadata/provider.csv slug (calcofi, swfsc, sio, cce-lter,
 # cdfw, farallon, sccoos); omit it to act on every active provider that has a
@@ -90,8 +96,14 @@ qs_stamp_asked_dates <- function(df, today = Sys.Date()) {
 #'   (as returned by googlesheets4::range_read(), or a fake for testing)
 #' @param path optional, only used in error messages
 #'
-#' @return list(df=<csv_df with matched-id editable cells replaced>,
-#'   diffs=data.frame(id,label,field,old,new,note), flips=<character ids>)
+#' Git wins wherever the sheet is merely behind it: a blank sheet cell never
+#' blanks a value git holds, and a status never moves back (qs_status_rank()).
+#' On a row git already closed (answered | wontfix), a different non-blank
+#' value is a conflict, reported and not applied.
+#'
+#' @return list(df=<csv_df with the applied cells replaced>,
+#'   diffs=data.frame(id,label,field,old,new,action,note) where action is
+#'   apply | keep | conflict, flips=<character ids>)
 qs_apply_pull <- function(csv_df, sheet_df, path = NULL) {
   need <- c("id", qs_editable_cols())
   miss <- setdiff(need, names(sheet_df))
@@ -123,32 +135,46 @@ qs_apply_pull <- function(csv_df, sheet_df, path = NULL) {
          "\n  Allowed: ", paste(calcofi4db::question_statuses(), collapse = " | "), call. = FALSE)
   }
 
-  # auto-flip: an answer present with status still open (or blank) means the
-  # provider typed an answer but did not change the dropdown
+  # auto-flip: an answer the provider typed (present, and not the text git
+  # already holds) with status still open (or blank) means they did not change
+  # the dropdown. A row git keeps open with a partial note in `answer` is not
+  # flipped just because the sheet repeats that note.
+  git_answer <- csv_df$answer[match(sheet_df$id, csv_df$id)]
   flip <- !is.na(sheet_df$answer) & nzchar(sheet_df$answer) &
+          (is.na(git_answer) | sheet_df$answer != git_answer) &
           (is.na(sheet_df$status) | sheet_df$status == "open")
   flips <- sheet_df$id[flip]
   sheet_df$status[flip] <- "answered"
 
   out <- csv_df
   diffs <- data.frame(id = character(), label = character(), field = character(),
-                       old = character(), new = character(), note = character(),
-                       stringsAsFactors = FALSE)
+                       old = character(), new = character(), action = character(),
+                       note = character(), stringsAsFactors = FALSE)
   for (i in seq_len(nrow(sheet_df))) {
     rid <- sheet_df$id[i]
     ri  <- match(rid, out$id)
+    closed <- out$status[ri] %in% c("answered", "wontfix")
     for (cl in qs_editable_cols()) {
       old <- out[[cl]][ri]; new <- sheet_df[[cl]][i]
-      changed <- !identical(old, new) && !(is.na(old) && is.na(new))
-      if (changed) {
-        note <- if (cl == "status" && rid %in% flips)
-          "auto-flip: answer present, status was open" else ""
-        diffs <- rbind(diffs, data.frame(
-          id = rid, label = out$label[ri], field = cl,
-          old = ifelse(is.na(old), "", old), new = ifelse(is.na(new), "", new),
-          note = note, stringsAsFactors = FALSE))
-        out[[cl]][ri] <- new
+      if (identical(old, new) || (is.na(old) && is.na(new))) next
+      # a sheet that is behind git (answers recorded in the repo but never
+      # pushed) must never blank or reopen them (2026-10-22: a pull would have
+      # reverted the eDNA, CUFES and ichthyo answers to open)
+      action <- "apply"; note <- ""
+      if (is.na(new)) {
+        action <- "keep"; note <- "sheet blank, git holds a value: the sheet is behind git, push"
+      } else if (cl == "status" && qs_status_rank(new) < qs_status_rank(old)) {
+        action <- "keep"; note <- glue::glue("would downgrade {old} -> {new}: the sheet is behind git, push")
+      } else if (closed && !is.na(old)) {
+        action <- "conflict"; note <- "row is closed in git with a different value: resolve in questions.csv by hand"
+      } else if (cl == "status" && rid %in% flips) {
+        note <- "auto-flip: answer present, status was open"
       }
+      diffs <- rbind(diffs, data.frame(
+        id = rid, label = out$label[ri], field = cl,
+        old = ifelse(is.na(old), "", old), new = ifelse(is.na(new), "", new),
+        action = action, note = note, stringsAsFactors = FALSE))
+      if (action == "apply") out[[cl]][ri] <- new
     }
   }
 
@@ -157,6 +183,23 @@ qs_apply_pull <- function(csv_df, sheet_df, path = NULL) {
             paste(unique(flips), collapse = ", "), call. = FALSE)
 
   list(df = out, diffs = diffs, flips = unique(flips))
+}
+
+#' Order of a question's progress: a pull may move a status forward (open ->
+#' proposed -> answered | wontfix), never back. Between the two closed states it
+#' is a conflict, since a stale sheet can hold either.
+qs_status_rank <- function(x)
+  unname(c(open = 0L, proposed = 1L, answered = 2L, wontfix = 2L)[x])
+
+#' Sheet edits not yet in git: the cells a pull would apply or flag as a
+#' conflict. A push overwrites the whole tab, so it refuses while any exist.
+#' Rows whose id git no longer has (a question deleted from questions.csv) are
+#' ignored here; the push removes them.
+qs_unpulled_edits <- function(csv_df, sheet_df) {
+  sheet_df$id <- trimws(sheet_df$id)
+  sheet_df <- sheet_df[!is.na(sheet_df$id) & sheet_df$id %in% csv_df$id, , drop = FALSE]
+  d <- suppressWarnings(qs_apply_pull(csv_df, sheet_df))$diffs
+  d[d$action %in% c("apply", "conflict"), , drop = FALSE]
 }
 
 #' Write a questions.csv the safe way (na = "") and re-read it immediately so
@@ -343,7 +386,7 @@ gs_ensure_spreadsheet <- function(provider, short, entry, folder_id) {
 #' duplicates; if the column layout ever changes, an existing tab's
 #' protection/validation must be reset by hand).
 gs_push_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = FALSE,
-                              share_with = SHARE_WITH) {
+                              share_with = SHARE_WITH, force = FALSE) {
   yml   <- qs_load_sheets_yml(sheets_yml_path)
   entry <- yml[[provider]]
   paths <- qs_dataset_paths(provider)
@@ -396,6 +439,26 @@ gs_push_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
     qcat("created {meta$spreadsheet_url} in folder {folder_id}; shared with {paste(shared, collapse=', ')}")
   }
 
+  # a push overwrites every tab, so it would erase what a provider typed and
+  # nobody pulled; refuse while any such edit exists (--force overrides)
+  if (!is_new_sheet) {
+    tabs <- googlesheets4::sheet_names(ss)
+    unpulled <- do.call(rbind, lapply(plan, function(pl) {
+      if (!pl$tab %in% tabs) return(NULL)
+      sheet_df <- googlesheets4::range_read(ss, sheet = pl$tab, col_types = "c")
+      d <- qs_unpulled_edits(pl$df, sheet_df)
+      if (nrow(d)) cbind(tab = pl$tab, d) else NULL
+    }))
+    if (!is.null(unpulled) && nrow(unpulled)) {
+      print(as.data.frame(unpulled), row.names = FALSE)
+      if (!isTRUE(force))
+        stop(provider, ": the sheet holds ", nrow(unpulled), " edit(s) not in git (above). ",
+             "Run `pull ", provider, " --execute` first, or pass --force to overwrite them.",
+             call. = FALSE)
+      qcat("{provider}: --force: overwriting {nrow(unpulled)} sheet edit(s) not in git")
+    }
+  }
+
   googlesheets4::sheet_write(qs_readme_content(short), ss = ss, sheet = "README")
 
   for (pl in plan) {
@@ -445,7 +508,7 @@ gs_pull_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
   ss <- googlesheets4::as_sheets_id(entry$sheet_id)
 
   paths <- qs_dataset_paths(provider)
-  any_diff <- FALSE
+  any_diff <- FALSE; behind <- character(); conflicts <- character()
   for (p in paths) {
     ds  <- basename(dirname(p))
     tab <- qs_tab_name(provider, ds)
@@ -456,14 +519,17 @@ gs_pull_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
     if (is.null(sheet_df)) { qcat("{tab}: no tab in sheet — skipping"); next }
 
     res <- qs_apply_pull(csv_df, sheet_df, path = p)
+    n   <- table(factor(res$diffs$action, c("apply", "keep", "conflict")))
     if (nrow(res$diffs)) {
-      any_diff <- TRUE
       cat("\n")
-      qcat("{tab}: {nrow(res$diffs)} change(s)")
+      qcat("{tab}: {n[['apply']]} to apply, {n[['keep']]} kept from git, {n[['conflict']]} conflict(s)")
       print(as.data.frame(res$diffs), row.names = FALSE)
       if (length(res$flips))
         cat("  auto-flipped to answered: ", paste(res$flips, collapse = ", "), "\n")
-      if (isTRUE(execute)) {
+      if (n[["apply"]] > 0) any_diff <- TRUE
+      if (n[["keep"]] > 0) behind <- c(behind, tab)
+      if (n[["conflict"]] > 0) conflicts <- c(conflicts, tab)
+      if (isTRUE(execute) && n[["apply"]] > 0) {
         qs_write_questions_csv(res$df, p)
         cat("  wrote ", p, "\n")
       }
@@ -471,6 +537,13 @@ gs_pull_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
       qcat("{tab}: no changes")
     }
   }
+  if (length(behind))
+    qcat("\n{provider}: the sheet is behind git on {length(behind)} tab(s) ",
+         "({paste(behind, collapse = ', ')}); git kept its values. ",
+         "Run `push {provider} --execute` once this pull is applied.")
+  if (length(conflicts))
+    qcat("\n{provider}: conflicts on {paste(conflicts, collapse = ', ')}: ",
+         "a closed row differs in the sheet; edit questions.csv by hand, then push.")
   if (!isTRUE(execute)) cat("\ndry run — pass --execute to write\n")
   invisible(any_diff)
 }
@@ -481,6 +554,7 @@ gs_pull_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
   flags   <- args[grepl("^--", args)]
   pos     <- args[!grepl("^--", args)]
   execute <- "--execute" %in% flags
+  force   <- "--force" %in% flags
   if (!length(pos))
     stop("usage: Rscript scripts/sync_questions_sheets.R <push|pull> [provider] [--execute]", call. = FALSE)
   mode         <- pos[1]
@@ -495,7 +569,7 @@ gs_pull_provider <- function(provider, sheets_yml_path = SHEETS_YML, execute = F
   if (mode == "pull" || execute) options(qs.auth_user = qs_auth())
 
   for (pv in providers) {
-    if (mode == "push") gs_push_provider(pv, execute = execute)
+    if (mode == "push") gs_push_provider(pv, execute = execute, force = force)
     else                gs_pull_provider(pv, execute = execute)
   }
 }
