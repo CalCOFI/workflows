@@ -124,11 +124,11 @@ the new `standsin_own_p01` rule (calcofi4db 4.28.1).
 
 **Validation:** 97 pass / 0 fail / 4 skip (consumer-contract suite, 2026-10-21T10:39:31Z).
 
-**Software:** calcofi4db 4.29.0, calcofi4r 1.28.0.
+**Software:** calcofi4db 4.29.0, calcofi4r 1.28.1.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.21 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.10.21
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.10.21 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.23566406
 
 Cite the source datasets you use alongside the release:
 
