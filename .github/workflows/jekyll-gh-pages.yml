@@ -61,6 +61,20 @@ jobs:
             any::jsonlite
             any::curl
             calcofi/calcofi4db
+      # an `in_release: false` notebook's render shows its data (tables, maps), and the
+      # provider has not confirmed it yet: keep it, and its card, off the public site.
+      # the repo is public too, so a committed render is flagged; it belongs in the
+      # preview bucket, not git (calcofi4db::release_excluded_datasets())
+      - name: Drop renders of unreleased datasets
+        run: |
+          Rscript -e '
+            for (k in calcofi4db::release_excluded_datasets(".")) {
+              f <- Sys.glob(file.path("_output", paste0("ingest_", k, c(".html", "_files"))))
+              if (!length(f)) next
+              unlink(f, recursive = TRUE)
+              cat(sprintf("::warning::%s is in_release: false; dropped %s from the site (it is still in git)\n",
+                          k, paste(f, collapse = ", ")))
+            }'
       - name: Build workflows index (_data/workflows.yml)
         # the shape checks always run; the network half (link liveness, citation
         # authorities) runs at release and in observe.yml — a runner without egress to
