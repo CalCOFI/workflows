@@ -8,6 +8,14 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The CTD team answered two of the zero-rule questions
+
+CTD question Q48 (`est_nitrate_cruise_corr` is 0 on every row of 2301, 2304, 2307 and 2411) is
+answered: the CTD team asks that the values stay as published until those DECODR-era cruises are
+reprocessed with Kraken, which will replace them. Q49 (the contaminated July baseline of
+`est_chlorophyll_a_cruise_corr`) stays open; it is on the team's cruise processing issues log, and
+`est_chlorophyll_a_sta_corr` is the series to use for anomalies meanwhile. No data change.
+
 # v2026.10.21
 
 ## The October 2022 eDNA survey moves to its corrected v1.3, and every CTD source archive is kept
