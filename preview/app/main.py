@@ -82,8 +82,9 @@ def page(title: str, email: str, body: str) -> HTMLResponse:
                         headers={"Cache-Control": "private, no-store"})
 
 
-@app.get("/healthz")
-def healthz():
+# not /healthz: Cloud Run reserves paths ending in "z" and answers them 404 itself
+@app.get("/health")
+def health():
     return {"ok": True, "version": __version__}
 
 
