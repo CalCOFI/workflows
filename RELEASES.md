@@ -27,6 +27,19 @@ their PIs through Betty Huang and Erin Satterthwaite; the PIC net-tow dataset wa
 is ready. The provider Sheets were also brought up to date with answers recorded since September. No
 data change.
 
+## A provider Sheet that is behind git can no longer undo a recorded answer
+
+Both Sheet syncs had a blind spot: a pull took every cell that differed from git as an edit, so a
+Sheet nobody had refreshed would have put old values back. On 2026-10-22 the question tabs would
+have reverted the eDNA, CUFES and ichthyo answers to open, and the metadata tabs would have blanked
+102 fields and restored Farallon's licence from CC-BY-4.0 to custom. Now a pull never blanks a value
+git holds, never moves a question's status back, flags a different answer on a question git already
+closed as a conflict rather than applying it, and treats a metadata value the sidecar held at an
+earlier commit as the Sheet being behind, not an edit. A push, which rewrites whole tabs, refuses
+while a tab holds an edit nobody has pulled. The one real edit waiting was the team's own triage of
+ten holdings, now in `datasets.json` (`status.priority` PR or IP for ten, `status.owner` betty for
+seven); every Sheet was then pushed in step with git. No data change.
+
 # v2026.10.21
 
 ## The October 2022 eDNA survey moves to its corrected v1.3, and every CTD source archive is kept
