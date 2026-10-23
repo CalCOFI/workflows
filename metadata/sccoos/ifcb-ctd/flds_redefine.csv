@@ -1,0 +1,39 @@
+tbl_old,tbl_new,fld_old,fld_new,type_new,fld_description
+summary,ifcb_sample,IFCB_filename,ifcb_filename,varchar,"IFCB bin id (DYYYYMMDDTHHMMSS_IFCBnnn, the UTC start of the run); the id part of sample_key sccoos_ifcb-ctd:water:<id>."
+summary,ifcb_sample,(derived from IFCB_filename),datetime_utc,timestamp,"UTC start of the run, parsed from the bin id and checked against Sample_time_PT converted from America/Los_Angeles (DST included). sample.datetime."
+summary,ifcb_sample,Cruise,cruise,varchar,Provider cruise code: YYMM plus a 2-letter ship suffix (e.g. 2208BH). Not a CalCOFI cruise_key.
+summary,ifcb_sample,(derived from Cruise),ship_key,varchar,2-letter suffix of the cruise code; input to resolve_cruise_key() (question Q07).
+summary,ifcb_sample,(derived from Cruise),cruise_ym,varchar,YYYYMM designation built from the first four characters of the cruise code; the source-designation step of resolve_cruise_key().
+summary,ifcb_sample,Line,line,decimal,CalCOFI line number.
+summary,ifcb_sample,Station,station,decimal,CalCOFI station number.
+summary,ifcb_sample,"(derived from Line, Station)",site_key,varchar,"CalCOFI station key 'LLL.L SSS.S', sprintf('%05.1f %05.1f', line, station)."
+summary,ifcb_sample,Latitude,latitude,decimal,Latitude in decimal degrees (WGS84).
+summary,ifcb_sample,Longitude,longitude,decimal,Longitude in decimal degrees (WGS84).
+summary,ifcb_sample,Bottle,bottle,integer,CTD rosette bottle number the water came from; staging-only until the bin is linked to its bottle sample (question Q08).
+summary,ifcb_sample,Depth,depth_m,decimal,Depth of the sampled bottle in meters; NULL for one bin (question Q05). Published as both depth_min_m and depth_max_m.
+summary,ifcb_sample,Depthstype,depth_class,varchar,Provider depth class: 'Surface' or 'DCM' (deep chlorophyll maximum); staging-only.
+summary,ifcb_sample,Volume_ml,volume_ml,decimal,"Volume of seawater analysed for this bin in ml: 0.25 ml/min x (runTime - inhibitTime) / 60, per the provider notebook. Published as sample_measurement ifcb_volume_analyzed."
+summary,ifcb_sample,Sample_time_PT,sample_time_pt,timestamp,"Pacific wall-clock time of the run (no time zone in the source); used only to check datetime_utc, not published."
+summary,ifcb_summary,IFCB_filename,ifcb_filename,varchar,IFCB bin id; FK to ifcb_sample.
+summary,ifcb_summary,Taxa,taxa,varchar,"Taxon name as the provider labels it (trimmed; 'Navicula ' carries a trailing space in the source, question Q10). Equals the WoRMS matched name for every taxon except 'unidentified cells'."
+summary,ifcb_summary,(derived from Taxa),ds_taxa_code,varchar,"dataset_taxon.ds_taxa_code: Taxa verbatim, except 'unidentified cells' -> 'unidentified_cells' so the dataset-local taxon_key has no space."
+summary,ifcb_summary,Autoclass classes,autoclass_classes,varchar,"Image-classifier class names merged into this taxon, '; '-separated; staging-only (not published)."
+summary,ifcb_summary,WoRMS matched name,worms_name,varchar,Name matched in WoRMS; 17 names carry an underscore where WoRMS has a space (question Q10).
+summary,ifcb_summary,AphiaID,aphia_id,integer,WoRMS AphiaID; NULL only for unidentified cells. Declared as worms_id in the dataset_taxon vocabulary.
+summary,ifcb_summary,Sizerange ESD,size_class,varchar,"Equivalent-spherical-diameter size class in um: '<10', '10-20', '20-40', '40>' (left-closed). Published as obs_attribute.bin_label."
+summary,ifcb_summary,Count,n_cells,integer,Number of images (cells) classified to this taxon in this size class; obs_attribute.count. A chain-forming taxon imaged as one chain counts once (question Q11).
+summary,ifcb_summary,Abundance (counts/ml),abundance_ml,decimal,n_cells / volume_ml (asserted); summed over size classes into ifcb_abundance.
+summary,ifcb_summary,Avg Biovol,avg_biovol_um3,decimal,"Mean cell biovolume in um3 (feature Biovolume / 3.4^3, per the provider notebook). 16 rows are 0 (question Q12)."
+summary,ifcb_summary,SD biovol,sd_biovol_um3,decimal,Sample SD of cell biovolume in um3 (0 for a single image); staging-only.
+summary,ifcb_summary,Avg ESD,avg_esd_um,decimal,Mean equivalent spherical diameter in um; staging-only.
+summary,ifcb_summary,SD ESD,sd_esd_um,decimal,Sample SD of ESD in um (0 for a single image); staging-only.
+summary,ifcb_summary,Autoclass Version,autoclass_version,integer,Version of the image classifier (1 on every row); staging-only.
+summary,ifcb_summary,Autoclass Accuracy,autoclass_accuracy,varchar,Per-class classifier accuracy carried over from an earlier summary by class name; '; '-separated when classes are merged; blank for 2 taxa. Not published pending question Q06.
+summary,ifcb_summary,Volume_ml,volume_ml,decimal,Volume analysed in ml (repeated on every row of a bin).
+summary,ifcb_bin_taxon,Count,n_cells,integer,SUM of n_cells over the taxon's size classes in the bin (asserted to conserve every imaged cell).
+summary,ifcb_bin_taxon,Abundance (counts/ml),abundance_ml,decimal,SUM of abundance_ml over the size classes; obs.measurement_value for ifcb_abundance (cells/ml).
+summary,ifcb_bin_taxon,"(derived from Count, Avg Biovol, Volume_ml)",biovolume_ml,decimal,SUM(n_cells x avg_biovol_um3) / volume_ml; obs.measurement_value for ifcb_biovolume (um3/ml).
+summary,ifcb_bin_taxon,(derived),n_size_class,integer,Size classes (1-4) in which the taxon was seen in this bin; staging-only.
+(derived),ifcb_context,IFCB_filename,sample_id,varchar,IFCB bin id; the id part of sample_key.
+(derived),ifcb_context,(derived),measurement_type,varchar,ifcb_volume_analyzed (the only type).
+summary,ifcb_context,Volume_ml,measurement_value,double,Volume analysed in ml; sample_measurement.measurement_value.

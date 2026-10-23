@@ -1,69 +1,130 @@
-# source: WS-R1 2026-09-05: dataset_key minted from the CalOOS row's access URL/provider
-provider: sccoos
+# descriptive metadata for sccoos_ifcb-ctd -- provider-editable. The structural
+# keys (dataset_name, dataset_name_short, category, color, tables) live in
+# ingest_sccoos_ifcb-ctd.qmd's calcofi.dataset_meta YAML block.
+#
+# This file replaces the holding-only sidecar (status / module / priority_caloos /
+# next_step dropped now that the dataset is an active ingest, as iron did). The
+# description / abstract / methods below describe the SUMMARY TABLE that is
+# ingested, not the raw IFCB images the old abstract described.
+#
+# Sources: the provider's files and email thread (Sep 2026), and the CalOOS
+# working-draft dataset sheet, row 31 "IFCB-CTD" (read 2026-10-23). The sheet's
+# license and DOI describe the CalOOS-hosted IFCB data; whether they cover the
+# summary table is provider question Q01.
 
-# source: WS-R1 2026-09-05
-dataset: ifcb-ctd
-
-# source: caloos-sheet row 31, 2026-09-05
-dataset_name: CalCOFI Imaging FlowCytobot (IFCB) Images of Chloroplast-Containing
-  Plankton from CTD - SIO, UCSD
-# the pick-list / card label (the long title above is the source's own); authored by R0 2026-09-05
-dataset_name_short: "IFCB imagery (CTD)"
-
-# source: WS-R1 2026-09-05: category.csv (widened for this holding, see hand-back)
-category: Phytoplankton
-
-# source: caloos-sheet row 31, 2026-09-05
-status: external
-
-# source: WS-R1 2026-09-05 default
+# source: email thread, L. Hou 2026-09-30 ("I agree it would be really nice to get
+# the IFCB data there too") + R. Swalethorp 2026-09-30 (plans to serve and
+# visualize the data on calcofi.io). To be confirmed with the provider (Q01).
 visibility: public
 
-# source: caloos-sheet row 31, 2026-09-05
-priority_caloos: CalOOS
+# source: provider's summary workbook + IFCB_CalCOFI_summary.ipynb, read 2026-10-23
+description: >
+  Phytoplankton abundance and biovolume from an Imaging FlowCytobot (IFCB) run on
+  water collected from the CalCOFI CTD rosette, Aug 2022 - Jul 2026 (10 cruises,
+  671 samples). Cells are imaged, classified by an image classifier, and counted
+  per taxon and per equivalent-spherical-diameter size class; taxa are matched to
+  WoRMS.
 
-# source: caloos-sheet row 31, 2026-09-05
-module: CalCOFI Imaging FlowCytobot (IFCB) Images of Chloroplast-Containing Plankton
-  from CTD & Underway data, CCE-LTER, SIO, UCSD
+# source: provider's IFCB_CalCOFI_summary.ipynb (method, units, size classes) and
+# the summary workbook (extent), read 2026-10-23
+abstract: >
+  Imaging FlowCytobot (IFCB) phytoplankton summary for CalCOFI CTD water samples.
+  Each IFCB sample (a "bin") is a measured volume of seawater from a CTD rosette
+  bottle, typically at the surface and at the deep chlorophyll maximum, run
+  through the instrument aboard CalCOFI cruises from August 2022 to July 2026.
+  Every imaged cell is assigned to a class by an image classifier (autoclass),
+  and the classes are matched to WoRMS. The summary reports, per bin, taxon and
+  equivalent spherical diameter (ESD) size class (<10, 10-20, 20-40, >40 um),
+  the number of cells imaged, the abundance (cells per ml analysed), and the mean
+  and standard deviation of cell biovolume (um3) and ESD (um). Non-cell classes
+  (bubbles, detritus, beads and similar) are removed upstream. The time series is
+  short and has gaps (the instrument was not run on every cruise).
 
-# source: caloos-sheet row 31, 2026-09-05
-abstract: CalCOFI Imaging FlowCytobot (IFCB) Images of Chloroplast-Containing Plankton
-  from CTD contains high-resolution digital images of chloroplast-containing plankton
-  and other suspended particles, collected during California Cooperative Oceanic Fisheries
-  Investigations (CalCOFI) CTD casts to characterize fine-scale plankton community
-  composition. The dataset covers the southern California Current and spans 2022 to
-  ongoing, since the Imaging FlowCytobot (IFCB) was first deployed on CalCOFI cruises.
-  Discrete water samples are collected from 10 meters and the chlorophyll maximum
-  depth during CTD casts and imaged using the IFCB, an automated flow cytometer that
-  combines flow cytometry and video technology to photograph individual suspended
-  particles. Images are processed to estimate particle volume and identity, along
-  with geolocation, sampling conditions, and instrument metadata, allowing estimates
-  of plankton abundance, biovolume, and carbon content. This dataset supports research
-  on fine-scale plankton community composition and spatial and temporal variability,
-  and is intended for researchers studying phytoplankton ecology in the California
-  Current.
+# source: IFCB_CalCOFI_summary.ipynb, settings and aggregation cells, read 2026-10-23
+methods_md: >
+  Seawater from CTD rosette bottles is run through an Imaging FlowCytobot
+  (IFCB). Volume analysed is 0.25 ml/min x (runTime - inhibitTime) / 60, from the
+  instrument header. Each image is classified to its highest-scoring class by an
+  image classifier (autoclass version 1), joined to its size features, converted
+  from pixels to um (3.4 pixels per um), and grouped by taxon and ESD size class
+  ([0,10), [10,20), [20,40), [40,inf) um). Abundance is images / volume analysed.
+  Classes are matched to WoRMS (CalCOFI_IFCB_WoRMS_match.xlsx). Samples flagged
+  `skip` in the provider's metadata are dropped.
 
-# source: caloos-sheet row 31, 2026-09-05
+# source: CalOOS sheet row 31 (leads: Andy Allen, Lin (Vivian) Hou); existing
+# holding sidecar (Allen). Confirmation requested in Q02.
 creators:
 - name: Andy Allen
-  organization: JCVI, UCSD SIO
+  organization: J. Craig Venter Institute (JCVI) / Scripps Institution of Oceanography, UC San Diego
   email: aallen@ucsd.edu
   role: lead
+- name: Vivian (Lin) Hou
+  organization: Scripps Institution of Oceanography (SIO), UC San Diego
+  email: vihou@ucsd.edu
+  role: lead
 
-# source: caloos-sheet row 31, 2026-09-05
-contact: aallen@ucsd.edu
+# source: CalOOS sheet row 31 (data collection; processing/QA-QC and curation)
+associated_parties:
+- name: Vivian (Lin) Hou
+  role: processing/QA-QC
+- name: Vivian (Lin) Hou
+  role: curation/management
+- name: Vivian (Lin) Hou
+  role: data collection
+- name: Sooyoon Kim
+  organization: Scripps Institution of Oceanography (SIO), UC San Diego
+  role: data collection
+- name: Grace Constantian
+  organization: Scripps Institution of Oceanography (SIO), UC San Diego
+  role: data collection
+- name: Bryce Ellman
+  organization: Scripps Institution of Oceanography (SIO), UC San Diego
+  role: data collection
 
-# source: caloos-sheet row 31, 2026-09-05
+# source: email thread, L. Hou 2026-09-30
+contact: vihou@ucsd.edu
+
+# source: summary workbook / provider notebook
 keywords:
 - Phytoplankton Biomass and Diversity
+- Imaging FlowCytobot
+- IFCB
 - CalCOFI Network
 
-# source: caloos-sheet row 31, 2026-09-05
-maintenance: ongoing
+# source: CalOOS sheet row 31 + provider (B. Huang, 2026-10-23): QC of the
+# instrument data (filter volume, flow rate, focus and similar) follows the CalOOS
+# IFCB SOP QC protocols. The classifier accuracy is a per-class figure carried over
+# from an earlier summary, not a per-image confidence (Q06).
+quality_control_md: >-
+  Instrument data quality (filter volume, flow rate, focus and similar) is
+  checked following the CalOOS IFCB SOP QC protocols. Bins flagged `skip` in the
+  provider's metadata are removed. Images are classified automatically;
+  class-level classifier accuracy is reported per taxon in the source
+  (`Autoclass Accuracy`) but not published here pending the provider (Q06).
 
-# source: caloos-sheet row 31, 2026-09-05
+# source: email thread, L. Hou 2026-09-29 ("I can get everything sorted in a week
+# after the cruise")
+maintenance: "Ongoing; updated after each CalCOFI cruise (CalOOS sheet: quarterly)"
+
+# source: CalOOS sheet row 31 ("Public domain (CC0) - Free use and reuse",
+# public/unrestricted). Scope for the summary table to be confirmed (Q01).
+license: CC0-1.0
+
+# source: CalOOS sheet row 31. Resolution of the DOI was not checked when this
+# was written (doi.org not reachable from the build environment); Q01 asks Lin.
+doi: 10.6075/J05Q4WFB
+
+# source: CalOOS sheet row 31 (funders NOAA, IOOS, NASA; the sheet's short abstract
+# names NOAA ECOHAB). Wording to be confirmed (Q02).
+funding: NOAA (ECOHAB); NOAA IOOS; NASA
+
+# source: CalOOS sheet row 31, preferred-citation cell (cell text is cut off in the
+# sheet export; completed by B. Huang, 2026-10-23). A fuller citation with year and
+# DOI can replace it once the provider gives one (Q02).
+citation_main: CalCOFI – Scripps Institution of Oceanography
+
+# source: pi_names follows the leads above
+pi_names: Andy Allen; Vivian (Lin) Hou
+
+# source: existing holding sidecar (CalOOS IFCB dashboard, CalCOFI CTD dataset)
 link_data_source: https://ifcb.caloos.org/timeline?dataset=calcofi-cruises-ctd
-
-# source: WS-R1 2026-09-05 triage note + match/conflict evidence (see hand-back)
-next_step: confirm dataset scope, license and DOI with the provider; no ingest planned
-  yet. ifcb.caloos.org CTD timeline -- provider sccoos (CalOOS/SCCOOS-hosted IFCB)
