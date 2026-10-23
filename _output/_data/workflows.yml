@@ -1,13 +1,13 @@
-generated: '2026-10-21'
-n_total: 64
-n_meta: 32
+generated: '2026-10-23'
+n_total: 65
+n_meta: 33
 categories:
 - id: ingest
   title: Ingest
   blurb: Acquire, standardize, and load a source dataset into the integrated database.
     Cards are grouped by data provider.
   layout: cards
-  count: 21
+  count: 22
   groups:
   - label: CalCOFI
     items:
@@ -222,6 +222,7 @@ categories:
       bbox: 19.9–51.0°N, 164.1–107.1°W
       color: '#bbe0f0'
       link_calcofi_org: https://calcofi.org/data/marine-ecosystem-data/zooplankton/
+      link_data_source: https://scripps.ucsd.edu/pelagic-invertebrate-collection
       provider: sio
   - label: CCE-LTER
     items:
@@ -338,6 +339,19 @@ categories:
       color: '#f0d2e8'
       link_data_source: https://oceanview.pfeg.noaa.gov/erddap/tabledap/CAC_FI_SBAS_obs.html
       provider: farallon
+  - label: SCCOOS
+    items:
+    - url: ingest_sccoos_ifcb-ctd.html
+      title: ingest_sccoos_ifcb-ctd
+      dataset_name: CalCOFI CTD Imaging FlowCytobot (IFCB) Phytoplankton
+      description: Phytoplankton abundance and biovolume from an Imaging FlowCytobot
+        (IFCB) run on water collected from the CalCOFI CTD rosette, Aug 2022 - Jul
+        2026 (10 cruises, 671 samples). Cells are imaged, classified by an image classifier,
+        and counted per taxon and per equivalent-spherical-diameter size class; taxa
+        are matched to WoRMS.
+      color: '#bbe0f0'
+      link_data_source: https://ifcb.caloos.org/timeline?dataset=calcofi-cruises-ctd
+      provider: sccoos
 - id: publish
   title: Publish
   blurb: 'Publish the released core to external services and formats — ERDDAP, CF
@@ -464,10 +478,10 @@ categories:
       title: explore_dumping
     - url: explore_gdatasets.html
       title: explore_gdatasets
-    - url: explore_grid_voronoi.html
-      title: explore_grid_voronoi
     - url: explore_grid-res.html
       title: explore_grid-res
+    - url: explore_grid_voronoi.html
+      title: explore_grid_voronoi
     - url: explore_interpolate-larvae.html
       title: explore_interpolate-larvae
     - url: explore_join-larvae-bottle.html
@@ -515,6 +529,7 @@ dag_mermaid: |-
     ingest_cce_lter_zooscan(["ingest_cce_lter_zooscan"]):::c_ingest_cce_lter_zooscan
     ingest_cdfw_dungeness_crab(["ingest_cdfw_dungeness_crab"]):::c_ingest_cdfw_dungeness_crab
     ingest_farallon_bird_mammal(["ingest_farallon_bird_mammal"]):::c_ingest_farallon_bird_mammal
+    ingest_sccoos_ifcb_ctd(["ingest_sccoos_ifcb_ctd"]):::c_ingest_sccoos_ifcb_ctd
     ingest_sio_mesopelagic_fish(["ingest_sio_mesopelagic_fish"]):::c_ingest_sio_mesopelagic_fish
     ingest_sio_pic_zooplankton(["ingest_sio_pic_zooplankton"]):::c_ingest_sio_pic_zooplankton
     ingest_spatial(["ingest_spatial"]):::ingest
@@ -546,6 +561,7 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_cdfw_dungeness_crab
     ingest_swfsc_ichthyo --> ingest_farallon_bird_mammal
     ingest_calcofi_ctd_cast --> ingest_farallon_bird_mammal
+    ingest_swfsc_ichthyo --> ingest_sccoos_ifcb_ctd
     ingest_swfsc_ichthyo --> ingest_sio_mesopelagic_fish
     ingest_swfsc_ichthyo --> ingest_sio_pic_zooplankton
     ingest_swfsc_ichthyo --> ingest_swfsc_cufes
@@ -574,6 +590,7 @@ dag_mermaid: |-
     ingest_cce_lter_zooscan --> release_database
     ingest_cdfw_dungeness_crab --> release_database
     ingest_farallon_bird_mammal --> release_database
+    ingest_sccoos_ifcb_ctd --> release_database
     ingest_sio_mesopelagic_fish --> release_database
     ingest_sio_pic_zooplankton --> release_database
     ingest_spatial --> release_database
@@ -597,6 +614,7 @@ dag_mermaid: |-
     classDef c_ingest_cce_lter_zooscan fill:#c2e8f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cdfw_dungeness_crab fill:#f5d5b8,stroke:#00000033,color:#10161c;
     classDef c_ingest_farallon_bird_mammal fill:#f0d2e8,stroke:#00000033,color:#10161c;
+    classDef c_ingest_sccoos_ifcb_ctd fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_sio_mesopelagic_fish fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_sio_pic_zooplankton fill:#bbe0f0,stroke:#00000033,color:#10161c;
     classDef ingest fill:#cdd9e5,stroke:#00000033,color:#10161c;
