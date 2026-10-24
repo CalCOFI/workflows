@@ -1,0 +1,15 @@
+table,column,name_long,units,description_md
+ifcb_sample,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+ifcb_sample,grid_key,Grid Key,,CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`.
+ifcb_sample,cruise_key,Cruise Key,,"Cruise natural key (YYYY-MM-NODC); FK to `cruise`. Resolved by `resolve_cruise_key()` from `ship_key` and `cruise_ym` by date span, then the source designation, then the month; a bin whose ship has no match stays NULL (question Q07)."
+ifcb_sample,cruise_key_method,Cruise Key Method,,"Which `resolve_cruise_key()` step resolved the key: `span`, `source` or `month`."
+ifcb_sample,ship_key,Ship Key,,2-letter suffix of the provider cruise code (e.g. `SR` from `2411SR`); join to `ship$ship_key`.
+ifcb_sample,cruise_ym,Cruise YYYYMM,,Source designation `20` + the first four characters of the provider cruise code (e.g. `202411`).
+ifcb_sample,site_key,Site Key,,"CalCOFI station key 'LLL.L SSS.S', derived as `sprintf('%05.1f %05.1f', line, station)` from the source's own Line/Station columns."
+ifcb_sample,datetime_utc,Datetime (UTC),,"UTC start of the IFCB run, parsed from the bin id `DYYYYMMDDTHHMMSS_IFCBnnn` and checked against the provider's Pacific `Sample_time_PT`."
+ifcb_sample,depth_min_m,Depth Min,m,Sampled bottle depth; equal to `depth_max_m` (a bottle sample has no depth span).
+ifcb_sample,depth_max_m,Depth Max,m,Sampled bottle depth; equal to `depth_min_m`.
+ifcb_summary,ds_taxa_code,Dataset Taxon Code,,"`taxa` verbatim, except `unidentified cells` -> `unidentified_cells` (no space in the dataset-local `taxon_key`)."
+ifcb_bin_taxon,ds_taxa_code,Dataset Taxon Code,,Join key to `dataset_taxon.ds_taxa_code`.
+ifcb_bin_taxon,abundance_ml,Abundance,cells/ml,"Images (cells) per ml analysed, summed over the four ESD size classes."
+ifcb_bin_taxon,biovolume_ml,Biovolume Concentration,um3/ml,"`sum(n_cells x mean biovolume) / volume analysed`, over the four size classes."

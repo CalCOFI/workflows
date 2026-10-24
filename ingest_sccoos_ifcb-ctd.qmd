@@ -1,0 +1,941 @@
+---
+title: "Ingest CalCOFI CTD Imaging FlowCytobot (IFCB) Phytoplankton"
+calcofi:
+  # publishes the consolidated core. The source is a long summary (IFCB bin x
+  # taxon x ESD size class); this notebook projects it into the shared core
+  # obs_attribute, and the analysed volume (the normaliser) in sample_measurement.
+  target_name: ingest_sccoos_ifcb_ctd
+  workflow_type: ingest
+  dependency:
+    # reads swfsc_ichthyo's staged ship/cruise/grid (load_prior_tables() below)
+    - ingest_swfsc_ichthyo
+  output: data/parquet/sccoos_ifcb-ctd/manifest.json
+  provider: sccoos
+  dataset: ifcb-ctd
+  workflow_url: https://calcofi.io/workflows/ingest_sccoos_ifcb-ctd.html
+  questions_file: metadata/sccoos/ifcb-ctd/questions.csv
+  in_release: false
+  dataset_meta:
+    # display trio, read by the release `dataset` table and consumer apps
+    dataset_name: CalCOFI CTD Imaging FlowCytobot (IFCB) Phytoplankton
+    dataset_name_short: IFCB Phytoplankton
+    category: Phytoplankton
+    color: "#2a9d8f"
+  # tables: the headline per bin x taxon in obs, the size-class split in
+  tables_owned:
+    - {table: sample, shared: true, note: "one row per IFCB bin (one water sample run through the instrument; sample_type water)"}
+    - {table: obs, shared: true, note: "one row per bin x taxon x measurement_type: ifcb_abundance (cells/ml) + ifcb_biovolume (um3/ml), both summed over the four ESD size classes"}
+    - {table: obs_attribute, shared: true, note: "the ESD size-class split of each obs headline: one row per bin x taxon x size class (bin_label, count = cells imaged)"}
+    - {table: sample_measurement, shared: true, note: "volume analysed per bin (ifcb_volume_analyzed, ml): the denominator of ifcb_abundance"}
+    - {table: taxon, shared: true}
+    - {table: dataset_taxon, shared: true}
+    - {table: measurement_type, shared: true, note: "adds ifcb_abundance, ifcb_biovolume, ifcb_size_class, ifcb_volume_analyzed"}
+  erd:
+    color: "#bbe0f0"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: a summary table built by Vivian (Lin) Hou (SIO) for Andy Allen's
+IFCB program (JCVI / SIO; the images are hosted on the CalOOS IFCB dashboard,
+`ifcb.caloos.org`, which is why the dataset key is `sccoos_ifcb-ctd` -- the key was
+minted from the host when the holding was created, see below) from Imaging
+FlowCytobot (IFCB) bins run on water collected from the CalCOFI CTD rosette, Aug
+2022 - Jul 2026 (10 cruises, 671 bins). Supplied as four files in
+`data-public/sccoos/ifcb-ctd/`:
+
+- `CalCOFI_CTD_IFCB_data_summary_new.xlsx` -- the data: sheet `summary` (one row
+  per bin x taxon x ESD size class), plus `class_to_WoRMS` (the autoclass
+  class -> WoRMS crosswalk) and `per_bin_totals` (a per-bin check table).
+- `CalCOFI_CTD_metadata_filled_102226.csv` -- the per-bin cast metadata, with
+  the provider's own `skip` flags.
+- `CalCOFI_IFCB_WoRMS_match.xlsx` -- the provider's WoRMS naming table.
+- `IFCB_CalCOFI_summary.ipynb` -- the provider's notebook that builds the
+  summary. Read for units and method (see below), archived, not executed.
+
+**What a row is.** An IFCB images the cells in a measured volume of water, an
+image classifier (the "autoclass") assigns each image to a class, and the
+summary groups the classified images by taxon and by equivalent spherical
+diameter (ESD) size class. Per the provider's notebook: `Count` is the number
+of images (cells) in the group, `Abundance (counts/ml)` is `Count / Volume_ml`,
+`Volume_ml` is `0.25 ml/min x (runTime - inhibitTime) / 60`, `Avg Biovol` is the
+mean cell biovolume in um3 and `Avg ESD` the mean ESD in um (pixels converted at
+3.4 px/um). The summary keeps cells only (bubbles, detritus, beads and other
+non-cell classes are filtered upstream, class_to_WoRMS `Cell (yes/no)`).
+
+**Sample grain is the IFCB bin** (`IFCB_filename`, `DYYYYMMDDTHHMMSS_IFCBnnn`,
+the UTC start of the run): one water sample from one CTD bottle, run once. Every
+row of a bin shares one cruise, position, depth and analysed volume (asserted
+below). The bin id carries the UTC timestamp, so `datetime` comes from the
+filename and is checked against the provider's `Sample_time_PT`.
+
+**Three grains in the core model** (the size class is a third dimension that no
+single `obs` row can carry):
+
+- `obs`: one row per bin x taxon x measurement_type, **summed over the size
+  classes**: `ifcb_abundance` (cells/ml) and `ifcb_biovolume` (um3/ml, the
+  total cell biovolume per ml, `sum(Count x Avg Biovol) / Volume_ml`).
+- `obs_attribute`: the size-class split behind each headline, one row per bin x
+  taxon x size class, `bin_label` the class (`<10`, `10-20`, `20-40`, `40>` um)
+  and `count` the cells imaged in that class. Counts sum to the headline x
+  volume (asserted).
+- `sample_measurement`: `ifcb_volume_analyzed` (ml), the denominator.
+
+Not published (still in the archived source): the per-size-class mean and SD of
+biovolume and ESD, `Autoclass Accuracy` (a per-class classifier accuracy, not a
+per-image confidence -- provider question Q06), the autoclass class names
+merged into each taxon, and the bottle number. The bin is **not** linked to its
+`bottle` sample yet (parent_sample_key is NULL, Q08).
+
+**Detections only.** The summary lists the taxa seen in a bin; a taxon absent
+from a bin has no row, and a 0 is never emitted. Absence cannot be inferred
+(Q09).
+
+### Data Flow
+
+```{mermaid}
+graph LR
+  A[summary.xlsx + metadata.csv + WoRMS match] --> B[DuckDB Wrangling]
+  B --> C[Validate & Clean]
+  C --> D[Parquet Export]
+  D --> E[GCS Archive]
+  E --> F[Release Database]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr, lubridate, purrr,
+  readr, readxl, sf, stringr, tibble, tidyr, units, quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+
+cc           <- read_calcofi_meta(here("ingest_sccoos_ifcb-ctd.qmd"))
+provider     <- cc$provider    # "sccoos"
+dataset      <- cc$dataset     # "ifcb-ctd"
+ds_key       <- as.character(glue("{provider}_{dataset}"))
+tables_owned <- cc$tables_owned
+dir_label    <- ds_key
+dir_parquet  <- here(glue("data/parquet/{dir_label}"))
+dir_stage    <- cc_stage_path("parquet", dir_label, create = TRUE)
+dir_meta     <- here(glue("metadata/{provider}/{dataset}"))
+db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
+
+if (overwrite) {
+  if (file_exists(db_path))                 file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp")))  dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+
+meas_type_csv <- here("metadata/measurement_type.csv")
+d_meas_type   <- read_measurement_type(meas_type_csv)
+
+# required by build_metadata_json() even when read_csv_files() is bypassed for
+# the main data read (same requirement as ingest_calcofi_2022-edna.qmd)
+d_flds_rd <- read_csv(glue("{dir_meta}/flds_redefine.csv"), show_col_types = FALSE)
+d_tbls_rd <- read_csv(glue("{dir_meta}/tbls_redefine.csv"), show_col_types = FALSE)
+```
+
+## Read Source Data
+
+The source is one Excel workbook, one CSV and a notebook, not the wide CSV that
+`read_csv_files()` expects, so the files are read directly (the same bypass
+`ingest_calcofi_2022-edna.qmd` documents). The four raw files are archived to
+GCS as received.
+
+```{r}
+#| label: read-source
+
+dir_source <- path(dir_data, provider, dataset)
+f_summary  <- path(dir_source, "CalCOFI_CTD_IFCB_data_summary_new.xlsx")
+f_meta     <- path(dir_source, "CalCOFI_CTD_metadata_filled_102226.csv")
+f_worms    <- path(dir_source, "CalCOFI_IFCB_WoRMS_match.xlsx")
+stopifnot("source files missing from the dataset folder" =
+            all(file_exists(c(f_summary, f_meta, f_worms))))
+
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(
+    local_dir  = dir_source,
+    gcs_prefix = glue("archive/{provider}/{dataset}"),
+    bucket     = "calcofi-files-public",
+    exclude    = c(".DS_Store"))
+} else cat("CALCOFI_SKIP_GCS set - skipping the archive upload (local verification run)\n")
+
+d_raw <- read_excel(f_summary, sheet = "summary", guess_max = 1e5)
+d_c2w <- read_excel(f_summary, sheet = "class_to_WoRMS")
+d_pbt <- read_excel(f_summary, sheet = "per_bin_totals")
+d_md  <- read_csv(f_meta, na = c("", "NA"), col_types = cols(.default = "c"))
+
+need <- c("Cruise", "Line", "Station", "Latitude", "Longitude", "Bottle", "Depth",
+          "Depthstype", "Taxa", "Autoclass classes", "WoRMS matched name", "AphiaID",
+          "Sizerange ESD", "Count", "Abundance (counts/ml)", "Avg Biovol", "SD biovol",
+          "Avg ESD", "SD ESD", "Autoclass Version", "Autoclass Accuracy", "Volume_ml",
+          "Sample_time_PT", "IFCB_filename")
+stopifnot("summary sheet is missing expected columns" = all(need %in% names(d_raw)))
+
+# explicit renames (not clean_names()): the source headers carry units and
+# parentheses, and the published names are part of flds_redefine.csv
+d_sum <- d_raw |>
+  transmute(
+    ifcb_filename  = str_trim(IFCB_filename),
+    cruise         = Cruise,
+    line           = as.numeric(Line),
+    station        = as.numeric(Station),
+    latitude       = as.numeric(Latitude),
+    longitude      = as.numeric(Longitude),
+    bottle         = as.integer(Bottle),
+    depth_m        = as.numeric(Depth),
+    depth_class    = Depthstype,
+    # 'Navicula ' carries a trailing space in the source (Q10); trimmed here and
+    # in the vocabulary, so the code obs stores is the trimmed one
+    taxa           = str_trim(Taxa),
+    autoclass_classes = `Autoclass classes`,
+    worms_name     = str_trim(`WoRMS matched name`),
+    aphia_id       = as.integer(AphiaID),
+    size_class     = `Sizerange ESD`,
+    n_cells        = as.integer(Count),
+    abundance_ml   = as.numeric(`Abundance (counts/ml)`),
+    avg_biovol_um3 = as.numeric(`Avg Biovol`),
+    sd_biovol_um3  = as.numeric(`SD biovol`),
+    avg_esd_um     = as.numeric(`Avg ESD`),
+    sd_esd_um      = as.numeric(`SD ESD`),
+    autoclass_version  = as.integer(`Autoclass Version`),
+    autoclass_accuracy = as.character(`Autoclass Accuracy`),
+    volume_ml      = as.numeric(Volume_ml),
+    sample_time_pt = as.POSIXct(Sample_time_PT, tz = "UTC"))  # naive Pacific wall clock
+
+cat(glue("read {nrow(d_sum)} summary rows / {n_distinct(d_sum$ifcb_filename)} bins / ",
+         "{n_distinct(d_sum$taxa)} taxa; {nrow(d_c2w)} class_to_WoRMS rows; ",
+         "{nrow(d_pbt)} per_bin_totals rows; {nrow(d_md)} metadata rows"), "\n")
+```
+
+## Check Data Integrity
+
+Checked directly against the shape this ingest depends on: the grain of the
+summary, one position / depth / volume per bin, the arithmetic the provider's
+notebook states (`abundance = count / volume`), a one-to-one taxon -> AphiaID
+map, the provider's own `per_bin_totals` check table, and the metadata CSV
+(every bin present, none flagged `skip`, same volume and depth).
+
+```{r}
+#| label: check-integrity
+
+# 1. grain: one row per bin x taxon x size class
+stopifnot(
+  "summary must be unique per bin x taxon x size class" =
+    !anyDuplicated(d_sum[, c("ifcb_filename", "taxa", "size_class")]),
+  "size classes must be the provider's four ESD classes" =
+    setequal(unique(d_sum$size_class), c("<10", "10-20", "20-40", "40>")),
+  "every row must carry a positive cell count" = all(d_sum$n_cells > 0))
+
+# 2. one cruise / position / depth / volume per bin (the sample-grain decision)
+bin_grain <- d_sum |>
+  distinct(ifcb_filename, cruise, line, station, latitude, longitude, bottle,
+           depth_m, depth_class, volume_ml, sample_time_pt) |>
+  count(ifcb_filename) |> filter(n > 1)
+stopifnot("every bin must share one cruise/position/depth/volume across its rows" =
+            nrow(bin_grain) == 0)
+
+# 3. abundance is count / volume, as the provider's notebook states
+stopifnot("abundance_ml must equal n_cells / volume_ml" =
+            all(abs(d_sum$abundance_ml - d_sum$n_cells / d_sum$volume_ml) < 1e-8))
+
+# 4. taxon <-> AphiaID is one-to-one (NA AphiaID = unidentified cells only)
+tx_map <- d_sum |> distinct(taxa, aphia_id, worms_name)
+stopifnot(
+  "one AphiaID per taxon" = !anyDuplicated(tx_map$taxa),
+  "one taxon per AphiaID" = !anyDuplicated(na.omit(tx_map$aphia_id)),
+  "the only taxon without an AphiaID is 'unidentified cells'" =
+    identical(tx_map$taxa[is.na(tx_map$aphia_id)], "unidentified cells"))
+
+# 5. the provider's per_bin_totals sheet reproduces from the summary
+tot <- d_sum |>
+  group_by(ifcb_filename) |>
+  summarize(taxa = n_distinct(taxa), rois = sum(n_cells),
+            total_per_ml = sum(abundance_ml), .groups = "drop")
+pbt_chk <- d_pbt |> select(ifcb_filename = IFCB_filename, taxa, rois, total_per_ml) |>
+  inner_join(tot, by = "ifcb_filename", suffix = c("", "_s"))
+stopifnot(
+  "per_bin_totals must cover every bin" = nrow(pbt_chk) == n_distinct(d_sum$ifcb_filename),
+  "per_bin_totals must reproduce from the summary" =
+    all(pbt_chk$rois == pbt_chk$rois_s, pbt_chk$taxa == pbt_chk$taxa_s,
+        abs(pbt_chk$total_per_ml - pbt_chk$total_per_ml_s) < 1e-8))
+
+# 6. the metadata CSV: every bin present once, none flagged skip, same volume/depth
+d_md_bin <- d_md |>
+  filter(!is.na(Cruise), !is.na(Filename)) |>
+  mutate(skip = coalesce(str_to_lower(skip) %in% c("true", "yes", "y", "1"), FALSE))
+bins <- d_sum |> distinct(ifcb_filename, volume_ml, depth_m)
+md_chk <- bins |> left_join(d_md_bin, by = c("ifcb_filename" = "Filename"))
+stopifnot(
+  "every bin must appear in the metadata CSV" = !anyNA(md_chk$Cruise),
+  "no summary bin may be flagged skip in the metadata" = !any(md_chk$skip),
+  "metadata ml_analyzed must equal the summary volume" =
+    all(abs(as.numeric(md_chk$ml_analyzed) - md_chk$volume_ml) < 1e-6),
+  "metadata Depth must equal the summary depth (NA matches NA)" =
+    all(is.na(md_chk$depth_m) == is.na(as.numeric(md_chk$Depth)) &
+          (is.na(md_chk$depth_m) | abs(md_chk$depth_m - as.numeric(md_chk$Depth)) < 1e-6)))
+
+n_bin <- n_distinct(d_sum$ifcb_filename)
+cat(glue(
+  "integrity OK: {nrow(d_sum)} rows = {n_bin} bins x taxa x 4 ESD classes (unique); ",
+  "abundance = count/volume; {nrow(tx_map)} taxa map 1:1 to AphiaID; per_bin_totals ",
+  "reproduced for {nrow(pbt_chk)} bins; {nrow(md_chk)} bins match the metadata CSV, none skipped"), "\n")
+```
+
+## Build Sample (Bin) Table
+
+```{r}
+#| label: build-sample
+
+# the bin id carries the UTC start of the run: D<YYYYMMDD>T<HHMMSS>_IFCB<nnn>
+d_bin <- d_sum |>
+  distinct(ifcb_filename, cruise, line, station, latitude, longitude, bottle,
+           depth_m, depth_class, volume_ml, sample_time_pt) |>
+  mutate(
+    datetime_utc = ymd_hms(str_match(ifcb_filename, "^D(\\d{8}T\\d{6})_IFCB\\d+$")[, 2],
+                           tz = "UTC"),
+    # cruise code is YYMM + a 2-letter ship suffix ('2208BH'); the suffix is the
+    # ship_key and YYMM the source's own designation (resolve_cruise_key step 2)
+    ship_key  = str_sub(cruise, -2),
+    cruise_ym = paste0("20", str_sub(cruise, 1, 4)),
+    # CalCOFI station key 'LLL.L SSS.S', the same form iron derives from Line/Station
+    site_key  = sprintf("%05.1f %05.1f", line, station),
+    depth_min_m = depth_m,
+    depth_max_m = depth_m)
+
+# '2601LS' is not a CalCOFI cruise: calcofi.org lists the January 2026 cruise as
+# 2601RL (FSV Reuben Lasker, loading 6 Jan, offloading 2 Feb), and all 132 bins
+# fall on 7-30 Jan 2026 on CalCOFI lines. 'LS' is read as a typo for 'RL' (Q07).
+# Only ship_key is changed; the provider's own `cruise` code is kept as received.
+ship_fix <- tribble(~cruise, ~ship_key_fixed, "2601LS", "RL")
+d_bin <- d_bin |>
+  left_join(ship_fix, by = "cruise") |>
+  mutate(ship_key = coalesce(ship_key_fixed, ship_key)) |>
+  select(-ship_key_fixed)
+
+# the filename UTC must agree with the provider's Pacific wall clock, DST included
+chk_pt <- with_tz(d_bin$datetime_utc, "America/Los_Angeles") |>
+  force_tz("UTC")
+stopifnot(
+  "every bin id must parse to a UTC datetime" = !anyNA(d_bin$datetime_utc),
+  "cruise code must be YYMM + 2 letters" = all(str_detect(d_bin$cruise, "^\\d{4}[A-Z]{2}$")),
+  "filename UTC must equal Sample_time_PT converted from America/Los_Angeles" =
+    all(abs(as.numeric(difftime(chk_pt, d_bin$sample_time_pt, units = "secs"))) <= 1),
+  "one ifcb_sample row per bin" =
+    nrow(d_bin) == n_bin && !anyDuplicated(d_bin$ifcb_filename))
+
+dbWriteTable(con, "ifcb_sample", as.data.frame(d_bin), overwrite = TRUE)
+cat(glue("ifcb_sample: {nrow(d_bin)} bins on {n_distinct(d_bin$cruise)} cruises ",
+         "({paste(sort(unique(d_bin$cruise)), collapse = ', ')}); ",
+         "{sum(is.na(d_bin$depth_m))} bin(s) with no depth (Q05)"), "\n")
+```
+
+## Standardize Taxonomy
+
+The summary already carries a resolved WoRMS AphiaID for every taxon that has
+one (the provider matched names against WoRMS, `CalCOFI_IFCB_WoRMS_match.xlsx`),
+so there is no name-matching to do: the AphiaID is declared as `worms_id` and the
+package resolves and checks it. The one exception is **`unidentified cells`**:
+in the provider's table the four classes `nanoplankton_mix`, `flagellate`,
+`colony` and `coccolithophorid` all map to this one name with no AphiaID (the
+single largest group, 37% of all images; Q03). It is not a taxon, so it takes a dataset-local `taxon_key` by
+declaration, one key at a time, the same mechanism ZooScan's `others` and
+picoplankton's `picoeukaryotes` use (also declared in `release_database.qmd`'s
+`TAXON_LOCAL_ALLOW`, which is the gate that fails the release).
+
+One consequence of keying by AphiaID: the provider's `Hemiaulus` (worms:605114)
+is `unaccepted` in WoRMS and resolves to `Eucampia` (worms:149130), which the
+provider also has as its own class. Both codes stay in `dataset_taxon`, but they
+share one `taxon_key`, so the aggregation below sums them in the 26 bins that
+carry both (Q10).
+
+`ds_taxa_code` is the source's taxon name verbatim, except that
+`unidentified cells` becomes `unidentified_cells` so the minted key
+(`sccoos_ifcb-ctd:unidentified_cells`) has no space in it.
+
+```{r}
+#| label: taxon-stage
+
+# filter the crosswalk to THIS dataset (an unfiltered read leaks other datasets'
+# taxa into this shard); this dataset has no measurement_taxon.csv rows
+mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
+                     col_types = cols(worms_id = "i", itis_id = "i",
+                                      bin_value = "d", .default = "c")) |>
+  filter(dataset_key == ds_key)
+tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
+
+d_vocab <- tx_map |>
+  transmute(
+    ds_taxa_code       = if_else(taxa == "unidentified cells", "unidentified_cells", taxa),
+    # no scientific name for the unidentified class: nothing to look up.
+    # 17 provider names carry an underscore where WoRMS has a space
+    # (Heterocapsa_rotundata, Thalassiosira_mala, Emiliania_huxleyi, ...; Q10):
+    # the display name drops it.
+    # The lookup is by worms_id, so this never changes which taxon is keyed; the
+    # code above stays verbatim because obs joins on it.
+    ds_scientific_name = if_else(is.na(aphia_id), NA_character_,
+                                 str_replace_all(worms_name, "_", " ")),
+    ds_common_name     = if_else(is.na(aphia_id), "unidentified cells", NA_character_),
+    worms_id           = aphia_id) |>
+  arrange(ds_taxa_code)
+stopifnot("ds_taxa_code must be unique" = !anyDuplicated(d_vocab$ds_taxa_code))
+
+n_staged <- append_dataset_taxon(con, ds_key, d_vocab)
+
+ensure_taxon_xref(con, mt_taxon, tx_over,
+                  cache_csv = here("metadata/taxon_xref.csv"))
+ensure_taxon_lineage(con, mt_taxon, tx_over,
+                     cache_csv = here("metadata/taxon_lineage.csv"))
+n_taxon    <- build_taxon_reference(con, mt_taxon, tx_over)
+n_ds_taxon <- resolve_dataset_taxon(con, mt_taxon, tx_over)
+n_tx_group <- build_taxon_group(con, read_taxon_group_rules(here("metadata/taxon_group.csv")))
+
+# the ingest asserts its own crosswalk (D6): the one dataset-local key is
+# declared here AND in release_database.qmd's TAXON_LOCAL_ALLOW
+local_allow <- tibble::tribble(
+  ~ds_taxa_code,        ~why,
+  "unidentified_cells", "cells the classifier could not assign to any class; not a taxon (Q03)")
+obs_codes <- unique(d_vocab$ds_taxa_code)
+chk_taxon <- check_dataset_taxon(
+  con, ds_key, allow = paste0(ds_key, ":", local_allow$ds_taxa_code),
+  codes = obs_codes)
+
+cat(glue("vocabulary: {n_staged} taxa staged ({sum(!is.na(d_vocab$worms_id))} WoRMS-keyed, ",
+         "{nrow(local_allow)} dataset-local by declaration); taxon {n_taxon}, ",
+         "dataset_taxon {n_ds_taxon}, taxon_group {n_tx_group}"), "\n")
+```
+
+## Aggregate to Bin x Taxon
+
+The headline grain is bin x taxon, **summed over the four size classes**. The
+taxon is the resolved `taxon_key`, so provider classes that resolve to one taxon
+are summed together (Hemiaulus into Eucampia, below).
+Biovolume concentration is `sum(count x mean biovolume) / volume`: the summary
+carries a per-class mean cell biovolume, so the class total is `count x mean` and
+the taxon total is their sum.
+
+```{r}
+#| label: aggregate
+
+dbWriteTable(con, "ifcb_summary",
+             d_sum |> mutate(ds_taxa_code = if_else(taxa == "unidentified cells",
+                                                    "unidentified_cells", taxa)) |>
+               as.data.frame(),
+             overwrite = TRUE)
+
+# Group by the RESOLVED taxon_key, not the provider's class name. Two provider
+# classes can resolve to one taxon: the package replaces an unaccepted WoRMS id
+# with the accepted one, and WoRMS lists provider class `Hemiaulus` (worms:605114)
+# as unaccepted -> `Eucampia` (worms:149130), which the provider also has as its
+# own class. In the 26 bins that carry both, their counts, abundance and
+# biovolume are summed into the one Eucampia taxon (Q10). The source stays
+# unchanged; dataset_taxon still maps both provider codes to the one key.
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE ifcb_bin_taxon AS
+  SELECT x.ifcb_filename, dt.taxon_key,
+         SUM(x.n_cells)                             AS n_cells,
+         SUM(x.abundance_ml)                        AS abundance_ml,
+         SUM(x.n_cells * x.avg_biovol_um3) / ANY_VALUE(x.volume_ml) AS biovolume_ml,
+         COUNT(DISTINCT x.size_class)               AS n_size_class,
+         COUNT(DISTINCT x.ds_taxa_code)             AS n_source_class
+  FROM ifcb_summary x
+  JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                       AND dt.ds_taxa_code = x.ds_taxa_code
+  GROUP BY x.ifcb_filename, dt.taxon_key"))
+
+# the size-class split on the same grain (bin x taxon_key x size class)
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE ifcb_size_taxon AS
+  SELECT x.ifcb_filename, dt.taxon_key, x.size_class, SUM(x.n_cells) AS n_cells
+  FROM ifcb_summary x
+  JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                       AND dt.ds_taxa_code = x.ds_taxa_code
+  GROUP BY x.ifcb_filename, dt.taxon_key, x.size_class"))
+
+d_bt <- dbGetQuery(con, "SELECT * FROM ifcb_bin_taxon")
+n_size_taxon <- dbGetQuery(con, "SELECT COUNT(*) FROM ifcb_size_taxon")[[1]]
+stopifnot(
+  "ifcb_bin_taxon must be unique per bin x taxon_key" =
+    !anyDuplicated(d_bt[, c("ifcb_filename", "taxon_key")]),
+  "every source row must resolve a taxon_key" = !anyNA(d_bt$taxon_key),
+  "the aggregation must conserve every imaged cell" = sum(d_bt$n_cells) == sum(d_sum$n_cells),
+  "abundance conserved over the aggregation" =
+    abs(sum(d_bt$abundance_ml) - sum(d_sum$abundance_ml)) < 1e-6,
+  "no negative biovolume" = all(d_bt$biovolume_ml >= 0),
+  "every bin x taxon must have 1-4 size classes" = all(d_bt$n_size_class %in% 1:4),
+  "size-class cells conserved on the taxon_key grain" =
+    dbGetQuery(con, "SELECT SUM(n_cells) FROM ifcb_size_taxon")[[1]] == sum(d_sum$n_cells))
+
+d_bt |>
+  summarize(bin_x_taxon = n(), bins = n_distinct(ifcb_filename),
+            taxa = n_distinct(taxon_key), cells = sum(n_cells),
+            bins_with_merged_classes = sum(n_source_class > 1)) |>
+  datatable(caption = "Aggregated headline grain (bin x taxon)", rownames = FALSE)
+```
+
+## Add Spatial
+
+No `enforce_column_types()` here for the reason `ingest_calcofi_2022-edna.qmd`
+documents: once `add_point_geom()` adds a GEOMETRY column, DuckDB >= 1.5.1 cannot
+rewrite that table's column types.
+
+```{r}
+#| label: add-spatial
+
+load_prior_tables(
+  con,
+  parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  tables      = c("ship", "cruise", "grid"),
+  geom_tables = c("grid"),
+  as_view     = TRUE)
+
+# ship_key is the 2-letter suffix of the cruise code: BH Bold Horizon, RL Reuben
+# Lasker, SH Bell M. Shimada, SR Sally Ride (calcofi.org cruise list, checked
+# 2026-10-23); 2601LS is read as 2601RL (build-sample). 2210RL (13-18 Oct 2022)
+# is not on the public cruise list: its dates match the Reuben Lasker
+# intercalibration cruise that ingest_calcofi_2022-edna.qmd keys. Keyed by the
+# shared helper (cruise-key skill): span containment, then the source's own YYMM
+# designation, then the event's month. A key is not forced into the cruise table
+# (require_in_cruise = FALSE) and the unresolved count is reported, not hidden.
+# Before add_point_geom(): never UPDATE a table that holds a geom.
+d_cruise_res <- resolve_cruise_key(
+  con, "ifcb_sample", datetime_col = "datetime_utc",
+  ship_key_col = "ship_key", cruise_ym_col = "cruise_ym",
+  require_in_cruise = FALSE)
+datatable(d_cruise_res, caption = "cruise_key resolution method")
+
+add_point_geom(con, "ifcb_sample", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "ifcb_sample") |> datatable(caption = "Grid assignment")
+
+d_ship_chk <- dbGetQuery(con, "
+  SELECT s.cruise, s.ship_key,
+         (sh.ship_key IS NOT NULL)        AS ship_known,
+         COUNT(*)                         AS n_bin,
+         COUNT(s.cruise_key)              AS n_cruise_key,
+         COUNT(s.grid_key)                AS n_grid_key
+  FROM ifcb_sample s LEFT JOIN ship sh ON sh.ship_key = s.ship_key
+  GROUP BY ALL ORDER BY 1")
+datatable(d_ship_chk, caption = "Cruise / ship / grid resolution per cruise", rownames = FALSE)
+
+n_all <- dbGetQuery(con, "SELECT COUNT(*) FROM ifcb_sample")[[1]]
+n_gk  <- dbGetQuery(con, "SELECT COUNT(*) FROM ifcb_sample WHERE grid_key IS NOT NULL")[[1]]
+n_ck  <- dbGetQuery(con, "SELECT COUNT(*) FROM ifcb_sample WHERE cruise_key IS NOT NULL")[[1]]
+cat(glue("grid_key resolved: {n_gk}/{n_all}; cruise_key resolved: {n_ck}/{n_all} ",
+         "(unresolved bins keep NULL, declared in Validate; see Q07)"), "\n")
+```
+
+## Declare and Enforce Physical Bounds
+
+The headline values are checked on the emitted `obs` after Emit Core Tables
+(the measurement-bounds skill); the one `sample_measurement` type is checked
+here on its staging table. Every type this dataset emits declares at least
+`valid_min = 0`, so an `undeclared` finding is a hard stop; `out_of_range` is
+enforced by `drop_out_of_bounds()` and reported.
+
+```{r}
+#| label: bounds-check
+
+d_vol <- d_bin |>
+  transmute(sample_id = ifcb_filename, measurement_type = "ifcb_volume_analyzed",
+            measurement_value = volume_ml)
+dbWriteTable(con, "ifcb_context", as.data.frame(d_vol), overwrite = TRUE)
+
+d_bounds <- check_measurement_bounds(con, "ifcb_context", mt = d_meas_type)
+bounds_datatable(d_bounds)
+stopifnot("every sample_measurement type must declare a bound" =
+            !any(d_bounds$status == "undeclared"))
+
+oob_tally <- drop_out_of_bounds(con, "ifcb_context", mt = d_meas_type)
+cat(glue("out-of-bounds rows dropped from ifcb_context: {sum(oob_tally$n_bad)}"), "\n")
+```
+
+## Schema Documentation
+
+Color scheme: lightblue = new dataset tables, lightyellow = amended reference
+tables, white = shared metadata.
+
+```{r}
+#| label: schema
+
+ifcb_rels <- list(
+  primary_keys = list(
+    ifcb_sample    = "ifcb_filename",
+    ifcb_summary   = c("ifcb_filename", "taxa", "size_class"),
+    ifcb_bin_taxon = c("ifcb_filename", "taxon_key"),
+    ifcb_context   = c("sample_id", "measurement_type"),
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "ifcb_summary", column = "ifcb_filename",
+         ref_table = "ifcb_sample", ref_column = "ifcb_filename"),
+    list(table = "ifcb_bin_taxon", column = "ifcb_filename",
+         ref_table = "ifcb_sample", ref_column = "ifcb_filename"),
+    list(table = "ifcb_context", column = "sample_id",
+         ref_table = "ifcb_sample", ref_column = "ifcb_filename"),
+    list(table = "ifcb_context", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+
+cc_erd(
+  con,
+  tables = c("ifcb_sample", "ifcb_summary", "ifcb_bin_taxon", "ifcb_context",
+             "measurement_type", "dataset"),
+  rels   = ifcb_rels,
+  colors = list(
+    lightblue   = c("ifcb_sample", "ifcb_summary", "ifcb_bin_taxon", "ifcb_context"),
+    lightyellow = "measurement_type",
+    white       = "dataset"))
+```
+
+## Emit Core Tables
+
+Projection lives here, in the notebook, per the no-`switch(dataset_key, ...)`
+rule. `sample_key` is `sccoos_ifcb-ctd:water:<IFCB_filename>`
+(`dataset_key:sample_type:id`).
+
+```{r}
+#| label: emit-core
+
+# 1. sample -- one row per IFCB bin. The bin is a water sample from one CTD
+# bottle; it is not yet linked to that bottle's `bottle` sample (Q08), so
+# parent_sample_key is NULL and the bin is its own root.
+append_sample(con, glue("
+  SELECT {ns_key(ds_key, 'water', 'ifcb_filename')} AS sample_key,
+         'water' AS sample_type, NULL::VARCHAR AS parent_sample_key,
+         {ns_key(ds_key, 'water', 'ifcb_filename')} AS root_sample_key,
+         '{ds_key}' AS dataset_key, grid_key, site_key, cruise_key,
+         NULL::INTEGER AS order_occ,
+         latitude, longitude, datetime_utc AS datetime,
+         depth_min_m, depth_max_m, NULL::VARCHAR AS tow_type
+  FROM ifcb_sample"))
+
+# 2. obs -- bound positionally: realm, dataset_key, sample_key, grid_key,
+# cruise_key, latitude, longitude, datetime, depth_min_m, depth_max_m, taxon_key,
+# life_stage, measurement_type, measurement_value, measurement_qual,
+# measurement_prec. life_stage is NULL: a phytoplankton cell has none.
+#   (a) ifcb_abundance -- cells/ml, summed over the four ESD classes
+#   (b) ifcb_biovolume -- um3/ml, sum(count x mean biovolume) / volume
+obs_cols <- glue("
+  '{ds_key}', {ns_key(ds_key, 'water', 'd.ifcb_filename')},
+  s.grid_key, s.cruise_key, s.latitude, s.longitude, s.datetime_utc,
+  s.depth_min_m, s.depth_max_m, d.taxon_key, NULL::VARCHAR")
+obs_from <- glue("
+  JOIN ifcb_sample s ON s.ifcb_filename = d.ifcb_filename")
+
+append_obs(con, glue("
+  SELECT 'bio', {obs_cols},
+         'ifcb_abundance', d.abundance_ml, NULL::VARCHAR, NULL::DOUBLE
+  FROM ifcb_bin_taxon d
+  {obs_from}"))
+
+append_obs(con, glue("
+  SELECT 'bio', {obs_cols},
+         'ifcb_biovolume', d.biovolume_ml, NULL::VARCHAR, NULL::DOUBLE
+  FROM ifcb_bin_taxon d
+  {obs_from}"))
+
+# 3. obs_attribute -- the ESD size-class split behind each headline. Keyed to
+# the abundance headline (same sample_key + taxon_key); count = cells imaged in
+# the class, bin_label = the class. bin_value is NULL: the classes are open
+# ('<10', '40>'), so a single numeric bin value would be invented.
+append_obs_attribute(con, glue("
+  SELECT '{ds_key}', {ns_key(ds_key, 'water', 'x.ifcb_filename')}, x.taxon_key,
+         NULL::VARCHAR, 'ifcb_size_class', NULL::DOUBLE, x.size_class,
+         CAST(x.n_cells AS INTEGER), NULL::VARCHAR
+  FROM ifcb_size_taxon x"))
+
+# 4. sample_measurement -- the analysed volume, the denominator of ifcb_abundance
+append_sample_measurement(con, glue("
+  SELECT {ns_key(ds_key, 'water', 'sample_id')}, '{ds_key}',
+         measurement_type, measurement_value, NULL::VARCHAR
+  FROM ifcb_context
+  WHERE measurement_value IS NOT NULL"))
+
+core <- list(
+  sample             = dbGetQuery(con, glue("SELECT COUNT(*) FROM sample WHERE dataset_key = '{ds_key}'"))[[1]],
+  obs                = dbGetQuery(con, glue("SELECT COUNT(*) FROM obs WHERE dataset_key = '{ds_key}'"))[[1]],
+  obs_attribute      = dbGetQuery(con, glue("SELECT COUNT(*) FROM obs_attribute WHERE dataset_key = '{ds_key}'"))[[1]],
+  sample_measurement = dbGetQuery(con, glue("SELECT COUNT(*) FROM sample_measurement WHERE dataset_key = '{ds_key}'"))[[1]])
+
+# the grain contract, asserted -------------------------------------------------
+d_obs_chk <- dbGetQuery(con, glue("
+  SELECT sample_key, taxon_key, measurement_type, measurement_value
+  FROM obs WHERE dataset_key = '{ds_key}'"))
+n_abund <- sum(d_obs_chk$measurement_type == "ifcb_abundance")
+n_biov  <- sum(d_obs_chk$measurement_type == "ifcb_biovolume")
+
+# attribute <-> headline: the size-class counts of a bin x taxon sum to
+# abundance x volume (the contract in core_dictionary: counts sum to the headline)
+d_attr_chk <- dbGetQuery(con, glue("
+  SELECT a.sample_key, a.taxon_key, SUM(a.count) AS n_attr,
+         ANY_VALUE(o.measurement_value * m.measurement_value) AS n_obs
+  FROM obs_attribute a
+  JOIN obs o ON o.sample_key = a.sample_key AND o.taxon_key = a.taxon_key
+            AND o.measurement_type = 'ifcb_abundance'
+  JOIN sample_measurement m ON m.sample_key = a.sample_key
+                           AND m.measurement_type = 'ifcb_volume_analyzed'
+  WHERE a.dataset_key = '{ds_key}'
+  GROUP BY a.sample_key, a.taxon_key"))
+
+stopifnot(
+  "one sample row per bin" = core$sample == n_bin,
+  "every sample_key must be dataset_key:water:id" =
+    dbGetQuery(con, glue("
+      SELECT COUNT(*) FROM sample
+      WHERE dataset_key = '{ds_key}'
+        AND (sample_type <> 'water' OR sample_key NOT LIKE '{ds_key}:water:%')"))[[1]] == 0,
+  "every observation must resolve a taxon_key" = !anyNA(d_obs_chk$taxon_key),
+  "obs must be unique per (sample_key, taxon_key, measurement_type)" =
+    !anyDuplicated(d_obs_chk[, c("sample_key", "taxon_key", "measurement_type")]),
+  "one ifcb_abundance and one ifcb_biovolume row per bin x taxon" =
+    n_abund == nrow(d_bt) && n_biov == nrow(d_bt),
+  "obs must carry every imaged cell (abundance x volume)" =
+    abs(sum(d_attr_chk$n_obs) - sum(d_sum$n_cells)) < 1e-4,
+  "one obs_attribute row per bin x taxon x size class" = core$obs_attribute == n_size_taxon,
+  "size-class counts must sum to abundance x volume for every bin x taxon" =
+    nrow(d_attr_chk) == nrow(d_bt) && all(abs(d_attr_chk$n_attr - d_attr_chk$n_obs) < 1e-6),
+  "no NULL measurement_value in obs" = !anyNA(d_obs_chk$measurement_value),
+  "one ifcb_volume_analyzed row per bin" = core$sample_measurement == n_bin)
+
+d_core_types <- dbGetQuery(con, glue("
+  SELECT 'obs' AS tbl, measurement_type, COUNT(*) AS n
+  FROM obs WHERE dataset_key = '{ds_key}' GROUP BY ALL
+  UNION ALL
+  SELECT 'obs_attribute', measurement_type, COUNT(*)
+  FROM obs_attribute WHERE dataset_key = '{ds_key}' GROUP BY ALL
+  UNION ALL
+  SELECT 'sample_measurement', measurement_type, COUNT(*)
+  FROM sample_measurement WHERE dataset_key = '{ds_key}' GROUP BY ALL
+  ORDER BY 1, 2"))
+d_core_types |> datatable(caption = "Rows per measurement_type emitted", rownames = FALSE)
+
+cat(glue(
+  "core projection -- sample={core$sample} obs={core$obs} ",
+  "({n_abund} ifcb_abundance + {n_biov} ifcb_biovolume) obs_attribute={core$obs_attribute} ",
+  "sample_measurement={core$sample_measurement}"), "\n")
+```
+
+```{r}
+#| label: bounds-obs
+
+# bounds on what is actually published, not only on the staging table
+d_bounds_obs <- check_measurement_bounds(con, "obs", mt = d_meas_type, dataset_key = ds_key)
+bounds_datatable(d_bounds_obs)
+stopifnot(
+  "every obs type must declare a bound" = !any(d_bounds_obs$status == "undeclared"),
+  "no obs value may lie outside its declared bound" =
+    !any(d_bounds_obs$status == "out_of_range"))
+```
+
+## Measurement Type Registry
+
+The four new types are added to `metadata/measurement_type.csv` once, with
+`register_measurement_types()`, not by this notebook: rewriting the shared
+registry on every render is a side effect on a file other ingests edit. The
+notebook asserts the contract in both directions: every type it emits is
+registered, and every registered type that names this dataset in
+`_source_datasets` has at least one row.
+
+```{r}
+#| label: measurement-types
+
+dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
+
+emitted    <- unique(d_core_types$measurement_type)
+registered <- d_meas_type |>
+  filter(map_lgl(str_split(coalesce(`_source_datasets`, ""), ";\\s*"), ~ ds_key %in% .x)) |>
+  pull(measurement_type)
+
+unregistered <- setdiff(emitted, d_meas_type$measurement_type)
+unclaimed    <- setdiff(emitted, registered)
+empty        <- setdiff(registered, emitted)
+stopifnot(
+  "every emitted measurement_type must be in metadata/measurement_type.csv" =
+    length(unregistered) == 0,
+  "every emitted measurement_type must list this dataset in _source_datasets" =
+    length(unclaimed) == 0,
+  "every registered type naming this dataset must have >= 1 row (an empty type would ship)" =
+    length(empty) == 0)
+cat(glue("measurement types: {length(emitted)} emitted, all registered and claimed; ",
+         "0 registered-but-empty"), "\n")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+
+this_provider <- provider; this_dataset <- dataset
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot("this dataset must appear in the ingest YAML registry" = nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+```
+
+## Questions for Data Providers
+
+```{r}
+#| label: provider-questions
+
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the sccoos ifcb-ctd data providers (ranked)")
+```
+
+## Validate
+
+```{r}
+#| label: validate
+
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+
+# validate_for_release()'s null check treats every *_id/_key column as required,
+# a heuristic rather than this dataset's contract. Every nullable case is
+# declared here with its reason; anything not on the list is a hard failure.
+# `n` is the count the reason was derived for. NA_integer_ = the reason is known
+# but the count has not been pinned yet: it is PRINTED, not failed on. Pin the
+# NA rows after the first render, then a moved count becomes a hard failure.
+nullable <- tribble(
+  ~table,         ~column,             ~n,            ~reason,
+  "ifcb_summary", "aphia_id",          1408L,         "staging table, not published: the rows of the 'unidentified cells' class carry no AphiaID by design (Q03)",
+  "sample",       "parent_sample_key", n_bin,         "a bin is a root event: not yet linked to the CTD bottle it was drawn from (provider question Q08)",
+  "taxon",        "worms_id",          1L,            "the dataset-local 'unidentified_cells' class is not a taxon and has no WoRMS id (Q03)",
+  "taxon",        "itis_id",           125L,          "WoRMS links no ITIS TSN for these nodes",
+  "taxon",        "gbif_id",           291L,          "nothing asks GBIF -- no GBIF crosswalk in the xref",
+  "taxon",        "ncbi_id",           291L,          "never populated by ANY dataset",
+  "taxon",        "inat_id",           291L,          "never populated by ANY dataset",
+  "taxon",        "parent_taxon_key",  5L,            "the root of a lineage has no parent")
+
+nulls <- results$checks |>
+  filter(check == "nulls", status == "error") |>
+  mutate(column = str_match(message, "column '([^']+)'")[, 2],
+         n      = as.integer(str_match(message, "has (\\d+) NULL")[, 2])) |>
+  select(table, column, n)
+
+reconciled  <- full_join(nulls, nullable |> select(table, column, n_expected = n),
+                         by = c("table", "column"))
+declared    <- nullable |> select(table, column)
+unexplained <- reconciled |> anti_join(declared, by = c("table", "column"))
+moved       <- reconciled |> filter(!is.na(n_expected), !is.na(n), n != n_expected)
+to_pin      <- reconciled |> semi_join(declared, by = c("table", "column")) |>
+  filter(is.na(n_expected), !is.na(n))
+resolved    <- reconciled |> semi_join(declared, by = c("table", "column")) |>
+  filter(is.na(n))
+other_fail  <- results$checks |> filter(check != "nulls", status == "error")
+if (nrow(unexplained)) print(unexplained)
+if (nrow(moved))       print(moved)
+if (nrow(other_fail))  print(other_fail)
+if (nrow(to_pin))      { cat("pin these counts in `nullable`:\n"); print(to_pin) }
+stopifnot(
+  "a NULL appeared in a column with no declared reason" = nrow(unexplained) == 0,
+  "a declared NULL count has changed -- the data moved, re-derive the reason" = nrow(moved) == 0,
+  "a validate_for_release() check other than nulls failed" = nrow(other_fail) == 0)
+if (nrow(resolved))
+  cat(glue("{nrow(resolved)} declared nullable case(s) no longer occur -- prune them: ",
+           "{paste(resolved$table, resolved$column, sep = '.', collapse = ', ')}"), "\n")
+if (length(results$warnings) > 0)
+  cat("Warnings:\n", paste("-", results$warnings, collapse = "\n"), "\n")
+
+cat(glue("validate_for_release: {ifelse(results$passed, 'PASSED', 'FAILED')} on its null ",
+         "heuristic; {nrow(nulls)} null case(s) reconciled against {nrow(nullable)} declared, ",
+         "{nrow(unexplained)} unexplained, {nrow(other_fail)} other failures"), "\n")
+```
+
+## Data Preview
+
+```{r}
+#| label: preview-sample
+dbGetQuery(con, "SELECT * FROM sample WHERE dataset_key = 'sccoos_ifcb-ctd' LIMIT 100") |>
+  datatable(caption = "sample (first 100)", rownames = FALSE)
+```
+
+```{r}
+#| label: preview-obs
+dbGetQuery(con, "SELECT * FROM obs WHERE dataset_key = 'sccoos_ifcb-ctd' LIMIT 50") |>
+  datatable(caption = "obs (first 50)", rownames = FALSE)
+```
+
+```{r}
+#| label: preview-obs-attribute
+dbGetQuery(con, "SELECT * FROM obs_attribute WHERE dataset_key = 'sccoos_ifcb-ctd' LIMIT 50") |>
+  datatable(caption = "obs_attribute (first 50)", rownames = FALSE)
+```
+
+```{r}
+#| label: preview-sample-measurement
+dbGetQuery(con, "SELECT * FROM sample_measurement WHERE dataset_key = 'sccoos_ifcb-ctd' LIMIT 50") |>
+  datatable(caption = "sample_measurement (first 50)", rownames = FALSE)
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+write_parquet_outputs(con, dir_parquet, tables = tbls_out)
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+
+metadata_path <- build_metadata_json(
+  con                  = con,
+  d_tbls_rd            = d_tbls_rd,
+  d_flds_rd            = d_flds_rd,
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           glue("{dir_meta}/metadata_derived.csv")),
+  output_dir           = dir_parquet,
+  tables               = tbls_out,
+  provider             = provider,
+  dataset              = dataset,
+  workflow_url         = cc$workflow_url,
+  tables_owned         = tables_owned)
+
+build_relationships_json(
+  rels       = core_relationships(tbls_out),
+  output_dir = dir_parquet,
+  provider   = provider,
+  dataset    = dataset)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+
+# local_dir/sidecar_dir split matches ingest_calcofi_2022-edna.qmd. A local
+# verification run sets CALCOFI_SKIP_GCS to skip the upload.
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(
+    local_dir    = dir_stage,
+    sidecar_dir  = dir_parquet,
+    gcs_prefix   = glue("ingest/{dir_label}"),
+    bucket       = "calcofi-db",
+    delete_stale = TRUE)
+} else cat("CALCOFI_SKIP_GCS set - skipping the upload (local verification run)\n")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
+```

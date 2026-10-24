@@ -1,0 +1,5 @@
+tbl_old,tbl_new,tbl_description
+summary,ifcb_sample,"Working table: one row per IFCB bin (one water sample from one CTD bottle, run once through the instrument): position, depth, UTC start of the run, analysed volume, ship, cruise, site and grid keys. Built from the summary sheet; checked against the metadata CSV. Projected into core `sample` (sample_type water)."
+summary,ifcb_summary,"Working table: the summary sheet as received, one row per bin x taxon x ESD size class (<10, 10-20, 20-40, 40> um): cells imaged, abundance, mean and SD biovolume and ESD, classifier version and class accuracy. The Kingdom...Species lineage columns are not staged (the lineage is fetched from WoRMS by AphiaID). Projected into core `obs_attribute` (cells per size class)."
+summary,ifcb_bin_taxon,"Working table: one row per bin x taxon, summed over the four size classes: cells imaged, abundance (cells/ml) and total biovolume per ml. Projected into core `obs` as ifcb_abundance and ifcb_biovolume."
+(derived),ifcb_context,"Working table: one row per bin, the volume analysed in ml. Projected into core `sample_measurement` as ifcb_volume_analyzed."
