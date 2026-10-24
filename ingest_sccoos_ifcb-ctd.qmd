@@ -1,6 +1,9 @@
 ---
 title: "Ingest CalCOFI CTD Imaging FlowCytobot (IFCB) Phytoplankton"
 calcofi:
+  # publishes the consolidated core. The source is a long summary (IFCB bin x
+  # taxon x ESD size class); this notebook projects it into the shared core
+  # obs_attribute, and the analysed volume (the normaliser) in sample_measurement.
   target_name: ingest_sccoos_ifcb_ctd
   workflow_type: ingest
   dependency:
@@ -11,16 +14,14 @@ calcofi:
   dataset: ifcb-ctd
   workflow_url: https://calcofi.io/workflows/ingest_sccoos_ifcb-ctd.html
   questions_file: metadata/sccoos/ifcb-ctd/questions.csv
+  in_release: false
   dataset_meta:
-    dataset_name: CalCOFI CTD Imaging FlowCytobot (IFCB) Phytoplankton
     # display trio, read by the release `dataset` table and consumer apps
+    dataset_name: CalCOFI CTD Imaging FlowCytobot (IFCB) Phytoplankton
     dataset_name_short: IFCB Phytoplankton
     category: Phytoplankton
     color: "#2a9d8f"
-  # publishes the consolidated core. The source is a long summary (IFCB bin x
-  # taxon x ESD size class); this notebook projects it into the shared core
   # tables: the headline per bin x taxon in obs, the size-class split in
-  # obs_attribute, and the analysed volume (the normaliser) in sample_measurement.
   tables_owned:
     - {table: sample, shared: true, note: "one row per IFCB bin (one water sample run through the instrument; sample_type water)"}
     - {table: obs, shared: true, note: "one row per bin x taxon x measurement_type: ifcb_abundance (cells/ml) + ifcb_biovolume (um3/ml), both summed over the four ESD size classes"}

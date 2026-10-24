@@ -10,7 +10,7 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 ## IFCB phytoplankton from the CalCOFI CTD (2022-2026)
 
-`sccoos_ifcb-ctd` is new: 671 Imaging FlowCytobot samples (Surface and DCM bottles) from 10 cruises,
+`sccoos_ifcb-ctd` is staged but held out of this release (`in_release: false`) until the provider confirms the license and citation (Q01, Q02); none of its rows is in the release yet. It holds 671 Imaging FlowCytobot samples (Surface and DCM bottles) from 10 cruises,
 Aug 2022 - Jul 2026, summarized by Vivian (Lin) Hou. 103 taxa (102 keyed to WoRMS, plus
 "unidentified cells", 37% of all images, as a dataset-local class; the provider's Hemiaulus is summed into Eucampia). `obs` carries `ifcb_abundance`
 (images per ml) and `ifcb_biovolume` (um3 per ml) per sample and taxon (37,468 rows); `obs_attribute`
