@@ -23,7 +23,9 @@ permissions:
 
 jobs:
   observe:
-    runs-on: ubuntu-latest
+    # pinned, not ubuntu-latest: on ubuntu-26.04 (latest since Oct 2026) setup-r leaves R on CRAN source,
+    # so pak compiled duckdb for 47 min and failed; on 24.04 the R deps are Posit binaries (~1.5 min)
+    runs-on: ubuntu-24.04
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: no
