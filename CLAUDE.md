@@ -206,7 +206,8 @@ Rscript scripts/build_workflows_index.R
   `measurement_type.csv` (read with `read_measurement_type()`, append with
   `register_measurement_types()`, set fields with
   `declare_measurement_fields()`), `category.csv`, `life_stage.csv`, `gear.csv`,
-  `provider.csv`, `license.csv`, `distribution.csv` (never delete a row; status
+  `provider.csv`, `license.csv`, `cruise_ship_corrections.csv` (a ship code
+  fixed on one source cruise), `distribution.csv` (never delete a row; status
   it), `portal.csv`, `measurement_taxon.csv`, `taxon_override.csv`,
   `relationships_cross.csv`, and per dataset `metadata/{provider}/{dataset}/`
   (`tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, `dataset_meta.yml`).

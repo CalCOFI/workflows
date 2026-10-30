@@ -309,6 +309,18 @@ for (i in seq_len(nrow(d_ship_renames))) {
 }
 
 say(glue("\nTotal casts updated: {n_updated_total}"))
+
+# a ship named wrongly on ONE cruise cannot be renamed above (by name + code)
+# without breaking that ship's correct cruises: the source calls cruise 200907
+# MCARTHUR (31M4), which left service in 2003, and 198502 is a real 31M4 cruise.
+# Uncorrected, the July 2009 casts landed on a derived 2009-07-31M4 beside
+# SWFSC's 2009-07-33MH, joining to nothing (every release through v2026.10.21).
+# A registry row for this dataset that matches nothing stops the render.
+correct_cruise_ship(
+  con, "casts", here("metadata/cruise_ship_corrections.csv"),
+  dataset_key = "calcofi_bottle", cruise_ym_col = "cruise",
+  ship_name_col = "ship_name") |>
+  datatable(caption = "Ship codes corrected on one source cruise (metadata/cruise_ship_corrections.csv)")
 ```
 
 ## Column Naming Rationale

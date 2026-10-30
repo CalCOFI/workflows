@@ -8,6 +8,28 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The July 2009 bottle casts join their cruise
+
+Every release through v2026.10.21 kept the 100 bottle casts and 230 picoplankton samples of the
+July 2009 cruise on a cruise of their own, `2009-07-31M4` (MCARTHUR), while SWFSC and the ichthyo,
+CTD, zooscan, PIC and Farallon datasets have the same dates, 2009-07-15 to 2009-08-03, as
+`2009-07-33MH` (MCARTHUR II). A join on `cruise_key` found nothing for them, and none got a
+`station_uuid`. The bottle database's Cast file names the ship MCARTHUR (31M4, Cruise_ID
+`2009-07-14-C-31M4`) for that cruise, and picoplankton's `studyName` carries the same id, although
+the McArthur's last CalCOFI cruise was in October 2002. DIC's EXPOCODE `31M420090714` has the same
+error, which is why its 51 samples from that cruise had no `cruise_key` at all. A ship rename by name
+and code would also move 198502, a real McArthur cruise, so the new
+`metadata/cruise_ship_corrections.csv` corrects 31M4 to 33MH for cruise 200907 only, in all three
+ingests (`correct_cruise_ship()`, calcofi4db 4.31.0).
+The derived `2009-07-31M4` row leaves `cruise`. The providers are asked to confirm (bottle Q19,
+picoplankton Q09).
+
+`check_cruise_key_integrity()` passed this in every release because each check looks at one key:
+the derived row satisfied the foreign key, 31M4 is MCARTHUR's own code, a derived cruise's span is
+its own events', and the overlap check compares cruises of one ship. Its new check 11 stops a
+release with any event on a derived cruise at a station that an ichthyo site occupied within 24 h
+on a different cruise. On v2026.10.21 it finds exactly these 315 samples and nothing else.
+
 ## The CTD team answered two of the zero-rule questions
 
 CTD question Q48 (`est_nitrate_cruise_corr` is 0 on every row of 2301, 2304, 2307 and 2411) is
