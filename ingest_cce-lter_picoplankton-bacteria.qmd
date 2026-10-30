@@ -345,6 +345,14 @@ dbExecute(con, "
   UPDATE picoplankton_bacteria_bottle
   SET cruise_ym = regexp_replace(study_name, '^(\\d{4})-(\\d{2}).*$', '\\1\\2')")
 
+# the studyName carries the bottle database's cruise id, including its one wrong
+# ship: "2009-07-14-C-31M4" (MCARTHUR, out of service since 2003) for SWFSC's
+# 2009-07-33MH (MCARTHUR II); corrected for that cruise only
+correct_cruise_ship(
+  con, "picoplankton_bacteria_bottle", here("metadata/cruise_ship_corrections.csv"),
+  dataset_key = "cce-lter_picoplankton-bacteria", cruise_ym_col = "cruise_ym") |>
+  datatable(caption = "Ship codes corrected on one source cruise (metadata/cruise_ship_corrections.csv)")
+
 cruise_key_result <- derive_cruise_key_on_casts(
   con, table_name = "picoplankton_bacteria_bottle", datetime_col = "datetime_utc",
   cruise_ym_col = "cruise_ym")

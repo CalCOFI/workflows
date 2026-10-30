@@ -1549,7 +1549,9 @@ tryCatch(
 gate over `cruise_key` as it is actually used, not as it is assumed to behave: format,
 `date_ym`/NODC agreement, the FK from `sample`/`obs` into the (now-completed) `cruise`
 reference, `cruise_uuid` hygiene (unique for `'swfsc'` rows, NULL for `'derived'` ones),
-every event's date within its cruise's span, the ichthyo notebook's own
+every event's date within its cruise's span, no `'derived'` cruise sharing a station
+occupation with an SWFSC cruise (check 11, calcofi4db >= 4.31.0: the July 2009 bottle casts on
+`2009-07-31M4` beside SWFSC's `2009-07-33MH`), the ichthyo notebook's own
 `cruise_uuid`/`cruise_key` agreement (read from its manifest — the release's `sample` table
 carries no `cruise_uuid` column, so that check can only run inside the notebook that still
 has it) and three ratchets (span overlaps, derived-row count, NULL-`cruise_key` backlog per
@@ -1583,6 +1585,12 @@ ctd_span_exceptions <- c(
   "calcofi_ctd-cast:cast:9908_069d", "calcofi_ctd-cast:cast:9908_069u",
   "calcofi_ctd-cast:cast:9908_070d", "calcofi_ctd-cast:cast:9908_070u",
   "calcofi_ctd-cast:cast:1307_021u")
+
+# check 11 (derived_co_occupied) arrived in 4.31.0; an older calcofi4db would
+# pass the release without it
+stopifnot(
+  "check_cruise_key_integrity() check 11 needs calcofi4db >= 4.31.0; pull ../calcofi4db" =
+    packageVersion("calcofi4db") >= "4.31.0")
 
 d_cki <- check_cruise_key_integrity(
   con_wdl,
