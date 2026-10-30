@@ -23,8 +23,7 @@ permissions:
 
 jobs:
   observe:
-    # pinned, not ubuntu-latest: on ubuntu-26.04 (latest since Oct 2026) setup-r leaves R on CRAN source,
-    # so pak compiled duckdb for 47 min and failed; on 24.04 the R deps are Posit binaries (~1.5 min)
+    # pinned, not ubuntu-latest (26.04 since Oct 2026): Posit binaries are built for 24.04 ("noble")
     runs-on: ubuntu-24.04
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -42,6 +41,12 @@ jobs:
           r-version: release
           use-public-rspm: true
 
+      # setup-r exports RSPM (the Posit binary repo) but leaves options(repos) on CRAN source, so pak
+      # compiled every package (duckdb ~50 min) whenever the package cache missed; point CRAN at RSPM
+      - name: Use Posit binary R packages
+        run: |
+          test -n "$RSPM"
+          echo "options(repos = c(CRAN = '$RSPM'))" | sudo tee -a "$(R RHOME)/etc/Rprofile.site"
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |

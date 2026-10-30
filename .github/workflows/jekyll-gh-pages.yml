@@ -24,8 +24,7 @@ concurrency:
 jobs:
   # Build job
   build:
-    # pinned, not ubuntu-latest: on ubuntu-26.04 (latest since Oct 2026) setup-r leaves R on CRAN source,
-    # so pak compiled duckdb for 47 min and failed; on 24.04 the R deps are Posit binaries (~1.5 min)
+    # pinned, not ubuntu-latest (26.04 since Oct 2026): Posit binaries are built for 24.04 ("noble")
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -46,6 +45,12 @@ jobs:
         uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
+      # setup-r exports RSPM (the Posit binary repo) but leaves options(repos) on CRAN source, so pak
+      # compiled every package (duckdb ~50 min) whenever the package cache missed; point CRAN at RSPM
+      - name: Use Posit binary R packages
+        run: |
+          test -n "$RSPM"
+          echo "options(repos = c(CRAN = '$RSPM'))" | sudo tee -a "$(R RHOME)/etc/Rprofile.site"
       # The index builder loads calcofi4db (read_calcofi_meta() merges each dataset's
       # descriptive sidecar; check_dataset_citation() and check_dataset_meta_split() are
       # gates) — since 2026-09-03 the deploy failed on every push with "there is no package
