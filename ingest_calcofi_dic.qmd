@@ -647,12 +647,26 @@ load_prior_tables(
   geom_tables = "grid",
   as_view     = TRUE)
 
+# the EXPOCODE's NODC prefix and start month (YYYYMM), as columns so a ship the
+# source names wrongly on one cruise can be corrected: EXPOCODE 31M420090714 names
+# MCARTHUR (out of service since 2003) for SWFSC's 2009-07-33MH (MCARTHUR II), the
+# same error as the bottle Cast file; its 51 samples resolved no cruise through
+# v2026.10.21. `expocode` itself stays as the source wrote it.
+dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS ship_code VARCHAR")
+dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS expocode_ym VARCHAR")
+dbExecute(con, "
+  UPDATE dic_sample SET ship_code = left(expocode, 4), expocode_ym = substr(expocode, 5, 6)")
+correct_cruise_ship(
+  con, "dic_sample", here("metadata/cruise_ship_corrections.csv"),
+  dataset_key = "calcofi_dic", cruise_ym_col = "expocode_ym") |>
+  datatable(caption = "Ship codes corrected on one source cruise (metadata/cruise_ship_corrections.csv)")
+
 # ship_key (WS-1004X2): NODC prefix first, then the source's Ship_Name
 dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
 dbExecute(con, "ALTER TABLE dic_sample ADD COLUMN IF NOT EXISTS ship_key_method VARCHAR")
 dbExecute(con, "
   UPDATE dic_sample d SET ship_key = s.ship_key, ship_key_method = 'nodc'
-  FROM ship s WHERE s.ship_nodc = left(d.expocode, 4)")
+  FROM ship s WHERE s.ship_nodc = d.ship_code")
 ship_name_sql <- function(x)
   glue("regexp_replace(regexp_replace(upper(trim({x})), '^RV ', ''), '[.]', '', 'g')")
 dbExecute(con, glue("

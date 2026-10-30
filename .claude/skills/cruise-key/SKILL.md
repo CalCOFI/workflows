@@ -120,7 +120,8 @@ Every release through v2026.10.21 kept the July 2009 bottle casts (100) and
 picoplankton samples (230) on `2009-07-31M4` (MCARTHUR, `derived`) beside SWFSC's
 `2009-07-33MH` (MCARTHUR II) with identical dates, 2009-07-15 to 2009-08-03. The
 bottle Cast file names the ship 31M4 for cruise 200907 (Cruise_ID
-`2009-07-14-C-31M4`), and picoplankton's `studyName` copies that id, although the
+`2009-07-14-C-31M4`), picoplankton's `studyName` copies that id and DIC's EXPOCODE
+is `31M420090714` (its 51 samples resolved no cruise at all), although the
 McArthur's last cruise was 2002-10. It was there from the first release that keyed
 bottle casts (v2026.06.26, `casts.cruise_key`); no ingest change introduced it.
 It was found 2026-10-30 by the AI-readiness benchmark's agents, not by any gate.

@@ -16,9 +16,11 @@ CTD, zooscan, PIC and Farallon datasets have the same dates, 2009-07-15 to 2009-
 `2009-07-33MH` (MCARTHUR II). A join on `cruise_key` found nothing for them, and none got a
 `station_uuid`. The bottle database's Cast file names the ship MCARTHUR (31M4, Cruise_ID
 `2009-07-14-C-31M4`) for that cruise, and picoplankton's `studyName` carries the same id, although
-the McArthur's last CalCOFI cruise was in October 2002. A ship rename by name and code would also
-move 198502, a real McArthur cruise, so the new `metadata/cruise_ship_corrections.csv` corrects
-31M4 to 33MH for cruise 200907 only, in both ingests (`correct_cruise_ship()`, calcofi4db 4.31.0).
+the McArthur's last CalCOFI cruise was in October 2002. DIC's EXPOCODE `31M420090714` has the same
+error, which is why its 51 samples from that cruise had no `cruise_key` at all. A ship rename by name
+and code would also move 198502, a real McArthur cruise, so the new
+`metadata/cruise_ship_corrections.csv` corrects 31M4 to 33MH for cruise 200907 only, in all three
+ingests (`correct_cruise_ship()`, calcofi4db 4.31.0).
 The derived `2009-07-31M4` row leaves `cruise`. The providers are asked to confirm (bottle Q19,
 picoplankton Q09).
 
