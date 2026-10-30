@@ -25,7 +25,7 @@ editor_options:
 #| label: setup
 #| include: false
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
-librarian::shelf(DT, dplyr, ggplot2, glue, here, knitr, readr, tidyr, quiet = T)
+librarian::shelf(DT, dplyr, ggplot2, ggrepel, glue, here, knitr, readr, tidyr, quiet = T)
 source(here("libs/bench_ai_readiness/score.R"))
 
 dir_out   <- here("data/bench_ai_readiness")
@@ -69,55 +69,130 @@ rng    <- \(cnd, col = "pct") { x <- acc[[col]][acc$condition == cnd]; c(min(x),
 
 ## Summary
 
-Duncan Watson-Parris asked for a pilot of the benchmark proposed in Aim 2: about 20–30 questions about
-the data, put to off-the-shelf models, with performance summarized in a sentence or two as preliminary
-data. This notebook runs that pilot and keeps every step reproducible.
+```{r}
+#| label: headline
+# raw vs release per configuration: accuracy gain, and the cut in cost and median time per answer
+vs <- scored |> filter(condition != "closed") |>
+  group_by(config, model, condition) |>
+  summarize(pct = 100 * mean(correct), usd = mean(cost_usd, na.rm = TRUE), sec = median(seconds, na.rm = TRUE),
+            turns = median(turns, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = condition, values_from = c(pct, usd, sec, turns)) |>
+  mutate(gain = pct_release - pct_raw, usd_cut = 100 * (1 - usd_release / usd_raw), sec_cut = 100 * (1 - sec_release / sec_raw))
+r   <- \(cnd) { x <- round(rng(cnd)); if (x[1] == x[2]) glue("{x[1]}%") else glue("{x[1]}–{x[2]}%") }
+pr  <- \(x) { x <- round(range(x)); if (x[1] == x[2]) glue("{x[1]}%") else glue("{x[1]}–{x[2]}%") }
+big <- vs |> filter(model == "opus-5-5")
+sml <- vs |> filter(model == "haiku-5-5")
 
-We put `r n_q` questions to `r n_cfg` model × effort configurations, `r n_reps` times each, under three
-conditions:
+# the references checked against the providers' own sources: questions every strongest-model raw session
+# reproduced, with its own code, from ERDDAP / EDI / CalCOFI.org and never the release
+val <- scored |> filter(condition == "raw", model == "opus-5-5") |>
+  group_by(id) |> summarize(ok = sum(correct), n = n(), .groups = "drop")
+n_val <- sum(val$ok == val$n)
+```
+
+**What we did.** Duncan Watson-Parris asked for a pilot of the benchmark proposed in Aim 2: about 20–30
+questions about the data, put to off-the-shelf models, with performance summarized in a sentence or two as
+preliminary data. We put `r n_q` questions to `r n_cfg` model × effort configurations, `r n_reps` times
+each, under three conditions:
 
 - **closed-book**: no tools and no data, so the model answers from training alone.
-- **raw**: the providers' public sources, as a user finds them today (ERDDAP, CalCOFI.org, EDI, NCEI).
-  This is the pilot's stand-in for the proposal's "release 0".
+- **raw**: the providers' public sources, as a user finds them today (ERDDAP, CalCOFI.org, EDI, NCEI,
+  CCE-LTER). This is the pilot's stand-in for the proposal's "release 0".
 - **release**: integrated release v2026.10.21 as a local DuckDB database, with no network.
 
-Accuracy across configurations:
+**What we found** (@fig-headline, @fig-efficiency):
 
-- closed-book: `r paste(round(rng("closed")), collapse = "–")`%
-- raw: `r paste(round(rng("raw")), collapse = "–")`%
-- release: `r paste(round(rng("release")), collapse = "–")`%
+1. **Models cannot answer from training alone**: `r r("closed")` correct closed-book.
+2. **The release made every model at least as accurate, and cheaper and faster.** Accuracy was
+   `r r("raw")` from raw sources and `r r("release")` from the release. The release cut the cost per
+   answer by `r pr(vs$usd_cut)` and the median time by `r pr(vs$sec_cut)`.
+3. **The gain is largest for the smaller models.** Haiku 5.5 went from `r round(sml$pct_raw)`% to
+   `r round(sml$pct_release)`%. The strongest model (Opus 5.5) was as accurate from raw files
+   (`r round(min(big$pct_raw))`%) as from the release, but needed more steps, time and money to get there.
+4. **The raw agents found a defect in the release**: a cruise filed under two ship codes, so its bottle
+   casts join to nothing (finding 4 under
+   [Raw vs. release disagreements](#raw-vs.-release-disagreements)). This is the release-to-release
+   check Aim 2 proposes.
+5. **The reference answers hold up against the providers' own data.** For `r n_val` of the `r n_q`
+   questions, every Opus 5.5 raw session reproduced the reference independently: its own code, working
+   from the providers' sources, never the release
+   ([What is the ground truth?](#what-is-the-ground-truth)).
 
 ### Sentence for the proposal
 
 ```{r}
 #| label: sentence
 #| results: asis
-tier_rng <- scored |> group_by(config, condition, tier) |> summarize(pct = 100 * mean(correct), .groups = "drop") |>
-  group_by(condition, tier) |> summarize(lo = round(min(pct)), hi = round(max(pct)), .groups = "drop")
-r  <- \(cnd) { x <- round(rng(cnd)); if (x[1] == x[2]) glue("{x[1]}%") else glue("{x[1]}–{x[2]}%") }
-models <- paste(unique(sub("-5-5$", " 5.5", tools::toTitleCase(scored$model))), collapse = ", ")
-
-# raw vs release per configuration: accuracy gain, and the cut in cost and median time per answer
-vs <- scored |> filter(condition != "closed") |>
-  group_by(config, model, condition) |>
-  summarize(pct = 100 * mean(correct), usd = mean(cost_usd, na.rm = TRUE), sec = median(seconds, na.rm = TRUE), .groups = "drop") |>
-  pivot_wider(names_from = condition, values_from = c(pct, usd, sec)) |>
-  mutate(gain = pct_release - pct_raw, usd_cut = 100 * (1 - usd_release / usd_raw), sec_cut = 100 * (1 - sec_release / sec_raw))
-pr  <- \(x) { x <- round(range(x)); if (x[1] == x[2]) glue("{x[1]}%") else glue("{x[1]}–{x[2]}%") }
-big <- vs |> filter(model == "opus-5-5")
-sml <- vs |> filter(model == "haiku-5-5")
+words <- c("one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
 sentence <- glue(
-  "In a pilot of {n_q} questions about CalCOFI data (retrieval, cross-dataset integration, analysis and ",
-  "unanswerable items) put to off-the-shelf models ({models}; {n_cfg} model and effort settings, {n_reps} runs each), ",
-  "the models answered {r('closed')} correctly from training alone, {r('raw')} when they had to find and download ",
-  "the providers' public files themselves, and {r('release')} with the integrated release, which also cut the cost ",
-  "per answer by {pr(vs$usd_cut)} and the median time by {pr(vs$sec_cut)}. ",
-  "The release helped the smaller models most (Haiku 5.5: {round(sml$pct_raw)}% to {round(sml$pct_release)}%); ",
-  "the strongest agents ({round(min(big$pct_raw))}% from raw files) matched it and, in doing so, exposed a ",
-  "cruise-key defect in the release, the kind of release-to-release check Aim 2 proposes.")
+  "A pilot (calcofi.io/workflows/bench_ai_readiness.html) shows the design works. We put {n_q} questions to ",
+  "off-the-shelf models (three Claude models at {words[n_cfg]} model and effort settings, {words[n_reps]} runs each). They answered ",
+  "{r('closed')} correctly from training alone, {r('raw')} when they had to find and download the providers' public ",
+  "files themselves, and {r('release')} with the current release, which also cut the cost per answer by ",
+  "{pr(vs$usd_cut)} and the median time by {pr(vs$sec_cut)}. The release helped the smallest model most ",
+  "({round(sml$pct_raw)}% to {round(sml$pct_release)}%); the strongest agents matched it from raw files and, in doing ",
+  "so, exposed a cruise-key defect in the release, which is the release-to-release check the benchmark is designed ",
+  "to provide.")
 cat("> ", sentence, "\n")
 writeLines(sentence, file.path(dir_out, glue("sentence_{run_tag}.txt")))
 ```
+
+```{r}
+#| label: fig-headline
+#| fig-cap: "Accuracy by condition for each model and effort setting, overall and by question tier. Each point is the mean over 3 repeats; the bar through it spans the repeats' lowest and highest scores."
+#| fig-width: 10
+#| fig-height: 3.6
+COL <- c(closed = "#8e7cc3", raw = "#d95f02", release = "#1b6ca8")
+cfg_order <- c("haiku-5-5 / default", "sonnet-5-5 / low", "sonnet-5-5 / default", "opus-5-5 / medium", "opus-5-5 / high")
+by_tier <- bind_rows(
+  scored |> mutate(tier = "all questions"),
+  scored) |>
+  group_by(config, condition, tier, rep) |> summarize(pct = 100 * mean(correct), .groups = "drop") |>
+  group_by(config, condition, tier) |> summarize(mean = mean(pct), lo = min(pct), hi = max(pct), .groups = "drop") |>
+  mutate(config = factor(config, cfg_order),
+         tier   = factor(tier, c("all questions", "retrieval", "integration", "analysis", "unanswerable")))
+off <- c(closed = 0.22, raw = 0, release = -0.22)
+by_tier <- by_tier |> mutate(y = as.numeric(config) + off[as.character(condition)])
+ggplot(by_tier, aes(mean, y, color = condition)) +
+  geom_segment(aes(x = lo, xend = hi, yend = y), linewidth = 0.6, alpha = 0.45) +
+  geom_point(size = 2.4) +
+  facet_wrap(~tier, nrow = 1) +
+  scale_color_manual(values = COL, name = NULL) +
+  scale_x_continuous(limits = c(0, 100), breaks = c(0, 50, 100)) +
+  scale_y_continuous(breaks = seq_along(cfg_order), labels = cfg_order, expand = expansion(add = 0.4)) +
+  labs(x = "% correct", y = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "top", panel.grid.minor = element_blank(), panel.grid.major.y = element_blank(),
+        panel.spacing.x = unit(1, "lines"))
+```
+
+```{r}
+#| label: fig-efficiency
+#| fig-cap: "What the release changes for each configuration: accuracy against mean cost per answer (left) and median minutes per answer (right). Arrows run from raw sources to the release; up and to the left is better."
+#| fig-width: 10
+#| fig-height: 4
+eff <- vs |>
+  transmute(config = factor(config, cfg_order),
+            raw_usd = usd_raw, release_usd = usd_release, raw_min = sec_raw / 60, release_min = sec_release / 60,
+            raw_pct = pct_raw, release_pct = pct_release) |>
+  pivot_longer(-config, names_to = c("condition", ".value"), names_sep = "_") |>
+  pivot_longer(c(usd, min), names_to = "measure", values_to = "x") |>
+  mutate(measure = factor(measure, c("usd", "min"), c("USD per answer (log scale)", "median minutes per answer (log scale)")))
+arrows <- eff |> pivot_wider(names_from = condition, values_from = c(x, pct))
+ggplot(eff, aes(x, pct)) +
+  geom_segment(data = arrows, aes(x = x_raw, y = pct_raw, xend = x_release, yend = pct_release),
+               color = "grey70", linewidth = 0.5, arrow = arrow(length = unit(0.12, "inches"), type = "closed")) +
+  geom_point(aes(color = condition), size = 2.6) +
+  ggrepel::geom_text_repel(data = eff |> filter(condition == "raw"), aes(label = config),
+            size = 2.7, color = "grey35", min.segment.length = 0, seed = 1, box.padding = 0.4) +
+  facet_wrap(~measure, scales = "free_x") +
+  scale_x_log10(expand = expansion(mult = 0.15)) +
+  scale_color_manual(values = COL[c("raw", "release")], name = NULL) +
+  labs(x = NULL, y = "% correct") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
+```
+
 
 ## Why this pilot
 
@@ -198,14 +273,23 @@ scorer is `libs/bench_ai_readiness/score.R`.
 ## Results
 
 ```{r}
-#| label: fig-accuracy
-#| fig-cap: "Accuracy by condition for each model and effort setting. Points are the repeats (each over all questions); bars are their mean."
-ggplot(acc_rep, aes(condition, pct, color = condition)) +
-  stat_summary(fun = mean, geom = "col", fill = NA, width = 0.6) +
-  geom_jitter(width = 0.12, height = 0, size = 2) +
-  facet_wrap(~config) +
-  scale_color_manual(values = c(closed = "#8c8c8c", raw = "#d95f02", release = "#1b6ca8"), guide = "none") +
-  labs(x = NULL, y = "% correct") + ylim(0, 100) + theme_minimal()
+#| label: fig-questions
+#| fig-cap: "Where each condition succeeds and fails: share of the 3 repeats answered correctly, per question (rows, grouped by tier) and configuration (columns, grouped by condition). R7 (dissolved iron) is behind a login at the provider; the release misses I1 because of the cruise-key defect in finding 4."
+#| fig-width: 10
+#| fig-height: 6.5
+heat <- scored |>
+  group_by(id, tier, condition, config) |> summarize(ok = mean(correct), .groups = "drop") |>
+  mutate(id = factor(id, rev(q$id)), config = factor(config, cfg_order),
+         tier = factor(tier, c("retrieval", "integration", "analysis", "unanswerable")))
+ggplot(heat, aes(config, id, fill = ok)) +
+  geom_tile(color = "white", linewidth = 1) +
+  facet_grid(tier ~ condition, scales = "free_y", space = "free_y") +
+  scale_fill_gradient(low = "#eef3f8", high = "#1b6ca8", limits = c(0, 1), breaks = c(0, 0.5, 1),
+                      labels = c("0 of 3", "", "3 of 3"), name = "correct") +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1), panel.grid = element_blank(),
+        strip.text.y = element_text(angle = 0), legend.position = "top", plot.margin = margin(5, 5, 5, 30))
 ```
 
 ```{r}
@@ -266,6 +350,85 @@ scored |>
   kable()
 ```
 
+## What is the ground truth?
+
+Each question's **reference answer** is SQL run on the integrated release (@tbl-questions). That raises an
+obvious question: is the release being treated as the truth it is supposed to be tested against? Two
+checks guard against that.
+
+- **Independent reproduction from the providers' sources.** In the raw condition, agents never see the
+  release. Each one finds the providers' files itself (mostly the NOAA ERDDAP copies of the bottle and
+  ichthyoplankton databases, EDI and CCE-LTER) and writes its own code. For `r n_val` of the `r n_q`
+  questions, every Opus 5.5 raw session landed on the reference within tolerance (@tbl-validation). The
+  one exception is R7 (dissolved iron), which the provider serves only behind a login.
+- **Disagreements are traced, not scored away.** On two integration questions the raw agents agreed with
+  each other and not with the release. We traced the difference to a defect in the release: the July 2009
+  bottle casts are filed under a different ship code from every other dataset. The reference now corrects
+  for it, and the release loses those points (finding 4 below).
+
+So the reference is computed from the release, but checked against the providers' own data by code the
+release's authors did not write. The full benchmark goes further: a second scientist writes the reference
+code against the authoritative sources, as the proposal states.
+
+```{r}
+#| label: tbl-validation
+#| tbl-cap: "Raw sessions, which never see the release, that reproduced each reference answer from the providers' own sources: all configurations, and the strongest model alone."
+scored |> filter(condition == "raw") |>
+  group_by(id) |>
+  summarize(tier = first(tier), reference = first(reference),
+            `all raw sessions` = glue("{sum(correct)}/{n()}"),
+            `Opus 5.5 raw sessions` = glue("{sum(correct[model == 'opus-5-5'])}/{sum(model == 'opus-5-5')}"),
+            .groups = "drop") |>
+  mutate(reference = ifelse(is.na(suppressWarnings(as.numeric(reference))), reference,
+                            as.character(signif(as.numeric(reference), 5))),
+         id = factor(id, q$id)) |>
+  arrange(id) |> kable()
+```
+
+## What the release adds, and what it does not
+
+The providers already publish much of this data well. The bottle and ichthyoplankton databases are on NOAA
+ERDDAP, a service agents use fluently, so the retrieval questions are about equally answerable either way.
+What the release adds in this pilot is:
+
+- **One schema and shared keys across datasets** (`cruise_key`, `site_key`, `taxon_key`). An integration
+  question becomes a join rather than a reconciliation of cruise codes, station names and taxon names
+  across providers.
+- **Provider quality codes in one column** (`measurement_qual`, with `qual_ok`), so "exclude flagged
+  values" is a filter rather than a hunt through each provider's codebook.
+- **Open access to data that is otherwise behind a login** (R7).
+- **Speed and cost.** The same question takes fewer steps: a median of
+  `r paste(range(vs$turns_release), collapse = "–")` turns against
+  `r paste(range(vs$turns_raw), collapse = "–")` from raw sources (@fig-efficiency).
+
+What the pilot does **not** test is the AI layer the proposal would build. The release condition gets a
+plain DuckDB file and a three-line README (`libs/bench_ai_readiness/release_README.md`). It has no MCP
+tools, no semantic metadata (Croissant, controlled vocabularies), no method register and no documentation
+of known traps. So these numbers measure the harmonized database alone, and are a floor for what an
+AI-ready release would score. The strongest raw agents also show that a well-run ERDDAP is already partly
+AI-ready. The benchmark is built to tell those contributions apart release by release.
+
+## Each session's code
+
+Every session's work is kept as code. For each question, condition, configuration and repeat, `code.md`
+lists the commands and queries the agent ran, in order: shell commands, the scripts and SQL it wrote, and
+its searches and fetches. Downloaded data and tool output are left out. `bench_session_code()` in
+`score.R` extracts it from the session's `transcript.jsonl`. Both files are in the archive
+`bench_ai_runs_2026-10-30.tar.gz`, at `<config>/<condition>/<question>_r<repeat>/`.
+
+For example, here is how Opus 5.5 (high effort) answered I1 from the release:
+
+```{r}
+#| label: code-example
+#| results: asis
+f_ex <- file.path(path.expand(runs_root), "2026-10-30_opus-5-5_high/release/I1_r1/code.md")
+f_ex_tracked <- file.path(dir_out, "code_example_opus-5-5_high_release_I1_r1.md")
+if (file.exists(f_ex)) file.copy(f_ex, f_ex_tracked, overwrite = TRUE)
+cat("<details><summary>code.md for opus-5-5 high / release / I1 rep 1</summary>\n\n")
+cat(readLines(f_ex_tracked), sep = "\n")
+cat("\n</details>\n")
+```
+
 ## Limitations
 
 - `r n_q` questions is a pilot of the method, not a measurement of the release. The proposal's benchmark
@@ -285,6 +448,7 @@ scored |>
 ## Reproduce
 
 ```bash
+# run in bash (the loop relies on word splitting)
 # 1. local copy of the release (about 600 MB of parquet, plus views)
 libs/bench_ai_readiness/build_release_db.sh v2026.10.21 ~/_big/bench_ai_release
 # 2. sessions per configuration: questions x conditions x 3 repeats
@@ -292,7 +456,9 @@ for cfg in "sonnet-5-5 default" "sonnet-5-5 low" "opus-5-5 medium" "opus-5-5 hig
   set -- $cfg
   libs/bench_ai_readiness/run_agents.sh "2026-10-30_$1_$2" "release raw closed" 3 6 "claude-$1" "$2"
 done
-# 3. this notebook: reference answers, scoring, tables
+# 3. each session's code.md, extracted from its transcript
+Rscript -e 'source("libs/bench_ai_readiness/score.R"); for (d in dirname(list.files("~/_big/bench_ai_runs", "transcript.jsonl", recursive = TRUE, full.names = TRUE))) bench_session_code(d)'
+# 4. this notebook: reference answers, scoring, figures, tables
 quarto render bench_ai_readiness.qmd
 ```
 

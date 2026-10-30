@@ -95,6 +95,34 @@ collect_bench_configs <- function(runs_root, pattern = "^2026-10-30_") {
   })
 }
 
+# the session's work as code: every shell command, file it wrote, search and fetch, in order, as code.md
+# beside the transcript (the tool results and downloaded data are left out; the transcript keeps them)
+bench_session_code <- function(d) {
+  tr  <- readLines(file.path(d, "transcript.jsonl"), warn = FALSE)
+  tr  <- tr[stringr::str_detect(tr, '"type":"tool_use"')]
+  res <- tryCatch(jsonlite::fromJSON(file.path(d, "result.json")), error = \(e) list())
+  fence <- \(x, lang = "") c(paste0("```", lang), x, "```", "")
+  blocks <- purrr::map(tr, \(l) {
+    m <- jsonlite::fromJSON(l, simplifyVector = FALSE)$message$content
+    purrr::map(purrr::keep(m, \(b) identical(b$type, "tool_use")), \(b) {
+      i <- b$input
+      switch(b$name,
+        Bash      = c(paste0("**Bash**", if (!is.null(i$description)) paste0(": ", i$description)), fence(i$command, "bash")),
+        Write     = c(paste0("**Write** `", basename(i$file_path), "`"),
+                      fence(i$content, tolower(tools::file_ext(i$file_path)))),
+        Edit      = c(paste0("**Edit** `", basename(i$file_path), "`"), fence(c("- ", i$old_string, "+ ", i$new_string))),
+        WebSearch = c(paste0("**WebSearch**: ", i$query), ""),
+        WebFetch  = c(paste0("**WebFetch**: <", i$url, ">"), ""),
+        c(paste0("**", b$name, "** ", jsonlite::toJSON(i, auto_unbox = TRUE)), ""))
+    })
+  }) |> unlist()
+  ans <- parse_final_answer(res$result)
+  out <- c(paste0("# ", basename(dirname(d)), " / ", basename(d)), "",
+           paste0("Final answer: ", ans %||% "none"), "", blocks)
+  writeLines(out, file.path(d, "code.md"))
+  invisible(length(tr))
+}
+
 score_bench_runs <- function(runs, ref) {
   runs |>
     left_join(ref |> select(id, tier, kind, tol_abs, tol_rel, reference), by = "id") |>
