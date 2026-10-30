@@ -1038,7 +1038,9 @@ d_ck <- dbGetQuery(con, "
 #    hold must never be missed;
 #  * the NULL count may only go DOWN from CRUISE_NULL_NO_CAST_MAX; lower it to the number
 #    measured here whenever it falls (and the release's key_null_max for calcofi_dic).
-CRUISE_NULL_NO_CAST_MAX <- 335L
+# 54 at v2026.10.21; 3 once the 51 samples of EXPOCODE 31M420090714 (MCARTHUR named for
+# MCARTHUR II, metadata/cruise_ship_corrections.csv) resolve 2009-07-33MH (2026-10-30)
+CRUISE_NULL_NO_CAST_MAX <- 3L
 n_null_resolvable <- dbGetQuery(con, "
   SELECT COUNT(*) FROM sample s
   JOIN dic_sample d ON s.sample_key = 'calcofi_dic:bottle:' || md5(concat_ws('|', d.expocode,
