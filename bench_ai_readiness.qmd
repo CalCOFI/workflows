@@ -1,0 +1,300 @@
+---
+title: "AI-readiness pilot: can off-the-shelf models answer CalCOFI questions?"
+subtitle: "24 questions × three conditions (closed-book, raw provider sources, the integrated release) × models and effort levels × 3 repeats"
+author: "CalCOFI (B. Best), preliminary data for the NSF 26-512 proposal (PI Watson-Parris)"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    code-fold: true
+    code-tools: true
+params:
+  run_prefix: "2026-10-30_"
+calcofi:
+  target_name: bench_ai_readiness
+  workflow_type: reference
+  output: _output/bench_ai_readiness.html
+  workflow_url: https://calcofi.io/workflows/bench_ai_readiness.html
+editor_options:
+  chunk_output_type: console
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+librarian::shelf(DT, dplyr, ggplot2, glue, here, knitr, readr, tidyr, quiet = T)
+source(here("libs/bench_ai_readiness/score.R"))
+
+dir_out   <- here("data/bench_ai_readiness")
+runs_root <- Sys.getenv("BENCH_RUNS_DIR", "~/_big/bench_ai_runs")
+run_tag   <- sub("_$", "", params$run_prefix)
+csv_runs  <- file.path(dir_out, glue("runs_{run_tag}.csv"))
+csv_ref   <- file.path(dir_out, "reference_answers.csv")
+COND      <- c("closed", "raw", "release")
+```
+
+```{r}
+#| label: load
+q   <- read_bench_questions()
+ref <- if (file.exists(csv_ref)) read_csv(csv_ref, col_types = cols(reference = "c")) else {
+  r <- bench_reference(q) |> select(id, tier, kind, tol_abs, tol_rel, reference)
+  write_csv(r, csv_ref, na = ""); r }
+
+# sessions: summarized from the transcripts when they are on this machine, else the tracked csv
+runs <- if (dir.exists(path.expand(runs_root))) {
+  r <- collect_bench_configs(runs_root, glue("^{params$run_prefix}")); write_csv(r, csv_runs, na = ""); r
+} else read_csv(csv_runs, col_types = cols(answer = "c"))
+
+scored <- score_bench_runs(runs, ref) |>
+  mutate(config    = glue("{model} / {effort}"),
+         condition = factor(condition, COND))
+
+# accuracy per configuration x condition: mean over sessions, and the spread over the repeats
+acc_rep <- scored |> group_by(config, model, effort, condition, rep) |>
+  summarize(pct = 100 * mean(correct), cost = sum(cost_usd, na.rm = TRUE), .groups = "drop")
+acc <- scored |> group_by(config, model, effort, condition) |>
+  summarize(n = n(), pct = 100 * mean(correct),
+            cost_usd = mean(cost_usd, na.rm = TRUE), minutes = mean(seconds, na.rm = TRUE) / 60, .groups = "drop") |>
+  left_join(acc_rep |> group_by(config, condition) |>
+              summarize(rep_min = min(pct), rep_max = max(pct), rep_sd = sd(pct), .groups = "drop"),
+            by = c("config", "condition"))
+n_q    <- nrow(q)
+n_reps <- max(scored$rep)
+n_cfg  <- n_distinct(scored$config)
+rng    <- \(cnd, col = "pct") { x <- acc[[col]][acc$condition == cnd]; c(min(x), max(x)) }
+```
+
+## Summary
+
+Duncan Watson-Parris asked for a pilot of the benchmark proposed in Aim 2: about 20–30 questions about
+the data, put to off-the-shelf models, with performance summarized in a sentence or two as preliminary
+data. This notebook runs that pilot and keeps every step reproducible.
+
+We put `r n_q` questions to `r n_cfg` model × effort configurations, `r n_reps` times each, under three
+conditions:
+
+- **closed-book**: no tools and no data, so the model answers from training alone.
+- **raw**: the providers' public sources, as a user finds them today (ERDDAP, CalCOFI.org, EDI, NCEI).
+  This is the pilot's stand-in for the proposal's "release 0".
+- **release**: integrated release v2026.10.21 as a local DuckDB database, with no network.
+
+Accuracy across configurations:
+
+- closed-book: `r paste(round(rng("closed")), collapse = "–")`%
+- raw: `r paste(round(rng("raw")), collapse = "–")`%
+- release: `r paste(round(rng("release")), collapse = "–")`%
+
+### Sentence for the proposal
+
+```{r}
+#| label: sentence
+#| results: asis
+tier_rng <- scored |> group_by(config, condition, tier) |> summarize(pct = 100 * mean(correct), .groups = "drop") |>
+  group_by(condition, tier) |> summarize(lo = round(min(pct)), hi = round(max(pct)), .groups = "drop")
+r  <- \(cnd) { x <- round(rng(cnd)); if (x[1] == x[2]) glue("{x[1]}%") else glue("{x[1]}–{x[2]}%") }
+models <- paste(unique(sub("-5-5$", " 5.5", tools::toTitleCase(scored$model))), collapse = ", ")
+
+# raw vs release per configuration: accuracy gain, and the cut in cost and median time per answer
+vs <- scored |> filter(condition != "closed") |>
+  group_by(config, model, condition) |>
+  summarize(pct = 100 * mean(correct), usd = mean(cost_usd, na.rm = TRUE), sec = median(seconds, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = condition, values_from = c(pct, usd, sec)) |>
+  mutate(gain = pct_release - pct_raw, usd_cut = 100 * (1 - usd_release / usd_raw), sec_cut = 100 * (1 - sec_release / sec_raw))
+pr  <- \(x) { x <- round(range(x)); if (x[1] == x[2]) glue("{x[1]}%") else glue("{x[1]}–{x[2]}%") }
+big <- vs |> filter(model == "opus-5-5")
+sml <- vs |> filter(model == "haiku-5-5")
+sentence <- glue(
+  "In a pilot of {n_q} questions about CalCOFI data (retrieval, cross-dataset integration, analysis and ",
+  "unanswerable items) put to off-the-shelf models ({models}; {n_cfg} model and effort settings, {n_reps} runs each), ",
+  "the models answered {r('closed')} correctly from training alone, {r('raw')} when they had to find and download ",
+  "the providers' public files themselves, and {r('release')} with the integrated release, which also cut the cost ",
+  "per answer by {pr(vs$usd_cut)} and the median time by {pr(vs$sec_cut)}. ",
+  "The release helped the smaller models most (Haiku 5.5: {round(sml$pct_raw)}% to {round(sml$pct_release)}%); ",
+  "the strongest agents ({round(min(big$pct_raw))}% from raw files) matched it and, in doing so, exposed a ",
+  "cruise-key defect in the release, the kind of release-to-release check Aim 2 proposes.")
+cat("> ", sentence, "\n")
+writeLines(sentence, file.path(dir_out, glue("sentence_{run_tag}.txt")))
+```
+
+## Why this pilot
+
+The proposal's Aim 2 scores the *data*, not the agent. Existing benchmarks for data-driven science
+hold the data fixed and compare agents: DiscoveryBench (Majumder et al., 2024), BLADE (Gu et al., 2024)
+and ScienceAgentBench (Chen et al., 2025). Aim 2 instead holds the agent fixed and asks how much each
+release improves what it can do. Five AI reviewers of the draft (punch-list row 2) said a small pilot
+would be the strongest preliminary result the text could add. This pilot reproduces the Aim 2 design
+at small scale:
+
+- the three tiers of questions, plus traps and unanswerable items
+- reference answers written as code
+- repeated runs on several pinned models and effort levels
+- a closed-book condition
+- a raw-source baseline
+
+## Design
+
+```{r}
+#| label: tbl-questions
+#| tbl-cap: "The pilot questions, with the reference answer computed in SQL against release v2026.10.21."
+q |>
+  left_join(ref |> select(id, reference), by = "id") |>
+  mutate(reference = case_when(
+    kind == "none"   ~ "NOT AVAILABLE",
+    kind == "number" ~ as.character(signif(suppressWarnings(as.numeric(reference)), 5)),
+    TRUE             ~ reference)) |>
+  select(id, tier, question = text, reference) |>
+  datatable(rownames = FALSE, options = list(pageLength = 30, dom = "t"))
+```
+
+**Questions.** There are eight retrieval questions (one value from one dataset) and seven integration
+questions that join datasets at the same cruise and station:
+
+- bottle × ichthyoplankton
+- ZooScan × bottle
+- CTD × ichthyoplankton
+- the cruise and ship reference
+- a taxonomic join between the ichthyoplankton and mesopelagic-fish datasets
+
+There are six analysis questions:
+
+- anomalies relative to a 1993–2013 station-by-month baseline
+- linear trends
+- a mean larval density where tows with no catch must count as zero. The ichthyoplankton records list
+  only positive catches, so this one is a trap.
+- a correlation
+
+Three questions cannot be answered from the data:
+
+- nitrate before 1959
+- bottle pH in 1985
+- CalBOBL bongo tows in 1972, before the bongo net replaced the ring net in 1977–78
+
+The reference SQL for each question is in `libs/bench_ai_readiness/questions.yml`.
+
+**Reference answers** are the question's SQL run on the release. Where the raw sessions agreed with each
+other and disagreed with the release, we traced the difference to its source. In one case (finding 4
+under [Raw vs. release disagreements](#raw-vs.-release-disagreements)) the release was wrong, and the
+reference SQL now corrects for it. Elsewhere a legitimate difference between a provider's file and the
+release still scores the raw answer wrong, so the pilot stays conservative for the raw condition.
+
+**Sessions.** Each session is one headless Claude Code run (`claude -p`, version 2.1.314). It loads no
+`CLAUDE.md`, memory, skills or MCP servers, and runs inside Claude Code's OS sandbox:
+
+- it can write only to its own folder
+- it cannot read the CalCOFI repositories, the other condition's runs or, in the raw condition, the
+  release copy
+- network access is limited to the providers' domains in the raw condition, and is off in the release
+  condition
+
+Every tool call is checked afterwards for any reach past the session's condition (@tbl-audit). A session
+had 4 min (closed), 20 min (release) or 40 min (raw), and had to end with `FINAL ANSWER: <value>` or
+`FINAL ANSWER: NOT AVAILABLE`. Numbers are scored within the tolerance stated per question, and
+unanswerable items only by declining. The runner is `libs/bench_ai_readiness/run_agents.sh` and the
+scorer is `libs/bench_ai_readiness/score.R`.
+
+## Results
+
+```{r}
+#| label: fig-accuracy
+#| fig-cap: "Accuracy by condition for each model and effort setting. Points are the repeats (each over all questions); bars are their mean."
+ggplot(acc_rep, aes(condition, pct, color = condition)) +
+  stat_summary(fun = mean, geom = "col", fill = NA, width = 0.6) +
+  geom_jitter(width = 0.12, height = 0, size = 2) +
+  facet_wrap(~config) +
+  scale_color_manual(values = c(closed = "#8c8c8c", raw = "#d95f02", release = "#1b6ca8"), guide = "none") +
+  labs(x = NULL, y = "% correct") + ylim(0, 100) + theme_minimal()
+```
+
+```{r}
+#| label: tbl-accuracy
+#| tbl-cap: "Accuracy (% of sessions correct) by configuration, condition and tier; spread across repeats; mean cost and time per answer."
+scored |>
+  group_by(config, condition, tier) |> summarize(pct = round(100 * mean(correct)), .groups = "drop") |>
+  pivot_wider(names_from = tier, values_from = pct) |>
+  left_join(acc |> transmute(config, condition, all = round(pct),
+                             `repeats (min–max)` = glue("{round(rep_min)}–{round(rep_max)}"),
+                             `USD/answer` = round(cost_usd, 2), `min/answer` = round(minutes, 1)),
+            by = c("config", "condition")) |>
+  arrange(config, condition) |>
+  select(config, condition, retrieval, integration, analysis, unanswerable, everything()) |>
+  kable()
+```
+
+```{r}
+#| label: tbl-by-question
+#| tbl-cap: "Sessions correct per question and condition, pooled over configurations and repeats."
+scored |>
+  group_by(id, condition) |>
+  summarize(cell = glue("{sum(correct)}/{n()}"), .groups = "drop") |>
+  pivot_wider(names_from = condition, values_from = cell) |>
+  left_join(ref |> select(id, tier, reference), by = "id") |>
+  mutate(id = factor(id, q$id)) |> arrange(id) |>
+  select(id, tier, reference, any_of(COND)) |>
+  kable()
+```
+
+```{r}
+#| label: tbl-answers
+#| tbl-cap: "Every session's answer (searchable)."
+scored |>
+  select(config, condition, id, rep, answer, reference, correct, cost_usd, seconds) |>
+  arrange(id, condition, config, rep) |>
+  datatable(rownames = FALSE, filter = "top", options = list(pageLength = 15, scrollX = TRUE))
+```
+
+### Raw vs. release disagreements
+
+```{r}
+#| label: disagreements
+#| results: asis
+f_notes <- file.path(dir_out, glue("notes_{run_tag}.md"))
+if (file.exists(f_notes)) cat(readLines(f_notes), sep = "\n")
+```
+
+### Audit
+
+```{r}
+#| label: tbl-audit
+#| tbl-cap: "Tool calls per configuration and condition, and calls that named a resource outside the condition (expected 0)."
+scored |>
+  group_by(config, condition) |>
+  summarize(sessions = n(), completed = sum(completed), tool_calls = sum(n_tool_calls),
+            forbidden_calls = sum(n_forbidden), sandbox_denials = sum(n_sandbox_deny), .groups = "drop") |>
+  kable()
+```
+
+## Limitations
+
+- `r n_q` questions is a pilot of the method, not a measurement of the release. The proposal's benchmark
+  has about 250 questions, an open-weights model, human baselines and a held-out set.
+- The models are all from one family (Claude). Closed-book scores also depend on what each model saw in
+  training.
+- The reference answers come from the release under test, so a release defect shared by the reference
+  and the release condition goes unnoticed unless the raw sessions disagree. They caught one here
+  (finding 4); others may remain. In the full benchmark, a second scientist writes the reference code
+  against the authoritative sources.
+- The questions were written by someone who knows the release, and most of them can be answered from
+  the providers' well-documented ERDDAP services. This favours neither condition by design, but it is
+  not a sample of the questions users ask.
+- The release condition gets a plain DuckDB file with a three-line README. It has none of the AI layer
+  the proposal would build: no MCP tools, no semantic metadata, no method register.
+
+## Reproduce
+
+```bash
+# 1. local copy of the release (about 600 MB of parquet, plus views)
+libs/bench_ai_readiness/build_release_db.sh v2026.10.21 ~/_big/bench_ai_release
+# 2. sessions per configuration: questions x conditions x 3 repeats
+for cfg in "sonnet-5-5 default" "sonnet-5-5 low" "opus-5-5 medium" "opus-5-5 high" "haiku-5-5 default"; do
+  set -- $cfg
+  libs/bench_ai_readiness/run_agents.sh "2026-10-30_$1_$2" "release raw closed" 3 6 "claude-$1" "$2"
+done
+# 3. this notebook: reference answers, scoring, tables
+quarto render bench_ai_readiness.qmd
+```
+
+The transcripts of every session are archived as `bench_ai_runs_2026-10-30.tar.gz` beside the proposal
+drafts. The tracked summary is `data/bench_ai_readiness/runs_2026-10-30.csv`.

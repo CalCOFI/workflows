@@ -1,0 +1,266 @@
+release: v2026.10.21
+questions:
+- id: R1
+  tier: retrieval
+  kind: number
+  tol:
+    abs: 0.05
+  text: What is the mean water temperature (deg C) of all CalCOFI hydrographic bottle
+    samples taken at exactly 10 m depth at CalCOFI station line 93.3, station 30.0,
+    across the full record? Exclude values with the provider's quality code 8 (suspect) or 9 (missing).
+  sql: |-
+    select avg(value) from obs_env where dataset_key='calcofi_bottle' and measurement_type='temperature'
+    and qual_ok and depth_min_m = 10 and site_key='093.3 030.0'
+- id: R2
+  tier: retrieval
+  kind: number
+  tol:
+    abs: 0
+  text: In the CalCOFI hydrographic bottle database, what is the first calendar year
+    with any nitrate measurement?
+  sql: select min(year) from obs_env where dataset_key='calcofi_bottle' and measurement_type='nitrate'
+- id: R3
+  tier: retrieval
+  kind: number
+  tol:
+    rel: 0.05
+  text: How many CalCOFI hydrographic bottle casts were made at station line 93.3,
+    station 30.0 during 2010-2019 (inclusive)?
+  sql: select count(*) from sample where dataset_key='calcofi_bottle' and sample_type='cast'
+    and site_key='093.3 030.0' and year(datetime) between 2010 and 2019
+- id: R4
+  tier: retrieval
+  kind: number
+  tol:
+    rel: 0.05
+  text: What is the mean chlorophyll-a concentration (ug/L) in CalCOFI hydrographic
+    bottle samples at depths of 10 m or shallower, across all stations, for samples
+    collected in January-March 2016? Exclude values with the provider's quality code 8 (suspect) or 9 (missing).
+  sql: select avg(value) from obs_env where dataset_key='calcofi_bottle' and measurement_type='chlorophyll_a'
+    and qual_ok and depth_min_m <= 10 and year=2016 and month(datetime) between 1
+    and 3
+- id: R5
+  tier: retrieval
+  kind: number
+  tol:
+    rel: 0.01
+  text: In the CalCOFI dissolved inorganic carbon (DIC) dataset from the Dickson lab
+    (CalCOFI cruises, 1983-2021), what is the mean DIC (umol/kg) of all samples shallower
+    than 20 m? Exclude provider-flagged values.
+  sql: select avg(value) from obs_env where dataset_key='calcofi_dic' and measurement_type='dic'
+    and qual_ok and depth_min_m < 20
+- id: R6
+  tier: retrieval
+  kind: number
+  tol:
+    rel: 0.02
+  text: How many northern anchovy (Engraulis mordax) larvae in total were counted
+    (raw counts, not standardized) in CalCOFI CalBOBL bongo ('CB') net tows in calendar
+    year 2014?
+  sql: select sum(value) from obs_bio where dataset_key='swfsc_ichthyo' and measurement_type='abundance'
+    and life_stage='larva' and tow_type='CB' and taxon_key='worms:272286' and year=2014
+- id: R7
+  tier: retrieval
+  kind: number
+  tol:
+    rel: 0.01
+  text: What is the maximum dissolved iron concentration (nmol/L) reported in the
+    CCE-LTER dissolved iron dataset from CalCOFI/CCE cruises (2002-2004)?
+  sql: select max(value) from obs_env where dataset_key='cce-lter_iron' and measurement_type='dissolved_iron'
+- id: R8
+  tier: retrieval
+  kind: number
+  tol:
+    rel: 0.02
+  text: How many Pacific sardine (Sardinops sagax) eggs in total were counted by the
+    Continuous Underway Fish Egg Sampler (CUFES) on CalCOFI/SWFSC surveys in calendar
+    year 2015?
+  sql: select sum(value) from obs_bio where dataset_key='swfsc_cufes' and measurement_type='abundance'
+    and taxon_key='worms:217452' and year=2015
+- id: I1
+  tier: integration
+  kind: number
+  tol:
+    abs: 0.1
+  text: Consider CalCOFI station occupations (same cruise and same station) during
+    2000-2009 at which a CalBOBL bongo ('CB') tow caught at least one Pacific sardine
+    (Sardinops sagax) larva. What is the mean 10 m bottle temperature (deg C, excluding values with the provider's quality code 8 (suspect) or 9 (missing))
+    across those occupations (average the per-occupation 10 m temperature)?
+  # v2026.10.21 keys the July 2009 bottle casts to 2009-07-31M4 (MCARTHUR) while ichthyo, ZooScan and CTD
+  # use the SWFSC reference 2009-07-33MH (MCARTHUR II), same dates; the reference maps it (notes, finding 4)
+  sql: |-
+    with occ as (select distinct cruise_key, site_key from obs_bio where dataset_key='swfsc_ichthyo' and tow_type='CB'
+    and life_stage='larva' and taxon_key='worms:217452' and value>0 and year between 2000 and 2009),
+    t as (select replace(cruise_key, '2009-07-31M4', '2009-07-33MH') cruise_key, site_key, avg(value) v from obs_env where dataset_key='calcofi_bottle' and measurement_type='temperature'
+    and qual_ok and depth_min_m = 10 group by all)
+    select avg(v) from occ join t using (cruise_key, site_key)
+- id: I2
+  tier: integration
+  kind: number
+  tol:
+    rel: 0.05
+  text: How many CalCOFI station occupations (distinct cruise + station) during 2005-2019
+    had both a CCE-LTER ZooScan zooplankton tow and a CalCOFI hydrographic bottle
+    cast?
+  # v2026.10.21 keys the July 2009 bottle casts to 2009-07-31M4 (MCARTHUR) while ichthyo, ZooScan and CTD
+  # use the SWFSC reference 2009-07-33MH (MCARTHUR II), same dates; the reference maps it (notes, finding 4)
+  sql: |-
+    select count(*) from (select distinct cruise_key, site_key from sample where dataset_key='cce-lter_zooscan' and year(datetime) between 2005 and 2019)
+    join (select distinct replace(cruise_key, '2009-07-31M4', '2009-07-33MH') cruise_key, site_key from sample where dataset_key='calcofi_bottle' and sample_type='cast') using (cruise_key, site_key)
+- id: I3
+  tier: integration
+  kind: text
+  text: Which research vessel (ship name) conducted the most CalCOFI CalBOBL bongo
+    ('CB') ichthyoplankton tows during 2010-2019?
+  sql: |-
+    select c.ship_name, count(*) n from sample s join cruise c using (cruise_key) where s.dataset_key='swfsc_ichthyo' and s.sample_type='tow'
+    and s.tow_type='CB' and year(s.datetime) between 2010 and 2019 group by 1 order by n desc limit 1
+- id: I4
+  tier: integration
+  kind: number
+  tol:
+    abs: 0.1
+  text: Among CalCOFI cruises in calendar year 2015, take the cruise whose CalBOBL
+    bongo ('CB') tows counted the most northern anchovy (Engraulis mordax) larvae
+    (raw counts). What was the mean 10 m bottle temperature (deg C, excluding values with the provider's quality code 8 (suspect) or 9 (missing)) on
+    that cruise?
+  sql: |-
+    with a as (select cruise_key, sum(value) n from obs_bio where dataset_key='swfsc_ichthyo' and tow_type='CB' and life_stage='larva'
+    and taxon_key='worms:272286' and year=2015 group by 1 order by n desc limit 1)
+    select avg(value) from obs_env where dataset_key='calcofi_bottle' and measurement_type='temperature'
+    and qual_ok and depth_min_m = 10 and cruise_key=(select cruise_key from a)
+- id: I5
+  tier: integration
+  kind: number
+  tol:
+    rel: 0.05
+  text: How many CalCOFI station occupations (distinct cruise + station) in calendar
+    year 2019 had both a CTD cast and a CalBOBL bongo ('CB') ichthyoplankton tow?
+  sql: |-
+    select count(*) from (select distinct cruise_key, site_key from sample where dataset_key='calcofi_ctd-cast' and year(datetime)=2019)
+    join (select distinct cruise_key, site_key from sample where dataset_key='swfsc_ichthyo' and sample_type='tow' and tow_type='CB' and year(datetime)=2019) using (cruise_key, site_key)
+- id: I6
+  tier: integration
+  kind: number
+  tol:
+    rel: 0.05
+  text: What is the mean nitrate concentration (umol/L, excluding values with the provider's quality code 8 (suspect) or 9 (missing)) in CalCOFI bottle
+    samples at exactly 10 m depth, restricted to the 2015 station occupations (same
+    cruise and station) where a CCE-LTER ZooScan tow was also taken?
+  sql: |-
+    select avg(value) from obs_env where dataset_key='calcofi_bottle' and measurement_type='nitrate'
+    and qual_ok and depth_min_m = 10 and year=2015 and (cruise_key, site_key) in
+    (select distinct cruise_key, site_key from sample where dataset_key='cce-lter_zooscan' and year(datetime)=2015)
+- id: I7
+  tier: integration
+  kind: number
+  tol:
+    rel: 0.1
+  text: How many distinct fish species (by accepted scientific name) were recorded
+    both as larvae in the SWFSC CalCOFI ichthyoplankton data and in the SIO mesopelagic
+    fish trawl dataset (2010-2012)?
+  sql: |-
+    select count(*) from (select distinct taxon_key from obs_bio where dataset_key='sio_mesopelagic-fish')
+    join (select distinct taxon_key from obs_bio where dataset_key='swfsc_ichthyo' and life_stage='larva') using (taxon_key)
+    join taxon using (taxon_key) where rank='Species'
+- id: A1
+  tier: analysis
+  kind: number
+  tol:
+    abs: 0.15
+  text: During the 2014-16 marine heatwave, how warm was 2015 at 10 m along CalCOFI
+    lines 90.0 and 93.3? Compute, for each 10 m bottle temperature sample (excluding values with the provider's quality code 8 (suspect) or 9 (missing))
+    on those two lines in 2015, its anomaly relative to the 1993-2013 mean for the
+    same station and calendar month, then report the mean anomaly (deg C).
+  sql: |-
+    with b as (select site_key, month(datetime) m, year, value from obs_env where dataset_key='calcofi_bottle' and measurement_type='temperature'
+    and qual_ok and depth_min_m = 10 and substr(site_key,1,5) in ('090.0','093.3')),
+    c as (select site_key, m, avg(value) cm from b where year between 1993 and 2013 group by all)
+    select avg(value-cm) from b join c using (site_key, m) where year=2015
+- id: A2
+  tier: analysis
+  kind: number
+  tol:
+    abs: 0.05
+  text: What is the ordinary least-squares linear trend (deg C per decade) in annual
+    mean 10 m bottle temperature (excluding values with the provider's quality code 8 (suspect) or 9 (missing)) at CalCOFI station 93.3 30.0, using all
+    years with at least 2 samples through 2020?
+  sql: |-
+    with y as (select year::double yr, avg(value) v from obs_env where dataset_key='calcofi_bottle' and measurement_type='temperature'
+    and qual_ok and depth_min_m = 10 and site_key='093.3 030.0' and year<=2020 group by year having count(*)>=2)
+    select regr_slope(v, yr)*10 from y
+- id: A3
+  tier: analysis
+  kind: number
+  tol:
+    abs: 0.03
+  text: What is the ordinary least-squares linear trend (ml/L per decade) in annual
+    mean dissolved oxygen at exactly 200 m depth (bottle samples, excluding values with the provider's quality code 8 (suspect) or 9 (missing)) across
+    all stations on CalCOFI line 93.3, for 1984-2020?
+  sql: |-
+    with y as (select year::double yr, avg(value) v from obs_env where dataset_key='calcofi_bottle' and measurement_type='oxygen_ml_l' and qual_ok
+    and depth_min_m=200 and substr(site_key,1,5)='093.3' and year between 1984 and 2020 group by year) select regr_slope(v, yr)*10 from y
+- id: A4
+  tier: analysis
+  kind: number
+  tol:
+    rel: 0.05
+  text: What was the mean standardized density of northern anchovy (Engraulis mordax)
+    larvae (larvae per 10 m^2 of sea surface) across ALL CalBOBL bongo ('CB') net
+    samples in the SWFSC CalCOFI ichthyoplankton data for calendar year 2005, counting
+    each sorted net as one sample and nets that caught no anchovy as zero?
+  sql: |-
+    with n as (select sample_key from sample where dataset_key='swfsc_ichthyo' and sample_type='net' and tow_type='CB' and year(datetime)=2005),
+    a as (select sample_key, sum(density_per_10m2) d from obs_bio where dataset_key='swfsc_ichthyo' and life_stage='larva'
+    and taxon_key='worms:272286' and tow_type='CB' and year=2005 group by 1)
+    select sum(coalesce(d,0))/count(*) from n left join a using (sample_key)
+- id: A5
+  tier: analysis
+  kind: number
+  tol:
+    abs: 0.1
+  text: Relative to the 1993-2013 mean for the same station and calendar month, what
+    was the mean anomaly (ug/L) of chlorophyll-a in CalCOFI bottle samples (excluding values with the provider's quality code 8 (suspect) or 9 (missing))
+    at exactly 10 m depth, across all stations sampled in 2015?
+  sql: |-
+    with b as (select site_key, month(datetime) m, year, value from obs_env where dataset_key='calcofi_bottle' and measurement_type='chlorophyll_a'
+    and qual_ok and depth_min_m = 10),
+    c as (select site_key, m, avg(value) cm from b where year between 1993 and 2013 group by all)
+    select avg(value-cm) from b join c using (site_key, m) where year=2015
+- id: A6
+  tier: analysis
+  kind: number
+  tol:
+    abs: 0.1
+  text: Across years 1984-2019, what is the Pearson correlation between (a) the annual
+    mean 10 m bottle temperature (excluding values with the provider's quality code 8 (suspect) or 9 (missing)) on CalCOFI lines 80.0 and 90.0, and (b)
+    the annual mean raw count of Pacific sardine (Sardinops sagax) larvae per CalBOBL
+    bongo ('CB') net sample on those same lines, counting each sorted net as one sample
+    and nets without sardine as zero?
+  sql: |-
+    with tmp as (select year, avg(value) t from obs_env where dataset_key='calcofi_bottle' and measurement_type='temperature' and qual_ok
+    and depth_min_m = 10 and substr(site_key,1,5) in ('080.0','090.0') and year between 1984 and 2019 group by 1),
+    nets as (select sample_key, year(datetime) yr from sample where dataset_key='swfsc_ichthyo' and sample_type='net' and tow_type='CB'
+    and substr(site_key,1,5) in ('080.0','090.0') and year(datetime) between 1984 and 2019),
+    sar as (select sample_key, sum(value) c from obs_bio where dataset_key='swfsc_ichthyo' and life_stage='larva' and taxon_key='worms:217452' and tow_type='CB' group by 1),
+    s as (select yr as year, avg(coalesce(c,0)) s from nets left join sar using (sample_key) group by 1)
+    select corr(t, s) from tmp join s using (year)
+- id: U1
+  tier: unanswerable
+  kind: none
+  text: What was the mean nitrate concentration (umol/L) at 10 m depth at CalCOFI
+    station 93.3 30.0 in 1955?
+  sql: select count(*) from obs_env where dataset_key='calcofi_bottle' and measurement_type='nitrate'
+    and year=1955
+- id: U2
+  tier: unanswerable
+  kind: none
+  text: What was the mean pH of CalCOFI hydrographic bottle samples collected in 1985?
+  sql: select count(*) from obs_env where measurement_type in ('ph','sw_ph') and year=1985
+- id: U3
+  tier: unanswerable
+  kind: none
+  text: How many northern anchovy larvae in total were counted in CalCOFI CalBOBL
+    bongo ('CB') net tows in 1972?
+  sql: select count(*) from sample where dataset_key='swfsc_ichthyo' and tow_type='CB'
+    and year(datetime)=1972
