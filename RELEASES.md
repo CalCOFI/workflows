@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.10.30
+
 ## The July 2009 bottle casts join their cruise
 
 Every release through v2026.10.21 kept the 100 bottle casts and 230 picoplankton samples of the
