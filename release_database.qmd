@@ -1662,7 +1662,14 @@ d_cki <- check_cruise_key_integrity(
       "cce-lter_zooscan"              = 421L,
       "farallon_bird-mammal"          = 1228L,
       # cufes: 5,053 until v2026.10.01; the export links every sample to its cruise by CruiseId
-      swfsc_cufes                     = 0L)),
+      swfsc_cufes                     = 0L,
+      # sightings (held, in_release: false; reaches a release only through
+      # CALCOFI_RELEASE_INCLUDE in the private preview): 66 effort segments, measured at
+      # the 2026-11-02 preview run — the two cruise labels the ingest resolves to no
+      # reference cruise, CC2023-03 (29 segments, Mar-Apr 2023) and CC2024-07 (36,
+      # Jul-Aug 2024; sightings Q14), plus the one segment it holds as misdated
+      # (2022-11-05; Q07). Baseline, not a target.
+      "sio_cetacean-sightings"        = 66L)),
   halt = TRUE)
 
 d_cki |>
