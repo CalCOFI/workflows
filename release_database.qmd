@@ -168,6 +168,25 @@ sidecar_root <- if (staging) "data/releases-staging" else "data/releases"
 stage_root   <- if (staging) "releases-staging" else "releases"
 if (staging)
   message(glue("STAGING release: prefix {release_prefix}, layout {release_layout}, sidecars {sidecar_root}"))
+
+# a PREVIEW run writes a candidate release into the private bucket behind the
+# calcofi-preview service (CALCOFI_RELEASE_BUCKET=calcofi-preview), and only there
+# may it include datasets every public release holds out (CALCOFI_RELEASE_INCLUDE,
+# comma-separated `{provider}_{dataset}` keys), so a provider sees their dataset in
+# calcofi.io and the Explorer before they agree to publish it (plan 2026-11-02)
+release_bucket  <- Sys.getenv("CALCOFI_RELEASE_BUCKET", "calcofi-db")
+release_include <- trimws(strsplit(Sys.getenv("CALCOFI_RELEASE_INCLUDE"), ",")[[1]])
+release_include <- release_include[nzchar(release_include)]
+if (release_bucket != "calcofi-db" && !staging)
+  stop(glue("a release into gs://{release_bucket} must be a staging run: set ",
+            "CALCOFI_RELEASE_PREFIX and CALCOFI_TABLES_PREFIX (e.g. ducklake-preview/…)"))
+if (length(release_include) && release_bucket %in% calcofi4db::CC_PUBLIC_BUCKETS)
+  stop(glue("CALCOFI_RELEASE_INCLUDE ({paste(release_include, collapse = ', ')}) names held ",
+            "datasets, which never go to the public bucket gs://{release_bucket}; set ",
+            "CALCOFI_RELEASE_BUCKET to the private preview bucket"))
+if (release_bucket != "calcofi-db")
+  message(glue("PREVIEW release: gs://{release_bucket}/{release_prefix}, including held ",
+               "{if (length(release_include)) paste(release_include, collapse = ', ') else 'none'}"))
 message(glue("Release version: {release_version}"))
 
 # --- refuse to re-cut the version consumers are currently reading -------------
@@ -196,7 +215,7 @@ message(glue("Release version: {release_version}"))
 # `latest.txt` points elsewhere and lets a run overwrite the release consumers
 # are actively reading. A guard that fails open for an hour after every
 # promotion is worse than no guard, because it reads as protection.
-promoted <- calcofi4db::read_promoted_release(bucket = "calcofi-db", prefix = release_prefix)
+promoted <- calcofi4db::read_promoted_release(bucket = release_bucket, prefix = release_prefix)
 
 if (!is.na(promoted) && identical(promoted, release_version) &&
     !isTRUE(as.logical(Sys.getenv("CALCOFI_ALLOW_REPUBLISH", "FALSE"))))
@@ -240,6 +259,12 @@ load_duckdb_extension(con_wdl, "spatial")
 # but nothing of it reaches the frozen release. That is how a dataset under
 # review (currently cdfw_dungeness-crab) is staged without leaking into a release.
 ds_excluded <- release_excluded_datasets(here())
+# a preview run includes the held datasets it names (CALCOFI_RELEASE_INCLUDE above)
+if (length(release_include)) {
+  stopifnot("CALCOFI_RELEASE_INCLUDE names only datasets held by in_release: false" =
+              all(release_include %in% ds_excluded))
+  ds_excluded <- setdiff(ds_excluded, release_include)
+}
 if (length(ds_excluded))
   message(glue("Held out of this release (in_release: false): ",
                "{paste(ds_excluded, collapse = ', ')}"))
@@ -270,7 +295,8 @@ message(glue(
 
 # --- authoritative dataset metadata + ERD coloring from ingest YAML ----
 # table -> provider_dataset(s) owned, from each ingest's calcofi.tables_owned
-ingest_yaml   <- read_ingest_yaml(here(), in_release_only = TRUE)
+ingest_yaml   <- read_ingest_yaml(here())
+ingest_yaml   <- ingest_yaml[!names(ingest_yaml) %in% ds_excluded]
 table_dataset <- list()
 add_owner <- function(tbl, pd) {
   if (is.null(tbl)) return(invisible())
@@ -513,7 +539,7 @@ build_supplemental <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
 supp_tbls <- supplemental_core_tables(here(), build_supplemental)
 if (length(supp_tbls))
   message(glue("supplemental tables: {paste(supp_tbls, collapse = ', ')}"))
-core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls)
+core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls, exclude = ds_excluded)
 
 # Vernacular names, applied ONCE to the merged `taxon` rather than in each of the
 # 10 taxa-emitting ingests. `common_name` only ever came from a dataset's own
@@ -675,7 +701,7 @@ q <- function(sql) dbGetQuery(con_wdl, sql)$n
 # a stronger check: it catches a shard silently dropped by the union, which the
 # canonical-first registry would otherwise do without complaint.
 shard_total <- function(tbl) {
-  paths <- core_shard_paths(tbl, root = here())
+  paths <- core_shard_paths(tbl, root = here(), exclude = ds_excluded)
   if (!length(paths)) return(0)
   sum(vapply(paths, function(p) {
     rd <- if (grepl("\\*\\*", p))
@@ -2435,7 +2461,7 @@ cat(release_notes)
 ```{r}
 #| label: upload_frozen
 
-gcs_bucket  <- "calcofi-db"
+gcs_bucket  <- release_bucket
 gcs_release <- glue("{release_prefix}/{release_version}")
 gcloud      <- find_gcloud()
 
