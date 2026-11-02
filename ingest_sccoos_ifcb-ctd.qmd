@@ -59,17 +59,47 @@ FlowCytobot (IFCB) bins run on water collected from the CalCOFI CTD rosette, Aug
 image classifier (the "autoclass") assigns each image to a class, and the
 summary groups the classified images by taxon and by equivalent spherical
 diameter (ESD) size class. Per the provider's notebook: `Count` is the number
-of images (cells) in the group, `Abundance (counts/ml)` is `Count / Volume_ml`,
-`Volume_ml` is `0.25 ml/min x (runTime - inhibitTime) / 60`, `Avg Biovol` is the
-mean cell biovolume in um3 and `Avg ESD` the mean ESD in um (pixels converted at
+of images (cells) in the group, `Abundance_counts_per_ml` is `Count / Volume_ml`,
+`Volume_ml` is `0.25 ml/min x (runTime - inhibitTime) / 60`, `Avg_Biovol` is the
+mean cell biovolume in um3 and `Avg_ESD` the mean ESD in um (pixels converted at
 3.4 px/um). The summary keeps cells only (bubbles, detritus, beads and other
 non-cell classes are filtered upstream, class_to_WoRMS `Cell (yes/no)`).
+
+**Taxon columns** (provider, 2026-10-30): `Autoclass_classes` are the IFCB
+classifier's own class names; several classes can be combined into one `Taxa`
+(`|`-separated in `Autoclass_classes`); `Taxa` is checked against WoRMS and
+`WoRMS_matched_name` is the valid WoRMS name, written with `_` for a space.
+
+**Source revision 2026-10-30.** Vivian Hou re-issued the summary after Rasmus
+Swalethorp's review (2026-10-28): headers use `_` (`Depthstype` -> `Sample_type`,
+`Sizerange ESD` -> `Size_range_ESD`, `Abundance (counts/ml)` ->
+`Abundance_counts_per_ml`, ...), taxon names use `_` for a space
+(`unidentified cells` -> `unidentified_cells`), multi-value cells are no longer
+`; `-joined, sample types are `surface` / `chla max`, and `Date` and
+`Sample_time_UTC` are new. The counts are unchanged (the same 671 bins, 104
+taxa and 530,927 images; `per_bin_totals` reproduces). Positions changed in
+two ways. Ten 2504SH bins on lines 76.7 and 63.3 were corrected: the earlier
+summary (and the metadata CSV) gave all ten the position of station 80 100,
+and the re-issue gives each its own station's position. Two 2601LS bins (line
+63.3, stations 80 and 90) lost their `Latitude` / `Longitude`; those two are
+taken from the same bins' rows of the metadata CSV, which match the earlier
+summary and the other bin of each cast (Read Source Data; Q16).
+
+**Cleaned before ingest (B. Huang, 2026-11-01).** The file in the dataset folder
+is the provider's re-issue with four formatting fixes and no value changes:
+`Sample_type` 'chl a max' -> 'chla max' (1 bin, 67 rows; the other 322 DCM bins
+use 'chla max'); `Taxa` / `WoRMS_matched_name` 'Navicula_' -> 'Navicula' (a
+stray trailing `_`, formerly a trailing space); `Autoclass_classes` and
+`Autoclass_Accuracy` joined with `|` instead of `, ` (7,991 rows; a comma inside
+a cell breaks a CSV export); and the `class_to_WoRMS` headers given `_`
+(`WoRMS_matched_name`, `WoRMS_status`, `Cell_yes_no`), its 'Navicula ' trimmed.
 
 **Sample grain is the IFCB bin** (`IFCB_filename`, `DYYYYMMDDTHHMMSS_IFCBnnn`,
 the UTC start of the run): one water sample from one CTD bottle, run once. Every
 row of a bin shares one cruise, position, depth and analysed volume (asserted
 below). The bin id carries the UTC timestamp, so `datetime` comes from the
-filename and is checked against the provider's `Sample_time_PT`.
+filename and is checked against the provider's `Sample_time_UTC` and
+`Sample_time_PT`.
 
 **Three grains in the core model** (the size class is a third dimension that no
 single `obs` row can carry):
@@ -84,9 +114,10 @@ single `obs` row can carry):
 - `sample_measurement`: `ifcb_volume_analyzed` (ml), the denominator.
 
 Not published (still in the archived source): the per-size-class mean and SD of
-biovolume and ESD, `Autoclass Accuracy` (a per-class classifier accuracy, not a
-per-image confidence -- provider question Q06), the autoclass class names
-merged into each taxon, and the bottle number. The bin is **not** linked to its
+biovolume and ESD, `Autoclass_Accuracy` (the provider's manual check of
+classifier v1, accurate cells / cells assigned, per autoclass class: a per-class
+figure, not a per-image confidence -- Q06), the autoclass class names merged
+into each taxon, `Date`, and the bottle number. The bin is **not** linked to its
 `bottle` sample yet (parent_sample_key is NULL, Q08).
 
 **Detections only.** The summary lists the taxa seen in a bin; a taxon absent
@@ -180,15 +211,17 @@ d_c2w <- read_excel(f_summary, sheet = "class_to_WoRMS")
 d_pbt <- read_excel(f_summary, sheet = "per_bin_totals")
 d_md  <- read_csv(f_meta, na = c("", "NA"), col_types = cols(.default = "c"))
 
-need <- c("Cruise", "Line", "Station", "Latitude", "Longitude", "Bottle", "Depth",
-          "Depthstype", "Taxa", "Autoclass classes", "WoRMS matched name", "AphiaID",
-          "Sizerange ESD", "Count", "Abundance (counts/ml)", "Avg Biovol", "SD biovol",
-          "Avg ESD", "SD ESD", "Autoclass Version", "Autoclass Accuracy", "Volume_ml",
-          "Sample_time_PT", "IFCB_filename")
+# headers as re-issued 2026-10-30 (`_` instead of spaces / parentheses)
+need <- c("Cruise", "Date", "Line", "Station", "Latitude", "Longitude", "Bottle",
+          "Depth", "Sample_type", "Taxa", "Autoclass_classes", "WoRMS_matched_name",
+          "AphiaID", "Size_range_ESD", "Count", "Abundance_counts_per_ml",
+          "Avg_Biovol", "SD_biovol", "Avg_ESD", "SD_ESD", "Autoclass_Version",
+          "Autoclass_Accuracy", "Volume_ml", "Sample_time_UTC", "Sample_time_PT",
+          "IFCB_filename")
 stopifnot("summary sheet is missing expected columns" = all(need %in% names(d_raw)))
 
-# explicit renames (not clean_names()): the source headers carry units and
-# parentheses, and the published names are part of flds_redefine.csv
+# explicit renames (not clean_names()): the published names are part of
+# flds_redefine.csv
 d_sum <- d_raw |>
   transmute(
     ifcb_filename  = str_trim(IFCB_filename),
@@ -199,24 +232,54 @@ d_sum <- d_raw |>
     longitude      = as.numeric(Longitude),
     bottle         = as.integer(Bottle),
     depth_m        = as.numeric(Depth),
-    depth_class    = Depthstype,
-    # 'Navicula ' carries a trailing space in the source (Q10); trimmed here and
-    # in the vocabulary, so the code obs stores is the trimmed one
-    taxa           = str_trim(Taxa),
-    autoclass_classes = `Autoclass classes`,
-    worms_name     = str_trim(`WoRMS matched name`),
+    # source `Sample_type` (surface / chla max); staged as depth_class so it is
+    # not confused with core sample.sample_type ('water')
+    depth_class    = str_trim(Sample_type),
+    # names use '_' for a space. A trailing '_' (the provider's 'Navicula_',
+    # cleaned to 'Navicula' before ingest) is dropped as a guard, so the code
+    # obs stores stays 'Navicula'
+    taxa           = str_remove(str_trim(Taxa), "_+$"),
+    autoclass_classes = Autoclass_classes,
+    worms_name     = str_remove(str_trim(WoRMS_matched_name), "_+$"),
     aphia_id       = as.integer(AphiaID),
-    size_class     = `Sizerange ESD`,
+    size_class     = Size_range_ESD,
     n_cells        = as.integer(Count),
-    abundance_ml   = as.numeric(`Abundance (counts/ml)`),
-    avg_biovol_um3 = as.numeric(`Avg Biovol`),
-    sd_biovol_um3  = as.numeric(`SD biovol`),
-    avg_esd_um     = as.numeric(`Avg ESD`),
-    sd_esd_um      = as.numeric(`SD ESD`),
-    autoclass_version  = as.integer(`Autoclass Version`),
-    autoclass_accuracy = as.character(`Autoclass Accuracy`),
+    abundance_ml   = as.numeric(Abundance_counts_per_ml),
+    avg_biovol_um3 = as.numeric(Avg_Biovol),
+    sd_biovol_um3  = as.numeric(SD_biovol),
+    avg_esd_um     = as.numeric(Avg_ESD),
+    sd_esd_um      = as.numeric(SD_ESD),
+    autoclass_version  = as.integer(Autoclass_Version),
+    autoclass_accuracy = as.character(Autoclass_Accuracy),
     volume_ml      = as.numeric(Volume_ml),
-    sample_time_pt = as.POSIXct(Sample_time_PT, tz = "UTC"))  # naive Pacific wall clock
+    sample_time_utc = as.POSIXct(Sample_time_UTC, tz = "UTC"),
+    sample_time_pt  = as.POSIXct(Sample_time_PT,  tz = "UTC"))  # naive Pacific wall clock
+
+# positions missing from the summary ----
+# the 2026-10-30 re-issue left Latitude/Longitude blank for two 2601LS bins
+# (63.3 80, 63.3 90). The provider's metadata CSV has them for the same bins
+# (Filename = IFCB_filename). Only blanks are filled, only from the bin's own
+# metadata row, never from a neighbouring bin or station (Q16).
+md_pos <- d_md |>
+  filter(!is.na(Filename)) |>
+  distinct(ifcb_filename = Filename,
+           md_latitude   = as.numeric(Latitude),
+           md_longitude  = as.numeric(Longitude))
+pos_fill <- d_sum |>
+  filter(is.na(latitude) | is.na(longitude)) |>
+  distinct(ifcb_filename) |>
+  left_join(md_pos, by = "ifcb_filename")
+stopifnot(
+  "a bin with no position must have exactly one position in the metadata CSV" =
+    !anyDuplicated(pos_fill$ifcb_filename) &&
+      !anyNA(pos_fill$md_latitude) && !anyNA(pos_fill$md_longitude))
+d_sum <- d_sum |>
+  left_join(pos_fill, by = "ifcb_filename") |>
+  mutate(latitude  = coalesce(latitude,  md_latitude),
+         longitude = coalesce(longitude, md_longitude)) |>
+  select(-md_latitude, -md_longitude)
+cat(glue("positions filled from the metadata CSV: {nrow(pos_fill)} bin(s) ",
+         "({paste(pos_fill$ifcb_filename, collapse = ', ')}; Q16)"), "\n")
 
 cat(glue("read {nrow(d_sum)} summary rows / {n_distinct(d_sum$ifcb_filename)} bins / ",
          "{n_distinct(d_sum$taxa)} taxa; {nrow(d_c2w)} class_to_WoRMS rows; ",
@@ -240,12 +303,15 @@ stopifnot(
     !anyDuplicated(d_sum[, c("ifcb_filename", "taxa", "size_class")]),
   "size classes must be the provider's four ESD classes" =
     setequal(unique(d_sum$size_class), c("<10", "10-20", "20-40", "40>")),
+  # the provider's one 'chl a max' bin was cleaned to 'chla max' (Overview)
+  "Sample_type must be 'surface' or 'chla max'" =
+    all(d_sum$depth_class %in% c("surface", "chla max")),
   "every row must carry a positive cell count" = all(d_sum$n_cells > 0))
 
 # 2. one cruise / position / depth / volume per bin (the sample-grain decision)
 bin_grain <- d_sum |>
   distinct(ifcb_filename, cruise, line, station, latitude, longitude, bottle,
-           depth_m, depth_class, volume_ml, sample_time_pt) |>
+           depth_m, depth_class, volume_ml, sample_time_utc, sample_time_pt) |>
   count(ifcb_filename) |> filter(n > 1)
 stopifnot("every bin must share one cruise/position/depth/volume across its rows" =
             nrow(bin_grain) == 0)
@@ -254,13 +320,15 @@ stopifnot("every bin must share one cruise/position/depth/volume across its rows
 stopifnot("abundance_ml must equal n_cells / volume_ml" =
             all(abs(d_sum$abundance_ml - d_sum$n_cells / d_sum$volume_ml) < 1e-8))
 
-# 4. taxon <-> AphiaID is one-to-one (NA AphiaID = unidentified cells only)
+# 4. taxon <-> AphiaID is one-to-one (NA AphiaID = unidentified_cells only)
 tx_map <- d_sum |> distinct(taxa, aphia_id, worms_name)
 stopifnot(
   "one AphiaID per taxon" = !anyDuplicated(tx_map$taxa),
   "one taxon per AphiaID" = !anyDuplicated(na.omit(tx_map$aphia_id)),
-  "the only taxon without an AphiaID is 'unidentified cells'" =
-    identical(tx_map$taxa[is.na(tx_map$aphia_id)], "unidentified cells"))
+  "the only taxon without an AphiaID is 'unidentified_cells'" =
+    identical(tx_map$taxa[is.na(tx_map$aphia_id)], "unidentified_cells"),
+  "taxon names must carry no space (the source writes '_' for a space)" =
+    !any(str_detect(tx_map$taxa, " ")))
 
 # 5. the provider's per_bin_totals sheet reproduces from the summary
 tot <- d_sum |>
@@ -305,7 +373,7 @@ cat(glue(
 # the bin id carries the UTC start of the run: D<YYYYMMDD>T<HHMMSS>_IFCB<nnn>
 d_bin <- d_sum |>
   distinct(ifcb_filename, cruise, line, station, latitude, longitude, bottle,
-           depth_m, depth_class, volume_ml, sample_time_pt) |>
+           depth_m, depth_class, volume_ml, sample_time_utc, sample_time_pt) |>
   mutate(
     datetime_utc = ymd_hms(str_match(ifcb_filename, "^D(\\d{8}T\\d{6})_IFCB\\d+$")[, 2],
                            tz = "UTC"),
@@ -334,6 +402,8 @@ chk_pt <- with_tz(d_bin$datetime_utc, "America/Los_Angeles") |>
 stopifnot(
   "every bin id must parse to a UTC datetime" = !anyNA(d_bin$datetime_utc),
   "cruise code must be YYMM + 2 letters" = all(str_detect(d_bin$cruise, "^\\d{4}[A-Z]{2}$")),
+  "filename UTC must equal the provider's Sample_time_UTC" =
+    all(abs(as.numeric(difftime(d_bin$datetime_utc, d_bin$sample_time_utc, units = "secs"))) <= 1),
   "filename UTC must equal Sample_time_PT converted from America/Los_Angeles" =
     all(abs(as.numeric(difftime(chk_pt, d_bin$sample_time_pt, units = "secs"))) <= 1),
   "one ifcb_sample row per bin" =
@@ -350,7 +420,7 @@ cat(glue("ifcb_sample: {nrow(d_bin)} bins on {n_distinct(d_bin$cruise)} cruises 
 The summary already carries a resolved WoRMS AphiaID for every taxon that has
 one (the provider matched names against WoRMS, `CalCOFI_IFCB_WoRMS_match.xlsx`),
 so there is no name-matching to do: the AphiaID is declared as `worms_id` and the
-package resolves and checks it. The one exception is **`unidentified cells`**:
+package resolves and checks it. The one exception is **`unidentified_cells`**:
 in the provider's table the four classes `nanoplankton_mix`, `flagellate`,
 `colony` and `coccolithophorid` all map to this one name with no AphiaID (the
 single largest group, 37% of all images; Q03). It is not a taxon, so it takes a dataset-local `taxon_key` by
@@ -364,9 +434,9 @@ provider also has as its own class. Both codes stay in `dataset_taxon`, but they
 share one `taxon_key`, so the aggregation below sums them in the 26 bins that
 carry both (Q10).
 
-`ds_taxa_code` is the source's taxon name verbatim, except that
-`unidentified cells` becomes `unidentified_cells` so the minted key
-(`sccoos_ifcb-ctd:unidentified_cells`) has no space in it.
+`ds_taxa_code` is the source's taxon name verbatim (the source now writes `_`
+for a space, so `unidentified_cells` and the minted key
+`sccoos_ifcb-ctd:unidentified_cells` agree).
 
 ```{r}
 #| label: taxon-stage
@@ -381,11 +451,10 @@ tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE
 
 d_vocab <- tx_map |>
   transmute(
-    ds_taxa_code       = if_else(taxa == "unidentified cells", "unidentified_cells", taxa),
+    ds_taxa_code       = taxa,
     # no scientific name for the unidentified class: nothing to look up.
-    # 17 provider names carry an underscore where WoRMS has a space
-    # (Heterocapsa_rotundata, Thalassiosira_mala, Emiliania_huxleyi, ...; Q10):
-    # the display name drops it.
+    # the provider writes '_' for a space in every binomial (Heterocapsa_rotundata,
+    # Thalassiosira_mala, Emiliania_huxleyi, ...): the display name restores it.
     # The lookup is by worms_id, so this never changes which taxon is keyed; the
     # code above stays verbatim because obs joins on it.
     ds_scientific_name = if_else(is.na(aphia_id), NA_character_,
@@ -433,9 +502,7 @@ the taxon total is their sum.
 #| label: aggregate
 
 dbWriteTable(con, "ifcb_summary",
-             d_sum |> mutate(ds_taxa_code = if_else(taxa == "unidentified cells",
-                                                    "unidentified_cells", taxa)) |>
-               as.data.frame(),
+             d_sum |> mutate(ds_taxa_code = taxa) |> as.data.frame(),
              overwrite = TRUE)
 
 # Group by the RESOLVED taxon_key, not the provider's class name. Two provider
@@ -810,7 +877,7 @@ results <- validate_for_release(con, checks = "all", strict = FALSE)
 # NA rows after the first render, then a moved count becomes a hard failure.
 nullable <- tribble(
   ~table,         ~column,             ~n,            ~reason,
-  "ifcb_summary", "aphia_id",          1408L,         "staging table, not published: the rows of the 'unidentified cells' class carry no AphiaID by design (Q03)",
+  "ifcb_summary", "aphia_id",          1408L,         "staging table, not published: the rows of the 'unidentified_cells' class carry no AphiaID by design (Q03)",
   "sample",       "parent_sample_key", n_bin,         "a bin is a root event: not yet linked to the CTD bottle it was drawn from (provider question Q08)",
   "taxon",        "worms_id",          1L,            "the dataset-local 'unidentified_cells' class is not a taxon and has no WoRMS id (Q03)",
   "taxon",        "itis_id",           125L,          "WoRMS links no ITIS TSN for these nodes",
