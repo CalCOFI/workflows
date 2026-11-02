@@ -15,8 +15,16 @@ def safe_path(*parts: str) -> str:
     return str(PurePosixPath(*segs))
 
 
+# types a static site and the Explorer need that mimetypes may not know on every platform
+TYPES = {".wasm": "application/wasm", ".mjs": "text/javascript", ".js": "text/javascript",
+         ".json": "application/json", ".geojson": "application/geo+json",
+         ".parquet": "application/vnd.apache.parquet", ".txt": "text/plain; charset=utf-8",
+         ".md": "text/markdown; charset=utf-8", ".svg": "image/svg+xml", ".woff2": "font/woff2"}
+CHUNK = 1 << 20
+
+
 def content_type(name: str) -> str:
-    return mimetypes.guess_type(name)[0] or "application/octet-stream"
+    return TYPES.get(PurePosixPath(name).suffix.lower()) or mimetypes.guess_type(name)[0] or "application/octet-stream"
 
 
 class LocalStore:
@@ -26,6 +34,18 @@ class LocalStore:
     def read(self, name: str) -> bytes | None:
         f = self.root / safe_path(name)
         return f.read_bytes() if f.is_file() else None
+
+    def stream(self, name: str):
+        """Chunks of the object, or None when it is absent."""
+        f = self.root / safe_path(name)
+        if not f.is_file():
+            return None
+
+        def chunks():
+            with f.open("rb") as fh:
+                while b := fh.read(CHUNK):
+                    yield b
+        return chunks()
 
     def list_prefixes(self, prefix: str) -> list[str]:
         d = self.root / safe_path(prefix)
@@ -54,6 +74,22 @@ class GcsStore:
             return self.bucket.blob(safe_path(name)).download_as_bytes()
         except NotFound:
             return None
+
+    def stream(self, name: str):
+        """Chunks of the object, or None when it is absent. Streamed, never buffered: a buffered
+        Cloud Run response stops at 32 MiB, and a release table (obs_bio) is about that size."""
+        from google.api_core.exceptions import NotFound
+        blob = self.bucket.blob(safe_path(name))
+        try:
+            blob.reload()
+        except NotFound:
+            return None
+
+        def chunks():
+            with blob.open("rb", chunk_size=CHUNK) as fh:
+                while b := fh.read(CHUNK):
+                    yield b
+        return chunks()
 
     def list_prefixes(self, prefix: str) -> list[str]:
         it = self.bucket.client.list_blobs(self.bucket, prefix=safe_path(prefix) + "/", delimiter="/")
