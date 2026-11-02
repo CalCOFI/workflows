@@ -7,7 +7,10 @@ scripts/pull_preview_consent.R.
 
   datasets/{key}/current.txt          the build on show
   datasets/{key}/{build}/build.json   what the build is: name, pages, consent question
-  datasets/{key}/{build}/...          its pages and files
+  datasets/{key}/{build}/...          its pages and files: a summary, and static builds of
+                                      calcofi.io (site/) and the Explorer (explore/)
+  {data_roots}/...                    the candidate release those builds read through
+                                      /d/{key}/data/, e.g. ducklake-preview/ (build.json data_roots)
   access.csv                          dataset_key,email,status,...
   consent/{key}/{utc}_{email}.json    one object per decision, never overwritten
 """
@@ -15,7 +18,7 @@ import html
 import json
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import __version__
 from .access import KEY_RE, may_view, parse_access, visible_keys
@@ -136,14 +139,36 @@ def dataset(key: str, email: str = Depends(who), store=Depends(get_store)):
 def dataset_file(key: str, path: str, email: str = Depends(who), store=Depends(get_store)):
     require(email, key, store)
     b = current_build(store, key)
+    if path == "" or path.endswith("/"):
+        path += "index.html"
     try:
         name = safe_path("datasets", key, str(b["build_id"]), path)
     except ValueError:
         raise HTTPException(400, "bad path") from None
-    data = store.read(name)
-    if data is None:
-        raise HTTPException(404, "not in this build")
-    return Response(data, media_type=content_type(path), headers={"Cache-Control": "private, no-store"})
+    return stream(store, name, "not in this build")
+
+
+@app.get("/d/{key}/data/{path:path}")
+def dataset_data(key: str, path: str, email: str = Depends(who), store=Depends(get_store)):
+    """The candidate release the build's site and Explorer read: only under the build's data_roots,
+    so neither access.csv nor consent/ nor another dataset's build can be reached this way."""
+    require(email, key, store)
+    b = current_build(store, key)
+    try:
+        name = safe_path(path)
+    except ValueError:
+        raise HTTPException(400, "bad path") from None
+    roots = [safe_path(r) for r in b.get("data_roots", [])]
+    if not any(name.startswith(r + "/") for r in roots):
+        raise HTTPException(404, "not in this preview")
+    return stream(store, name, "not in this preview")
+
+
+def stream(store, name: str, missing: str) -> StreamingResponse:
+    chunks = store.stream(name)
+    if chunks is None:
+        raise HTTPException(404, missing)
+    return StreamingResponse(chunks, media_type=content_type(name), headers={"Cache-Control": "private, no-store"})
 
 
 @app.post("/d/{key}/consent")

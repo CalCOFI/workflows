@@ -16,7 +16,8 @@ OTHER = "cce-lter_other"
 BUILD = {"build_id": "b1", "dataset_key": KEY, "dataset_name": "Held zooplankton",
          "created_utc": "2026-10-22T00:00:00Z", "consent_question_id": "sio_held-zoo_09",
          "consent_question": "May CalCOFI.io publish it as shown?",
-         "pages": [{"path": "summary.html", "title": "Summary"}]}
+         "pages": [{"path": "summary.html", "title": "Summary"}],
+         "data_roots": ["ducklake-preview"]}
 
 
 @pytest.fixture
@@ -29,6 +30,13 @@ def store(tmp_path):
         (d / "summary.html").write_text(f"<p>{key} rows</p>")
         (tmp_path / "datasets" / key / "current.txt").write_text("b1\n")
     (tmp_path / "secret.txt").write_text("outside the build")
+    (tmp_path / "datasets" / KEY / "b1" / "site" / "datasets").mkdir(parents=True)
+    (tmp_path / "datasets" / KEY / "b1" / "site" / "index.html").write_text("<p>site home</p>")
+    (tmp_path / "datasets" / KEY / "b1" / "site" / "datasets" / "index.html").write_text("<p>catalog</p>")
+    rel = tmp_path / "ducklake-preview" / "releases"
+    rel.mkdir(parents=True)
+    (rel / "latest.txt").write_text("v2026.11.02\n")
+    (rel / "big.parquet").write_bytes(b"P" * (3 * (1 << 20) + 5))
     (tmp_path / "access.csv").write_text(
         "dataset_key,email,status,granted,granted_by\n"
         f"{KEY},PI@ucsd.edu,active,2026-10-22,ben\n"
@@ -151,3 +159,42 @@ def test_reviewer_does_not_see_other_reviewers_decisions(store, monkeypatch):
                     "application/json")
     assert "theirs" not in client(store, monkeypatch).get(f"/d/{KEY}/").text
     assert "theirs" in client(store, monkeypatch, email="bebest@ucsd.edu").get(f"/d/{KEY}/").text
+
+
+# static builds and the candidate release ---------------------------------------------
+
+def test_a_folder_serves_its_index_html(store, monkeypatch):
+    c = client(store, monkeypatch)
+    assert "site home" in c.get(f"/d/{KEY}/f/site/").text
+    assert "catalog" in c.get(f"/d/{KEY}/f/site/datasets/").text
+
+
+def test_data_is_streamed_whole_from_the_build_data_roots(store, monkeypatch):
+    c = client(store, monkeypatch)
+    r = c.get(f"/d/{KEY}/data/ducklake-preview/releases/latest.txt")
+    assert r.status_code == 200 and r.text.strip() == "v2026.11.02"
+    assert r.headers["cache-control"] == "private, no-store"
+    r = c.get(f"/d/{KEY}/data/ducklake-preview/releases/big.parquet")
+    assert len(r.content) == 3 * (1 << 20) + 5    # several chunks, nothing lost
+    assert r.headers["content-type"] == "application/vnd.apache.parquet"
+
+
+def test_data_never_reaches_outside_the_data_roots(store, monkeypatch):
+    c = client(store, monkeypatch)
+    for path in ["access.csv", "secret.txt", f"consent/{KEY}/x.json", f"datasets/{OTHER}/b1/build.json",
+                 "ducklake-preview-other/x", "ducklake-preview/../access.csv", "ducklake-preview/%2e%2e/access.csv"]:
+        assert c.get(f"/d/{KEY}/data/{path}").status_code in (400, 404), path
+
+
+def test_data_needs_access_to_the_dataset(store, monkeypatch):
+    c = client(store, monkeypatch)
+    assert c.get(f"/d/{OTHER}/data/ducklake-preview/releases/latest.txt").status_code == 404
+    assert client(store, monkeypatch, email="").get(
+        f"/d/{KEY}/data/ducklake-preview/releases/latest.txt").status_code == 401
+
+
+def test_explorer_and_site_assets_get_their_types():
+    from app.store import content_type
+    assert content_type("duckdb-eh.wasm") == "application/wasm"
+    assert content_type("worker.mjs") == "text/javascript"
+    assert content_type("grid.geojson") == "application/geo+json"
