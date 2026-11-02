@@ -8,6 +8,20 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A private preview can include a held dataset
+
+`release_database.qmd` can cut a candidate release into the private preview bucket
+(`CALCOFI_RELEASE_BUCKET=calcofi-preview`, a staging-style run under `ducklake-preview/`) that
+includes datasets every public release holds out (`CALCOFI_RELEASE_INCLUDE`), so a provider sees
+their dataset on calcofi.io and in the Explorer behind a sign-in before agreeing to publish it. A
+held dataset is refused for any public bucket. Public releases are unchanged; the first candidate
+(2026-11-02) includes `sio_cetacean-sightings`, which stays `in_release: false` until the Scripps
+Whale Acoustics Lab signs off.
+
+The `cruise_key` integrity ratchet records that dataset's baseline, 66 effort segments with no
+`cruise_key` (the cruise labels CC2023-03 and CC2024-07 resolve no reference cruise, sightings Q14;
+one segment is misdated, Q07), reached only in that preview.
+
 # v2026.10.30
 
 ## The July 2009 bottle casts join their cruise
