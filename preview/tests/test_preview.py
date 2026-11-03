@@ -16,8 +16,16 @@ OTHER = "cce-lter_other"
 BUILD = {"build_id": "b1", "dataset_key": KEY, "dataset_name": "Held zooplankton",
          "created_utc": "2026-10-22T00:00:00Z", "consent_question_id": "sio_held-zoo_09",
          "consent_question": "May CalCOFI.io publish it as shown?",
-         "pages": [{"path": "summary.html", "title": "Summary"}],
-         "data_roots": ["ducklake-preview"]}
+         "pages": [{"path": "summary.html", "title": "Summary", "short": "Summary"}],
+         "data_roots": ["ducklake-preview"],
+         "dataset": {"dataset_name": "Held zooplankton", "dataset_name_short": "Held zoo",
+                     "description_md": "Zooplankton counts from held tows. More words here.",
+                     "provider": {"short": "SIO", "name": "Scripps Institution of Oceanography"},
+                     "attribution": {"citation_main": "Held, A. 2026. Zooplankton. EDI.", "license": "CC-BY-4.0",
+                                     "license_name": "CC BY 4.0", "license_url": "https://example.org/terms",
+                                     "acknowledgement": None, "pi_names": ["A. Held"]},
+                     "coverage": {"year_min": 2004, "year_max": 2025,
+                                  "years": [{"year": 2004, "n_obs": 100, "n_roots": 40}, {"year": 2025, "n_obs": 50, "n_roots": 10}]}}}
 
 
 @pytest.fixture
@@ -304,3 +312,55 @@ def test_settings_refuse_an_unknown_access_mode(monkeypatch):
     monkeypatch.setenv("PREVIEW_ACCESS", "open")
     with pytest.raises(ValueError):
         Settings()
+
+
+# the landing page, the attribution boxes and private feedback ---------------------------
+
+def test_landing_thanks_the_provider_and_prefills_the_attribution(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    h = c.get(f"{LINK}/").text
+    assert "Thank you for" in h and "Held zoo" in h and "A. Held" in h
+    assert "Held, A. 2026. Zooplankton. EDI." in h and 'value="CC BY 4.0"' in h and 'value="https://example.org/terms"' in h
+    assert "2004–2025" in h and "150" in h and "50" in h          # years · observations · sampling events
+    assert "Feedback" in h and "privately" in h and f'href="{LINK}/f/summary.html"' in h
+
+
+def test_decision_records_the_attribution_and_what_changed(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    r = c.post(f"{LINK}/consent", data={"decision": "yes", "comment": "", "build_id": "b2", "name": "A PI", "email": "pi@lab.org",
+                                        "citation_main": "Held, A. 2026. Zooplankton. EDI.", "license_name": "CC0",
+                                        "license_url": "https://example.org/terms", "acknowledgement": "NSF OCE-1"},
+               follow_redirects=False)
+    assert r.status_code == 303
+    rec = json.loads(link_store.read(link_store.list_names(f"consent/{KEY}")[0]))
+    a = rec["attribution"]
+    assert a["citation_main"] == {"value": "Held, A. 2026. Zooplankton. EDI.", "changed": False}
+    assert a["license_name"] == {"value": "CC0", "changed": True}
+    assert a["acknowledgement"] == {"value": "NSF OCE-1", "changed": True}
+
+
+PNG1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
+
+def test_feedback_is_kept_privately_and_listed(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    payload = {"app": "calcofi-io", "url": f"https://preview.calcofi.io{LINK}/f/site/", "release": "v2026.11.03",
+               "viewport": "1280×800", "theme": "light", "text": "the map is empty", "email": "pi@lab.org", "image": PNG1}
+    r = c.post(f"{LINK}/feedback", content=json.dumps(payload), headers={"Content-Type": "text/plain;charset=UTF-8"})
+    assert r.status_code == 200 and r.json()["ok"] is True and r.json()["private"] is True
+    names = link_store.list_names(f"feedback/{KEY}")
+    assert len(names) == 2 and names[0].endswith(".json") and names[1].endswith(".png")
+    rec = json.loads(link_store.read(names[0]))
+    assert rec["text"] == "the map is empty" and rec["app"] == "calcofi-io" and rec["via"] == "link" and "image" not in rec.get("text")
+    assert c.get(f"{LINK}/fb/{rec['image']}").status_code == 200
+    assert c.get(f"{LINK}/fb/../access.csv").status_code in (400, 404)
+    h = c.get(f"{LINK}/").text
+    assert "the map is empty" in h and f'{LINK}/fb/{rec["image"]}' in h
+    # explorer shape: datasets as a list, kind/label, no image
+    r = c.post(f"{LINK}/feedback", content=json.dumps({"app": "explore", "kind": "feedback", "label": "feedback",
+               "datasets": [KEY], "url": "x", "release": "v", "viewport": "1×1", "theme": "dark", "text": "legend off"}),
+               headers={"Content-Type": "text/plain;charset=UTF-8"})
+    assert r.status_code == 200
+    assert c.post(f"{LINK}/feedback", content="not json", headers={"Content-Type": "text/plain"}).status_code == 400
+    assert c.post(f"/{KEY}/00000000/feedback", content=json.dumps(payload)).status_code == 404
+    assert c.post(f"/d/{KEY}/feedback", content=json.dumps(payload)).status_code == 404   # iap family, link mode
