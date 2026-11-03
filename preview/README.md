@@ -7,14 +7,16 @@ existing billing. Two access modes, set by `PREVIEW_ACCESS` on the service and m
 `scripts/build_preview.sh` when a build is uploaded:
 
 - **`link`** (since 2026-11-03, the mode in use): no sign-in. A dataset is reachable only at
-  `/d/<key>-<16 hex>/`, a slug minted at build time, which the provider receives by email and may
-  pass to colleagues. The decision form asks for a name and address, and the record says they
-  were typed (`via: link`). The service runs with `--allow-unauthenticated --no-iap`. Revoking is
-  deleting the slug's folder (or uploading the next build under a new slug); a build under the
-  plain key is unreachable in this mode. The trade: anyone holding the link can open it, which is
-  what makes it easy to share; a provider uncomfortable with that gets the `iap` mode back.
+  `/<key>/<token>/`, the token 8 characters of `[a-z0-9]` minted at build time, which the
+  provider receives by email as `https://preview.calcofi.io/<key>/<token>/` (the server's Caddy
+  reverse-proxies that host to the service) and may pass to colleagues. The decision form asks
+  for a name and address, and the record says they were typed (`via: link`). The service runs
+  with `--allow-unauthenticated --no-iap`. Revoking is deleting `datasets/<key>-<token>/` (or
+  uploading the next build under a new token); the `/d/<key>/` URLs answer 404 in this mode. The
+  trade: anyone holding the link can open it, which is what makes it easy to share; a provider
+  uncomfortable with that gets the `iap` mode back.
 - **`iap`**: the sign-in mode below, kept intact. IAP signs every request, `access.csv` says
-  which dataset each address sees, the URL names the dataset key.
+  which dataset each address sees, the URL is `/d/<key>/`; the `/<key>/<token>/` URLs answer 404.
 
 ```
 reviewer ──► Cloud Run service calcofi-preview

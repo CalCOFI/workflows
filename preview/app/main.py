@@ -1,14 +1,16 @@
 """calcofi-preview: a private view of a dataset before its provider confirms it.
 
-Two access modes (PREVIEW_ACCESS). `iap`: IAP decides who may sign in at all and access.csv
-(in the bucket, versioned; not in git, which is public) which dataset each address sees; the
-URL names the dataset key. `link`: no sign-in; the URL names an unguessable slug
-({key}-{16 hex}) whose build opted in ("access": "link" in build.json), the provider gets
-the link by email and may pass it on, and the decision form asks for a name and address.
+Two access modes (PREVIEW_ACCESS), each with its own URLs; the other mode's answer 404.
+`iap`, at /d/{key}/: IAP decides who may sign in at all and access.csv (in the bucket,
+versioned; not in git, which is public) which dataset each address sees. `link`, at
+/{key}/{token}/ (preview.calcofi.io/{key}/{token}/ through the server's Caddy): no sign-in;
+the token is 8 characters nobody guesses, the build (datasets/{key}-{token}/) opted in
+("access": "link" in build.json), the provider gets the link by email and may pass it on,
+and the decision form asks for a name and address.
 Either way a decision is written once to consent/{key}/ and folded into the dataset's
 consent question by scripts/pull_preview_consent.R.
 
-  datasets/{slug}/current.txt         the build on show (slug = the key in iap mode)
+  datasets/{slug}/current.txt         the build on show (slug = the key in iap mode, key-token in link mode)
   datasets/{slug}/{build}/build.json  what the build is: dataset_key, name, pages, consent
                                       question, access (iap | link)
   datasets/{slug}/{build}/...         its pages and files: a summary, and static builds of
@@ -25,7 +27,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import __version__
-from .access import may_view, may_view_link, parse_access, visible_keys
+from .access import link_slug, may_view, may_view_link, parse_access, slug_key, visible_keys
 from .config import Settings
 from .consent import DECISIONS, EMAIL_RE, consent_object_name, consent_record
 from .identity import current_email
@@ -63,10 +65,13 @@ def current_build(store, slug: str) -> dict:
     return json.loads(raw)
 
 
-def allowed_build(email: str | None, slug: str, store) -> dict:
-    """The build on show at /d/{slug}/ for this request, or the one 404 that says nothing.
-    iap: the address must be granted the key (or be the team). link: the slug must carry its
-    secret and the build must have opted in; a build published under its plain key is unreachable."""
+def allowed_build(email: str | None, slug: str, store, via: str) -> dict:
+    """The build on show for this request, or the one 404 that says nothing. Each mode answers
+    only its own URLs (`via`): iap at /d/{key}/, where the address must be granted the key (or be
+    the team); link at /{key}/{token}/, where the slug must carry its token and the build must
+    have opted in, so a build published under its plain key is unreachable."""
+    if via != SETTINGS.access:
+        raise HTTPException(404, f"no preview of {slug}")
     if link_mode():
         try:
             b = current_build(store, slug)
@@ -79,6 +84,13 @@ def allowed_build(email: str | None, slug: str, store) -> dict:
     if not may_view(email, slug, grants(store), SETTINGS.team):
         raise HTTPException(404, f"no preview of {slug}")
     return current_build(store, slug)
+
+
+def url_base(slug: str) -> str:
+    """Where this build's pages live: /d/{key} (iap) or /{key}/{token} (link)."""
+    if link_mode():
+        return f"/{slug_key(slug)}/{slug[len(slug_key(slug)) + 1:]}"
+    return f"/d/{slug}"
 
 
 HEAD = """<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -128,13 +140,13 @@ def home(email: str | None = Depends(who), store=Depends(get_store)):
     return page("CalCOFI.io preview", email, body)
 
 
-@app.get("/d/{slug}/", response_class=HTMLResponse)
-def dataset(slug: str, email: str | None = Depends(who), store=Depends(get_store)):
-    b = allowed_build(email, slug, store)
+def dataset(slug: str, email: str | None, store, via: str) -> HTMLResponse:
+    b = allowed_build(email, slug, store, via)
     key = b.get("dataset_key", slug)
+    base = url_base(slug)
     e = html.escape
     pages = "".join(
-        f'<li><a href="/d/{slug}/f/{e(p["path"])}">{e(p.get("title", p["path"]))}</a>'
+        f'<li><a href="{base}/f/{e(p["path"])}">{e(p.get("title", p["path"]))}</a>'
         f'{" — " + e(p["description"]) if p.get("description") else ""}</li>'
         for p in b.get("pages", []))
     mine = [json.loads(store.read(n) or b"{}") for n in store.list_names(f"consent/{key}")]
@@ -153,7 +165,7 @@ def dataset(slug: str, email: str | None = Depends(who), store=Depends(get_store
 <h2>What to review</h2><ul>{pages}</ul>
 <h2>Your decision</h2>
 <p>{e(b.get("consent_question", ""))}</p>
-<form method="post" action="/d/{slug}/consent">
+<form method="post" action="{base}/consent">
   <input type="hidden" name="build_id" value="{e(str(b.get("build_id")))}">
 {whoami}  <p><label><input type="radio" name="decision" value="yes" required> Yes, publish it as shown</label><br>
      <label><input type="radio" name="decision" value="not_yet"> Not yet (say what should change below)</label></p>
@@ -165,9 +177,8 @@ def dataset(slug: str, email: str | None = Depends(who), store=Depends(get_store
     return page(b.get("dataset_name", key), email, body)
 
 
-@app.get("/d/{slug}/f/{path:path}")
-def dataset_file(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
-    b = allowed_build(email, slug, store)
+def dataset_file(slug: str, path: str, email: str | None, store, via: str):
+    b = allowed_build(email, slug, store, via)
     if path == "" or path.endswith("/"):
         path += "index.html"
     try:
@@ -177,11 +188,10 @@ def dataset_file(slug: str, path: str, email: str | None = Depends(who), store=D
     return stream(store, name, "not in this build")
 
 
-@app.get("/d/{slug}/data/{path:path}")
-def dataset_data(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+def dataset_data(slug: str, path: str, email: str | None, store, via: str):
     """The candidate release the build's site and Explorer read: only under the build's data_roots,
     so neither access.csv nor consent/ nor another dataset's build can be reached this way."""
-    b = allowed_build(email, slug, store)
+    b = allowed_build(email, slug, store, via)
     try:
         name = safe_path(path)
     except ValueError:
@@ -199,11 +209,9 @@ def stream(store, name: str, missing: str) -> StreamingResponse:
     return StreamingResponse(chunks, media_type=content_type(name), headers={"Cache-Control": "private, no-store"})
 
 
-@app.post("/d/{slug}/consent")
-def consent(slug: str, decision: str = Form(...), comment: str = Form(""), build_id: str = Form(...),
-            name: str = Form(""), email_typed: str = Form("", alias="email"),
-            email: str | None = Depends(who), store=Depends(get_store)):
-    b = allowed_build(email, slug, store)
+def consent(slug: str, decision: str, comment: str, build_id: str, name: str, email_typed: str,
+            email: str | None, store, via: str) -> RedirectResponse:
+    b = allowed_build(email, slug, store, via)
     key = b.get("dataset_key", slug)
     if decision not in DECISIONS:
         raise HTTPException(400, f"decision must be one of {DECISIONS}")
@@ -221,4 +229,58 @@ def consent(slug: str, decision: str = Form(...), comment: str = Form(""), build
         store.write_new(consent_object_name(rec), json.dumps(rec, indent=2).encode(), "application/json")
     except Exists:
         raise HTTPException(409, "a decision was already recorded this second; reload") from None
-    return RedirectResponse(f"/d/{slug}/", status_code=303)
+    return RedirectResponse(f"{url_base(slug)}/", status_code=303)
+
+
+# the routes: /d/{key}/… answers in iap mode, /{key}/{token}/… in link mode. The /d/ family is
+# declared first so /d/<x>/ never parses as key "d" + token "<x>".
+
+@app.get("/d/{slug}/", response_class=HTMLResponse)
+def dataset_iap(slug: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset(slug, email, store, "iap")
+
+
+@app.get("/d/{slug}/f/{path:path}")
+def dataset_file_iap(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_file(slug, path, email, store, "iap")
+
+
+@app.get("/d/{slug}/data/{path:path}")
+def dataset_data_iap(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_data(slug, path, email, store, "iap")
+
+
+@app.post("/d/{slug}/consent")
+def consent_iap(slug: str, decision: str = Form(...), comment: str = Form(""), build_id: str = Form(...),
+                name: str = Form(""), email_typed: str = Form("", alias="email"),
+                email: str | None = Depends(who), store=Depends(get_store)):
+    return consent(slug, decision, comment, build_id, name, email_typed, email, store, "iap")
+
+
+def _slug(key: str, token: str) -> str:
+    slug = link_slug(key, token)
+    if slug is None:
+        raise HTTPException(404, f"no preview of {key}")
+    return slug
+
+
+@app.get("/{key}/{token}/", response_class=HTMLResponse)
+def dataset_link(key: str, token: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset(_slug(key, token), email, store, "link")
+
+
+@app.get("/{key}/{token}/f/{path:path}")
+def dataset_file_link(key: str, token: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_file(_slug(key, token), path, email, store, "link")
+
+
+@app.get("/{key}/{token}/data/{path:path}")
+def dataset_data_link(key: str, token: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_data(_slug(key, token), path, email, store, "link")
+
+
+@app.post("/{key}/{token}/consent")
+def consent_link(key: str, token: str, decision: str = Form(...), comment: str = Form(""),
+                 build_id: str = Form(...), name: str = Form(""), email_typed: str = Form("", alias="email"),
+                 email: str | None = Depends(who), store=Depends(get_store)):
+    return consent(_slug(key, token), decision, comment, build_id, name, email_typed, email, store, "link")

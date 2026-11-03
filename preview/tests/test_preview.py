@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
-from app.access import may_view, may_view_link, mint_slug, parse_access, slug_key
+from app.access import link_slug, may_view, may_view_link, mint_slug, mint_token, parse_access, slug_key
 from app.config import Settings
 from app.consent import consent_object_name, consent_record
 from app.store import Exists, LocalStore, safe_path
@@ -52,14 +52,16 @@ def client(store, monkeypatch, email="pi@ucsd.edu", team=frozenset({"bebest@ucsd
     return TestClient(main.app)
 
 
-SLUG = f"{KEY}-3f9a1c0e7b2d4a65"
+TOKEN = "k7m2x9q4"
+SLUG = f"{KEY}-{TOKEN}"
+LINK = f"/{KEY}/{TOKEN}"
 
 
 @pytest.fixture
 def link_store(store, tmp_path):
     """The same store with KEY also published under a link-mode slug, and OTHER under a slug
     whose build never opted in."""
-    for slug, key, access in [(SLUG, KEY, "link"), (f"{OTHER}-0123456789abcdef", OTHER, None)]:
+    for slug, key, access in [(SLUG, KEY, "link"), (f"{OTHER}-aaaaaaaa", OTHER, None)]:
         d = tmp_path / "datasets" / slug / "b2"
         d.mkdir(parents=True)
         build = {**BUILD, "build_id": "b2", "dataset_key": key, **({"access": access} if access else {})}
@@ -221,61 +223,79 @@ def test_explorer_and_site_assets_get_their_types():
 
 # link mode -------------------------------------------------------------------------
 
-def test_slugs_carry_the_key_and_64_bits():
+def test_tokens_are_8_of_a_z_0_9_and_slugs_carry_the_key():
+    tok = mint_token()
+    assert len(tok) == 8 and tok.isalnum() and tok.islower() or tok.isdigit()
     s = mint_slug(KEY)
-    assert slug_key(s) == KEY and len(s) == len(KEY) + 17
-    assert slug_key(KEY) is None and slug_key(f"{KEY}-abc") is None and slug_key(f"{KEY}-{'z' * 16}") is None
+    assert slug_key(s) == KEY and len(s) == len(KEY) + 9
+    assert slug_key(KEY) is None and slug_key(f"{KEY}-abc") is None and slug_key(f"{KEY}-ABCDEFGH") is None
+    assert link_slug(KEY, TOKEN) == SLUG
+    assert link_slug("d", TOKEN) is None and link_slug(KEY, "f") is None and link_slug(KEY, "data") is None
     with pytest.raises(ValueError):
         mint_slug("not a key")
     assert may_view_link(SLUG, {"access": "link", "dataset_key": KEY})
     assert not may_view_link(SLUG, {"dataset_key": KEY})                       # never opted in
     assert not may_view_link(SLUG, {"access": "link", "dataset_key": OTHER})   # someone else's build
-    assert not may_view_link(KEY, {"access": "link", "dataset_key": KEY})      # no secret in the path
+    assert not may_view_link(KEY, {"access": "link", "dataset_key": KEY})      # no token
 
 
-def test_link_mode_needs_no_identity_but_only_the_slug_opens(link_store, monkeypatch):
+def test_link_mode_needs_no_identity_but_only_the_link_opens(link_store, monkeypatch):
     c = client(link_store, monkeypatch, email="", access="link")
     assert c.get("/health").status_code == 200
     home = c.get("/")
-    assert home.status_code == 200 and KEY not in home.text and SLUG not in home.text
-    r = c.get(f"/d/{SLUG}/")
+    assert home.status_code == 200 and KEY not in home.text and TOKEN not in home.text
+    r = c.get(f"{LINK}/")
     assert r.status_code == 200 and "opened from a private link" in r.text and 'name="email"' in r.text
-    assert c.get(f"/d/{SLUG}/f/summary.html").status_code == 200
-    assert c.get(f"/d/{SLUG}/data/ducklake-preview/releases/latest.txt").text.strip() == "v2026.11.02"
-    # the plain key, a slug with the wrong secret, and a slug whose build never opted in: all absent
-    for path in [f"/d/{KEY}/", f"/d/{KEY}-0000000000000000/", f"/d/{OTHER}-0123456789abcdef/",
-                 f"/d/{KEY}/f/summary.html", f"/d/{KEY}/data/ducklake-preview/releases/latest.txt"]:
+    assert f'href="{LINK}/f/summary.html"' in r.text and f'action="{LINK}/consent"' in r.text
+    assert c.get(f"{LINK}/f/summary.html").status_code == 200
+    assert c.get(f"{LINK}/data/ducklake-preview/releases/latest.txt").text.strip() == "v2026.11.02"
+    # the iap URLs, the wrong token, a build that never opted in, malformed parts: all absent
+    for path in [f"/d/{KEY}/", f"/d/{SLUG}/", f"/{KEY}/00000000/", f"/{OTHER}/aaaaaaaa/",
+                 f"/d/{KEY}/f/summary.html", f"/d/{KEY}/data/ducklake-preview/releases/latest.txt",
+                 f"/{KEY}/", f"/{KEY}/{TOKEN.upper()}/"]:
         assert c.get(path).status_code == 404, path
+    # a link pasted without its trailing slash still arrives
+    r = c.get(f"{LINK}", follow_redirects=False)
+    assert r.status_code == 307 and r.headers["location"].endswith(f"{LINK}/")
+
+
+def test_iap_mode_never_answers_the_link_urls(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="bebest@ucsd.edu")       # the team, who sees everything
+    assert c.get(f"/d/{SLUG}/").status_code == 200                     # …through the iap family
+    assert c.get(f"{LINK}/").status_code == 404
+    assert c.get(f"{LINK}/f/summary.html").status_code == 404
+    assert c.get(f"{LINK}/data/ducklake-preview/releases/latest.txt").status_code == 404
 
 
 def test_link_mode_ignores_a_stray_iap_header(link_store, monkeypatch):
     c = client(link_store, monkeypatch, email="", access="link")
     monkeypatch.setattr(main, "SETTINGS", replace(main.SETTINGS, iap_audience="/projects/1/locations/r/services/s"))
-    assert c.get(f"/d/{SLUG}/", headers={"x-goog-iap-jwt-assertion": "not.a.jwt"}).status_code == 200
+    assert c.get(f"{LINK}/", headers={"x-goog-iap-jwt-assertion": "not.a.jwt"}).status_code == 200
 
 
 def test_link_mode_decision_names_the_reviewer(link_store, monkeypatch):
     c = client(link_store, monkeypatch, email="", access="link")
-    r = c.post(f"/d/{SLUG}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2"})
+    r = c.post(f"{LINK}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2"})
     assert r.status_code == 400                                   # no name or address
-    r = c.post(f"/d/{SLUG}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2",
-                                            "name": "A PI", "email": "not an address"})
+    r = c.post(f"{LINK}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2",
+                                        "name": "A PI", "email": "not an address"})
     assert r.status_code == 400
-    r = c.post(f"/d/{SLUG}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2",
-                                            "name": "A PI", "email": "PI@lab.org"}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == f"/d/{SLUG}/"
+    r = c.post(f"{LINK}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2",
+                                        "name": "A PI", "email": "PI@lab.org"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"{LINK}/"
     names = link_store.list_names(f"consent/{KEY}")               # filed under the key, not the slug
     assert len(names) == 1 and names[0].endswith("_pi@lab.org.json")
     rec = json.loads(link_store.read(names[0]))
     assert rec["via"] == "link" and rec["name"] == "A PI" and rec["email"] == "pi@lab.org" and rec["dataset_key"] == KEY
-    assert "A PI" in c.get(f"/d/{SLUG}/").text                   # shown to the next holder of the link
+    assert "A PI" in c.get(f"{LINK}/").text                       # shown to the next holder of the link
 
 
 def test_iap_mode_still_serves_the_key_and_records_via_iap(link_store, monkeypatch):
     c = client(link_store, monkeypatch)
-    assert c.get(f"/d/{KEY}/").status_code == 200
+    r = c.get(f"/d/{KEY}/")
+    assert r.status_code == 200 and f'action="/d/{KEY}/consent"' in r.text
     r = c.post(f"/d/{KEY}/consent", data={"decision": "not_yet", "comment": "x", "build_id": "b1"}, follow_redirects=False)
-    assert r.status_code == 303
+    assert r.status_code == 303 and r.headers["location"] == f"/d/{KEY}/"
     rec = json.loads(link_store.read(link_store.list_names(f"consent/{KEY}")[0]))
     assert rec["via"] == "iap" and rec["email"] == "pi@ucsd.edu"
 

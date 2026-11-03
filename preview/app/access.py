@@ -5,20 +5,32 @@ import re
 import secrets
 
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*_[a-z0-9][a-z0-9-]*$")
-# link mode: the dataset key plus 64 bits nobody guesses, e.g. sio_cetacean-sightings-3f9a1c0e7b2d4a65
-SLUG_RE = re.compile(r"^([a-z0-9][a-z0-9-]*_[a-z0-9][a-z0-9-]*)-([0-9a-f]{16})$")
+# link mode: the dataset key and a short token nobody guesses, shown as /<key>/<token>/ and
+# stored as datasets/<key>-<token>/ (8 of [a-z0-9]: 41 bits; the key is public already)
+TOKEN_RE = re.compile(r"^[a-z0-9]{8}$")
+SLUG_RE = re.compile(r"^([a-z0-9][a-z0-9-]*_[a-z0-9][a-z0-9-]*)-([a-z0-9]{8})$")
+ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
+
+
+def mint_token() -> str:
+    return "".join(secrets.choice(ALPHABET) for _ in range(8))
 
 
 def mint_slug(key: str) -> str:
     if not KEY_RE.match(key):
         raise ValueError(f"not a dataset key: {key}")
-    return f"{key}-{secrets.token_hex(8)}"
+    return f"{key}-{mint_token()}"
 
 
 def slug_key(slug: str) -> str | None:
     """The dataset key a link-mode slug names, or None when it is not one."""
     m = SLUG_RE.match(slug)
     return m.group(1) if m else None
+
+
+def link_slug(key: str, token: str) -> str | None:
+    """The storage slug behind /<key>/<token>/, or None when either part is malformed."""
+    return f"{key}-{token}" if KEY_RE.match(key) and TOKEN_RE.match(token) else None
 
 
 def may_view_link(slug: str, build: dict) -> bool:
