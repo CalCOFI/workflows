@@ -14,13 +14,22 @@
 # Env: SITE_DIR (a CalCOFI.github.io checkout with scripts/build_preview.sh, default
 # ../CalCOFI.github.io), EXPLORE_DIR (a CalCOFI/explore checkout with VITE_PREVIEW, default
 # ../explore), CALCOFI_PREVIEW_BUCKET (default calcofi-preview), PREVIEW_RELEASE_ROOT (default
-# ducklake-preview). Uploads as the active gcloud account; the build shows once current.txt names it.
+# ducklake-preview). PREVIEW_ACCESS must match the service's: `iap` (default) shows the build at
+# /d/<key>/ to the addresses access.csv grants; `link` shows it at /d/<slug>/, slug = <key>-<16 hex>
+# minted here (or PREVIEW_SLUG to reuse one), to anyone holding the link. Uploads as the active
+# gcloud account; the build shows once current.txt names it.
 set -euo pipefail
 
 PROVIDER="${1:?provider, e.g. sio}"
 DATASET="${2:?dataset, e.g. cetacean-sightings}"
 NOTEBOOK="${3:-}"
 KEY="${PROVIDER}_${DATASET}"
+ACCESS="${PREVIEW_ACCESS:-iap}"
+case "$ACCESS" in
+  iap)  SLUG="$KEY";;
+  link) SLUG="${PREVIEW_SLUG:-$KEY-$(openssl rand -hex 8)}";;
+  *)    echo "PREVIEW_ACCESS must be iap or link, not $ACCESS" >&2; exit 1;;
+esac
 WF="$(pwd)"
 SITE_DIR="$(cd "${SITE_DIR:-$WF/../CalCOFI.github.io}" && pwd)"
 EXPLORE_DIR="$(cd "${EXPLORE_DIR:-$WF/../explore}" && pwd)"
@@ -35,15 +44,15 @@ VERSION="$(gcloud storage cat "gs://$BUCKET/$REL/latest.txt" | tr -d '[:space:]'
 BUILD="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="$(mktemp -d)/$BUILD"
 mkdir -p "$OUT"
-echo "preview $KEY: candidate release $VERSION, build $BUILD"
+echo "preview $KEY ($ACCESS, /d/$SLUG/): candidate release $VERSION, build $BUILD"
 
 # 1. calcofi.io ----
-(cd "$SITE_DIR" && scripts/build_preview.sh "$KEY" "https://storage.googleapis.com/$BUCKET/$REL" "$OUT/site")
+(cd "$SITE_DIR" && PREVIEW_SLUG="$SLUG" scripts/build_preview.sh "$KEY" "https://storage.googleapis.com/$BUCKET/$REL" "$OUT/site")
 
 # 2. the Explorer: data through the service's /d/{key}/data/ (same origin, behind the same sign-in) ----
 (cd "$EXPLORE_DIR" &&
-  VITE_BASE="/d/$KEY/f/explore/" VITE_DATA_URL="/d/$KEY/data/" VITE_RELEASE_PREFIX="$REL" \
-  VITE_PREVIEW=1 VITE_PREVIEW_HOME="/d/$KEY/" VITE_SITE_URL="/d/$KEY/f/site/" \
+  VITE_BASE="/d/$SLUG/f/explore/" VITE_DATA_URL="/d/$SLUG/data/" VITE_RELEASE_PREFIX="$REL" \
+  VITE_PREVIEW=1 VITE_PREVIEW_HOME="/d/$SLUG/" VITE_SITE_URL="/d/$SLUG/f/site/" \
   npx vite build --outDir "$OUT/explore" --emptyOutDir --logLevel warn)
 
 # 3. the ingest notebook's render, which never goes into the public repo for a held dataset ----
@@ -63,10 +72,10 @@ fi
 
 # 4. build.json: what is on show and the consent question it answers ----
 gcloud storage cat "gs://$BUCKET/$REL/$VERSION/datasets.json" > "$OUT/.datasets.json"
-python3 - "$KEY" "$BUILD" "$VERSION" "$ROOT" "$QUESTIONS" "$OUT" "${NOTEBOOK:+1}" <<'PY'
+python3 - "$KEY" "$BUILD" "$VERSION" "$ROOT" "$QUESTIONS" "$OUT" "${NOTEBOOK:+1}" "$ACCESS" "$SLUG" <<'PY'
 import csv, json, sys
 from datetime import datetime, timezone
-key, build, version, root, questions, out, notebook = sys.argv[1:8]
+key, build, version, root, questions, out, notebook, access, slug = sys.argv[1:10]
 ds = json.load(open(f"{out}/.datasets.json"))
 rec = next((d for d in ds.get("datasets", []) if d.get("dataset_key") == key), None)
 if rec is None:
@@ -90,6 +99,8 @@ build_json = {
     "dataset_name": rec.get("dataset_name") or key,
     "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "release_version": version, "data_roots": [root],
+    # the service serves a build at /d/<slug>/ only in the mode it was built for
+    "access": access, "slug": slug,
     "consent_question_id": q["id"], "consent_question": q["question"],
     "pages": pages}
 json.dump(build_json, open(f"{out}/build.json", "w"), indent=2)
@@ -98,6 +109,6 @@ PY
 rm "$OUT/.datasets.json"
 
 # 5. upload, then show it ----
-gcloud storage cp -r "$OUT" "gs://$BUCKET/datasets/$KEY/" --quiet
-echo "$BUILD" | gcloud storage cp - "gs://$BUCKET/datasets/$KEY/current.txt" --quiet
-echo "shown: https://calcofi-preview-199066946721.us-west1.run.app/d/$KEY/  (build $BUILD)"
+gcloud storage cp -r "$OUT" "gs://$BUCKET/datasets/$SLUG/" --quiet
+echo "$BUILD" | gcloud storage cp - "gs://$BUCKET/datasets/$SLUG/current.txt" --quiet
+echo "shown: https://calcofi-preview-199066946721.us-west1.run.app/d/$SLUG/  (build $BUILD, $ACCESS)"

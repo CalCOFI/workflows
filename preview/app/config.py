@@ -3,6 +3,9 @@ import os
 from dataclasses import dataclass, field
 
 
+ACCESS_MODES = ("iap", "link")
+
+
 def _csv(v: str) -> frozenset[str]:
     return frozenset(e.strip().lower() for e in v.split(",") if e.strip())
 
@@ -19,3 +22,13 @@ class Settings:
     # refused on Cloud Run (K_SERVICE is set there), so it can never ship
     dev_email: str = field(default_factory=lambda: os.environ.get("PREVIEW_DEV_EMAIL", ""))
     on_cloud_run: bool = field(default_factory=lambda: bool(os.environ.get("K_SERVICE")))
+    # how a reviewer reaches a dataset:
+    #   iap   IAP signs every request in; access.csv says which dataset each address sees
+    #   link  no sign-in: a dataset is reachable only through its unguessable slug
+    #         (datasets/{key}-{16 hex}/, build.json "access": "link"), sent to the provider,
+    #         who may pass it on; the decision form asks for a name and address instead
+    access: str = field(default_factory=lambda: os.environ.get("PREVIEW_ACCESS", "iap"))
+
+    def __post_init__(self):
+        if self.access not in ACCESS_MODES:
+            raise ValueError(f"PREVIEW_ACCESS must be one of {ACCESS_MODES}, not {self.access!r}")

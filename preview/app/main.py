@@ -1,17 +1,21 @@
-"""calcofi-preview: a sign-in-only view of a dataset before its provider confirms it.
+"""calcofi-preview: a private view of a dataset before its provider confirms it.
 
-IAP decides who may sign in at all; access.csv (in the bucket, versioned; not in git,
-which is public) decides which dataset each person sees; a decision is written once to
-consent/{key}/ and folded into the dataset's consent question by
-scripts/pull_preview_consent.R.
+Two access modes (PREVIEW_ACCESS). `iap`: IAP decides who may sign in at all and access.csv
+(in the bucket, versioned; not in git, which is public) which dataset each address sees; the
+URL names the dataset key. `link`: no sign-in; the URL names an unguessable slug
+({key}-{16 hex}) whose build opted in ("access": "link" in build.json), the provider gets
+the link by email and may pass it on, and the decision form asks for a name and address.
+Either way a decision is written once to consent/{key}/ and folded into the dataset's
+consent question by scripts/pull_preview_consent.R.
 
-  datasets/{key}/current.txt          the build on show
-  datasets/{key}/{build}/build.json   what the build is: name, pages, consent question
-  datasets/{key}/{build}/...          its pages and files: a summary, and static builds of
+  datasets/{slug}/current.txt         the build on show (slug = the key in iap mode)
+  datasets/{slug}/{build}/build.json  what the build is: dataset_key, name, pages, consent
+                                      question, access (iap | link)
+  datasets/{slug}/{build}/...         its pages and files: a summary, and static builds of
                                       calcofi.io (site/) and the Explorer (explore/)
   {data_roots}/...                    the candidate release those builds read through
-                                      /d/{key}/data/, e.g. ducklake-preview/ (build.json data_roots)
-  access.csv                          dataset_key,email,status,...
+                                      /d/{slug}/data/, e.g. ducklake-preview/ (build.json data_roots)
+  access.csv                          dataset_key,email,status,...   (iap mode)
   consent/{key}/{utc}_{email}.json    one object per decision, never overwritten
 """
 import html
@@ -21,9 +25,9 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import __version__
-from .access import KEY_RE, may_view, parse_access, visible_keys
+from .access import may_view, may_view_link, parse_access, visible_keys
 from .config import Settings
-from .consent import DECISIONS, consent_object_name, consent_record
+from .consent import DECISIONS, EMAIL_RE, consent_object_name, consent_record
 from .identity import current_email
 from .store import Exists, GcsStore, content_type, safe_path
 
@@ -39,26 +43,42 @@ def get_store():
     return STORE
 
 
-def who(request: Request) -> str:
+def who(request: Request) -> str | None:
     return current_email(request, SETTINGS)
+
+
+def link_mode() -> bool:
+    return SETTINGS.access == "link"
 
 
 def grants(store) -> dict:
     return parse_access((store.read("access.csv") or b"").decode())
 
 
-def current_build(store, key: str) -> dict:
-    bid = (store.read(f"datasets/{key}/current.txt") or b"").decode().strip()
-    raw = store.read(f"datasets/{key}/{bid}/build.json") if bid else None
+def current_build(store, slug: str) -> dict:
+    bid = (store.read(f"datasets/{slug}/current.txt") or b"").decode().strip()
+    raw = store.read(f"datasets/{slug}/{bid}/build.json") if bid else None
     if not raw:
-        raise HTTPException(404, f"no preview of {key}")
+        raise HTTPException(404, f"no preview of {slug}")
     return json.loads(raw)
 
 
-def require(email: str, key: str, store) -> None:
+def allowed_build(email: str | None, slug: str, store) -> dict:
+    """The build on show at /d/{slug}/ for this request, or the one 404 that says nothing.
+    iap: the address must be granted the key (or be the team). link: the slug must carry its
+    secret and the build must have opted in; a build published under its plain key is unreachable."""
+    if link_mode():
+        try:
+            b = current_build(store, slug)
+        except HTTPException:
+            b = {}
+        if not may_view_link(slug, b):
+            raise HTTPException(404, f"no preview of {slug}")
+        return b
     # the same 404 for "not granted" and "no such dataset": a reviewer learns nothing of the others
-    if not may_view(email, key, grants(store), SETTINGS.team):
-        raise HTTPException(404, f"no preview of {key}")
+    if not may_view(email, slug, grants(store), SETTINGS.team):
+        raise HTTPException(404, f"no preview of {slug}")
+    return current_build(store, slug)
 
 
 HEAD = """<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -75,13 +95,14 @@ HEAD = """<!doctype html><html lang="en"><head><meta charset="utf-8">
   textarea {{ width: 100%; min-height: 5rem; }}
   table {{ border-collapse: collapse; }} td, th {{ padding: .25rem .5rem; text-align: left; }}
 </style></head><body>
-<p><a href="/">CalCOFI.io preview</a> · signed in as {email}</p>
+<p><a href="/">CalCOFI.io preview</a> · {viewer}</p>
 """
 
 
-def page(title: str, email: str, body: str) -> HTMLResponse:
+def page(title: str, email: str | None, body: str) -> HTMLResponse:
     e = html.escape
-    return HTMLResponse(HEAD.format(title=e(title), email=e(email)) + body + "</body></html>",
+    viewer = "opened from a private link" if email is None else f"signed in as {e(email)}"
+    return HTMLResponse(HEAD.format(title=e(title), viewer=viewer) + body + "</body></html>",
                         headers={"Cache-Control": "private, no-store"})
 
 
@@ -92,7 +113,12 @@ def health():
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(email: str = Depends(who), store=Depends(get_store)):
+def home(email: str | None = Depends(who), store=Depends(get_store)):
+    if link_mode():
+        # nothing to list: each dataset opens only from the link its provider received
+        return page("CalCOFI.io preview", None,
+                    "<h1>CalCOFI.io preview</h1><p>A dataset preview opens from the private link "
+                    "sent to its data provider. If you were sent one, use that link.</p>")
     keys = visible_keys(email, grants(store), SETTINGS.team, store.list_prefixes("datasets"))
     items = "".join(f'<li><a href="/d/{k}/">{html.escape(k)}</a></li>' for k in keys)
     body = ("<h1>Datasets to review</h1>"
@@ -102,20 +128,24 @@ def home(email: str = Depends(who), store=Depends(get_store)):
     return page("CalCOFI.io preview", email, body)
 
 
-@app.get("/d/{key}/", response_class=HTMLResponse)
-def dataset(key: str, email: str = Depends(who), store=Depends(get_store)):
-    require(email, key, store)
-    b = current_build(store, key)
+@app.get("/d/{slug}/", response_class=HTMLResponse)
+def dataset(slug: str, email: str | None = Depends(who), store=Depends(get_store)):
+    b = allowed_build(email, slug, store)
+    key = b.get("dataset_key", slug)
     e = html.escape
     pages = "".join(
-        f'<li><a href="/d/{key}/f/{e(p["path"])}">{e(p.get("title", p["path"]))}</a>'
+        f'<li><a href="/d/{slug}/f/{e(p["path"])}">{e(p.get("title", p["path"]))}</a>'
         f'{" — " + e(p["description"]) if p.get("description") else ""}</li>'
         for p in b.get("pages", []))
     mine = [json.loads(store.read(n) or b"{}") for n in store.list_names(f"consent/{key}")]
-    if email not in SETTINGS.team:
+    if not link_mode() and email not in SETTINGS.team:
         mine = [r for r in mine if r.get("email") == email]
-    rows = "".join(f"<tr><td>{e(r.get('recorded_utc', ''))}</td><td>{e(r.get('email', ''))}</td>"
+    rows = "".join(f"<tr><td>{e(r.get('recorded_utc', ''))}</td>"
+                   f"<td>{e(r.get('name') or r.get('email', ''))}</td>"
                    f"<td>{e(r.get('decision', ''))}</td><td>{e(r.get('comment', ''))}</td></tr>" for r in mine)
+    whoami = ("""  <p><label>Your name<br><input type="text" name="name" required maxlength="200"></label><br>
+     <label>Your email<br><input type="email" name="email" required maxlength="200"></label></p>
+""" if link_mode() else "")
     body = f"""
 <h1>{e(b.get("dataset_name", key))}</h1>
 <p class="note">This is a private preview of <code>{e(key)}</code> as CalCOFI.io would publish it
@@ -123,9 +153,9 @@ def dataset(key: str, email: str = Depends(who), store=Depends(get_store)):
 <h2>What to review</h2><ul>{pages}</ul>
 <h2>Your decision</h2>
 <p>{e(b.get("consent_question", ""))}</p>
-<form method="post" action="/d/{key}/consent">
+<form method="post" action="/d/{slug}/consent">
   <input type="hidden" name="build_id" value="{e(str(b.get("build_id")))}">
-  <p><label><input type="radio" name="decision" value="yes" required> Yes, publish it as shown</label><br>
+{whoami}  <p><label><input type="radio" name="decision" value="yes" required> Yes, publish it as shown</label><br>
      <label><input type="radio" name="decision" value="not_yet"> Not yet (say what should change below)</label></p>
   <p><label>Comments<br><textarea name="comment"></textarea></label></p>
   <p><button type="submit">Record my decision</button></p>
@@ -135,25 +165,23 @@ def dataset(key: str, email: str = Depends(who), store=Depends(get_store)):
     return page(b.get("dataset_name", key), email, body)
 
 
-@app.get("/d/{key}/f/{path:path}")
-def dataset_file(key: str, path: str, email: str = Depends(who), store=Depends(get_store)):
-    require(email, key, store)
-    b = current_build(store, key)
+@app.get("/d/{slug}/f/{path:path}")
+def dataset_file(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    b = allowed_build(email, slug, store)
     if path == "" or path.endswith("/"):
         path += "index.html"
     try:
-        name = safe_path("datasets", key, str(b["build_id"]), path)
+        name = safe_path("datasets", slug, str(b["build_id"]), path)
     except ValueError:
         raise HTTPException(400, "bad path") from None
     return stream(store, name, "not in this build")
 
 
-@app.get("/d/{key}/data/{path:path}")
-def dataset_data(key: str, path: str, email: str = Depends(who), store=Depends(get_store)):
+@app.get("/d/{slug}/data/{path:path}")
+def dataset_data(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
     """The candidate release the build's site and Explorer read: only under the build's data_roots,
     so neither access.csv nor consent/ nor another dataset's build can be reached this way."""
-    require(email, key, store)
-    b = current_build(store, key)
+    b = allowed_build(email, slug, store)
     try:
         name = safe_path(path)
     except ValueError:
@@ -171,19 +199,26 @@ def stream(store, name: str, missing: str) -> StreamingResponse:
     return StreamingResponse(chunks, media_type=content_type(name), headers={"Cache-Control": "private, no-store"})
 
 
-@app.post("/d/{key}/consent")
-def consent(key: str, decision: str = Form(...), comment: str = Form(""), build_id: str = Form(...),
-            email: str = Depends(who), store=Depends(get_store)):
-    require(email, key, store)
+@app.post("/d/{slug}/consent")
+def consent(slug: str, decision: str = Form(...), comment: str = Form(""), build_id: str = Form(...),
+            name: str = Form(""), email_typed: str = Form("", alias="email"),
+            email: str | None = Depends(who), store=Depends(get_store)):
+    b = allowed_build(email, slug, store)
+    key = b.get("dataset_key", slug)
     if decision not in DECISIONS:
         raise HTTPException(400, f"decision must be one of {DECISIONS}")
-    b = current_build(store, key)
     if str(b.get("build_id")) != build_id:
         # the page was older than the build now on show: they decided on something else
         raise HTTPException(409, "this preview was updated while you had it open; reload and review it again")
-    rec = consent_record(key, email, decision, comment, b)
+    if link_mode():
+        # nobody signed in: the reviewer says who they are, and the record says it was typed
+        if not name.strip() or not EMAIL_RE.match(email_typed.strip()):
+            raise HTTPException(400, "a name and an email address are needed with the decision")
+        rec = consent_record(key, email_typed.strip().lower(), decision, comment, b, name=name, via="link")
+    else:
+        rec = consent_record(key, email, decision, comment, b, via="iap")
     try:
         store.write_new(consent_object_name(rec), json.dumps(rec, indent=2).encode(), "application/json")
     except Exists:
         raise HTTPException(409, "a decision was already recorded this second; reload") from None
-    return RedirectResponse(f"/d/{key}/", status_code=303)
+    return RedirectResponse(f"/d/{slug}/", status_code=303)
