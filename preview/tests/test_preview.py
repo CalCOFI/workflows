@@ -364,3 +364,24 @@ def test_feedback_is_kept_privately_and_listed(link_store, monkeypatch):
     assert c.post(f"{LINK}/feedback", content="not json", headers={"Content-Type": "text/plain"}).status_code == 400
     assert c.post(f"/{KEY}/00000000/feedback", content=json.dumps(payload)).status_code == 404
     assert c.post(f"/d/{KEY}/feedback", content=json.dumps(payload)).status_code == 404   # iap family, link mode
+
+
+# HEAD and byte ranges, what DuckDB-WASM asks for --------------------------------------
+
+def test_head_and_ranges_on_data_and_files(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    big = f"{LINK}/data/ducklake-preview/releases/big.parquet"
+    r = c.head(big)
+    assert r.status_code == 200 and r.headers["content-length"] == str(3 * (1 << 20) + 5) and r.headers["accept-ranges"] == "bytes"
+    r = c.get(big, headers={"Range": "bytes=0-9"})
+    assert r.status_code == 206 and len(r.content) == 10 and r.headers["content-range"] == f"bytes 0-9/{3 * (1 << 20) + 5}"
+    r = c.get(big, headers={"Range": "bytes=3145720-"})          # to the end, across a chunk boundary
+    assert r.status_code == 206 and len(r.content) == 3 * (1 << 20) + 5 - 3145720
+    r = c.get(big, headers={"Range": "bytes=-5"})                 # the last five
+    assert r.status_code == 206 and len(r.content) == 5
+    assert c.get(big, headers={"Range": "bytes=99999999-"}).status_code == 416
+    r = c.get(big)                                                 # whole, still
+    assert r.status_code == 200 and len(r.content) == 3 * (1 << 20) + 5 and r.headers["content-length"] == str(3 * (1 << 20) + 5)
+    assert c.head(f"{LINK}/f/summary.html").status_code == 200
+    assert c.head(f"{LINK}/f/missing.html").status_code == 404
+    assert c.head(f"/d/{KEY}/f/summary.html").status_code == 404   # the iap family, in link mode
