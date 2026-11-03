@@ -22,7 +22,10 @@ def verify_iap_jwt(token: str, audience: str) -> str:
     return claims["email"].lower()
 
 
-def current_email(request: Request, settings: Settings) -> str:
+def current_email(request: Request, settings: Settings) -> str | None:
+    """The signed-in address, or None in link mode (IAP is off there; a stray header is ignored)."""
+    if settings.access == "link":
+        return None
     token = request.headers.get("x-goog-iap-jwt-assertion")
     if token:
         if not settings.iap_audience:

@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
-from app.access import may_view, parse_access
+from app.access import may_view, may_view_link, mint_slug, parse_access, slug_key
 from app.config import Settings
 from app.consent import consent_object_name, consent_record
 from app.store import Exists, LocalStore, safe_path
@@ -44,10 +44,29 @@ def store(tmp_path):
     return s
 
 
-def client(store, monkeypatch, email="pi@ucsd.edu", team=frozenset({"bebest@ucsd.edu"}), on_cloud_run=False):
+def client(store, monkeypatch, email="pi@ucsd.edu", team=frozenset({"bebest@ucsd.edu"}), on_cloud_run=False,
+           access="iap"):
     monkeypatch.setattr(main, "STORE", store)
-    monkeypatch.setattr(main, "SETTINGS", replace(Settings(), team=team, dev_email=email, on_cloud_run=on_cloud_run))
+    monkeypatch.setattr(main, "SETTINGS", replace(Settings(), team=team, dev_email=email, on_cloud_run=on_cloud_run,
+                                                  access=access))
     return TestClient(main.app)
+
+
+SLUG = f"{KEY}-3f9a1c0e7b2d4a65"
+
+
+@pytest.fixture
+def link_store(store, tmp_path):
+    """The same store with KEY also published under a link-mode slug, and OTHER under a slug
+    whose build never opted in."""
+    for slug, key, access in [(SLUG, KEY, "link"), (f"{OTHER}-0123456789abcdef", OTHER, None)]:
+        d = tmp_path / "datasets" / slug / "b2"
+        d.mkdir(parents=True)
+        build = {**BUILD, "build_id": "b2", "dataset_key": key, **({"access": access} if access else {})}
+        (d / "build.json").write_text(json.dumps(build))
+        (d / "summary.html").write_text(f"<p>{slug} rows</p>")
+        (tmp_path / "datasets" / slug / "current.txt").write_text("b2\n")
+    return store
 
 
 # access -------------------------------------------------------------------------
@@ -198,3 +217,70 @@ def test_explorer_and_site_assets_get_their_types():
     assert content_type("duckdb-eh.wasm") == "application/wasm"
     assert content_type("worker.mjs") == "text/javascript"
     assert content_type("grid.geojson") == "application/geo+json"
+
+
+# link mode -------------------------------------------------------------------------
+
+def test_slugs_carry_the_key_and_64_bits():
+    s = mint_slug(KEY)
+    assert slug_key(s) == KEY and len(s) == len(KEY) + 17
+    assert slug_key(KEY) is None and slug_key(f"{KEY}-abc") is None and slug_key(f"{KEY}-{'z' * 16}") is None
+    with pytest.raises(ValueError):
+        mint_slug("not a key")
+    assert may_view_link(SLUG, {"access": "link", "dataset_key": KEY})
+    assert not may_view_link(SLUG, {"dataset_key": KEY})                       # never opted in
+    assert not may_view_link(SLUG, {"access": "link", "dataset_key": OTHER})   # someone else's build
+    assert not may_view_link(KEY, {"access": "link", "dataset_key": KEY})      # no secret in the path
+
+
+def test_link_mode_needs_no_identity_but_only_the_slug_opens(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    assert c.get("/health").status_code == 200
+    home = c.get("/")
+    assert home.status_code == 200 and KEY not in home.text and SLUG not in home.text
+    r = c.get(f"/d/{SLUG}/")
+    assert r.status_code == 200 and "opened from a private link" in r.text and 'name="email"' in r.text
+    assert c.get(f"/d/{SLUG}/f/summary.html").status_code == 200
+    assert c.get(f"/d/{SLUG}/data/ducklake-preview/releases/latest.txt").text.strip() == "v2026.11.02"
+    # the plain key, a slug with the wrong secret, and a slug whose build never opted in: all absent
+    for path in [f"/d/{KEY}/", f"/d/{KEY}-0000000000000000/", f"/d/{OTHER}-0123456789abcdef/",
+                 f"/d/{KEY}/f/summary.html", f"/d/{KEY}/data/ducklake-preview/releases/latest.txt"]:
+        assert c.get(path).status_code == 404, path
+
+
+def test_link_mode_ignores_a_stray_iap_header(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    monkeypatch.setattr(main, "SETTINGS", replace(main.SETTINGS, iap_audience="/projects/1/locations/r/services/s"))
+    assert c.get(f"/d/{SLUG}/", headers={"x-goog-iap-jwt-assertion": "not.a.jwt"}).status_code == 200
+
+
+def test_link_mode_decision_names_the_reviewer(link_store, monkeypatch):
+    c = client(link_store, monkeypatch, email="", access="link")
+    r = c.post(f"/d/{SLUG}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2"})
+    assert r.status_code == 400                                   # no name or address
+    r = c.post(f"/d/{SLUG}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2",
+                                            "name": "A PI", "email": "not an address"})
+    assert r.status_code == 400
+    r = c.post(f"/d/{SLUG}/consent", data={"decision": "yes", "comment": "fine", "build_id": "b2",
+                                            "name": "A PI", "email": "PI@lab.org"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/d/{SLUG}/"
+    names = link_store.list_names(f"consent/{KEY}")               # filed under the key, not the slug
+    assert len(names) == 1 and names[0].endswith("_pi@lab.org.json")
+    rec = json.loads(link_store.read(names[0]))
+    assert rec["via"] == "link" and rec["name"] == "A PI" and rec["email"] == "pi@lab.org" and rec["dataset_key"] == KEY
+    assert "A PI" in c.get(f"/d/{SLUG}/").text                   # shown to the next holder of the link
+
+
+def test_iap_mode_still_serves_the_key_and_records_via_iap(link_store, monkeypatch):
+    c = client(link_store, monkeypatch)
+    assert c.get(f"/d/{KEY}/").status_code == 200
+    r = c.post(f"/d/{KEY}/consent", data={"decision": "not_yet", "comment": "x", "build_id": "b1"}, follow_redirects=False)
+    assert r.status_code == 303
+    rec = json.loads(link_store.read(link_store.list_names(f"consent/{KEY}")[0]))
+    assert rec["via"] == "iap" and rec["email"] == "pi@ucsd.edu"
+
+
+def test_settings_refuse_an_unknown_access_mode(monkeypatch):
+    monkeypatch.setenv("PREVIEW_ACCESS", "open")
+    with pytest.raises(ValueError):
+        Settings()

@@ -1,22 +1,34 @@
 # calcofi-preview
 
-A sign-in-only view of a dataset before its provider has confirmed it may be published. The
-provider's PI signs in with their Google identity, sees the dataset as CalCOFI.io would publish
-it, and records "yes, publish it as shown" or "not yet" in place. Everything runs in the
-`ucsd-sio-calcofi` Google Cloud project, on its existing billing.
+A private view of a dataset before its provider has confirmed it may be published. The
+provider sees the dataset as CalCOFI.io would publish it and records "yes, publish it as shown"
+or "not yet" in place. Everything runs in the `ucsd-sio-calcofi` Google Cloud project, on its
+existing billing. Two access modes, set by `PREVIEW_ACCESS` on the service and matched by
+`scripts/build_preview.sh` when a build is uploaded:
+
+- **`link`** (since 2026-11-03, the mode in use): no sign-in. A dataset is reachable only at
+  `/d/<key>-<16 hex>/`, a slug minted at build time, which the provider receives by email and may
+  pass to colleagues. The decision form asks for a name and address, and the record says they
+  were typed (`via: link`). The service runs with `--allow-unauthenticated --no-iap`. Revoking is
+  deleting the slug's folder (or uploading the next build under a new slug); a build under the
+  plain key is unreachable in this mode. The trade: anyone holding the link can open it, which is
+  what makes it easy to share; a provider uncomfortable with that gets the `iap` mode back.
+- **`iap`**: the sign-in mode below, kept intact. IAP signs every request, `access.csv` says
+  which dataset each address sees, the URL names the dataset key.
 
 ```
-reviewer ──► Cloud Run service calcofi-preview  (IAP in front: Google sign-in, no anonymous request reaches it)
-                │  verifies IAP's signed header → email
-                │  access.csv: which datasets that email may see (the data team sees all)
+reviewer ──► Cloud Run service calcofi-preview
+                │  link: the slug in the URL is the credential; build.json must say access = link
+                │  iap:  IAP in front (Google sign-in); its signed header → email;
+                │        access.csv: which datasets that email may see (the data team sees all)
                 ▼
              gs://calcofi-preview  (private: uniform access, public access prevention, versioned)
-                datasets/{key}/current.txt, datasets/{key}/{build}/build.json + pages + files
-                access.csv                       ← who may see which dataset (versioned here, not in git)
+                datasets/{slug}/current.txt, datasets/{slug}/{build}/build.json + pages + files
+                access.csv                       ← who may see which dataset (iap; versioned here, not in git)
                 consent/{key}/{utc}_{email}.json ← one object per decision, create-only
 ```
 
-- **Two gates.** IAP decides who may sign in at all (every reviewer and the team are granted
+- **Two gates (iap mode).** IAP decides who may sign in at all (every reviewer and the team are granted
   `roles/iap.httpsResourceAccessor` on the service). The app decides which dataset each person
   sees, from `access.csv`; a dataset not granted answers the same 404 as one that does not exist.
 - **The trail.** A decision records the verified email, the time, the build shown (its id and
@@ -25,6 +37,22 @@ reviewer ──► Cloud Run service calcofi-preview  (IAP in front: Google sign
   writes with `if_generation_match=0`. IAP's own audit logs record each sign-in.
 - **Into git.** A pull script folds each decision into the dataset's consent question in
   `questions.csv` (answer, who, answered_date), the same record a verbal or emailed yes lands in.
+
+## Switching the mode
+
+```sh
+P=ucsd-sio-calcofi; R=us-west1; SA=calcofi-preview@$P.iam.gserviceaccount.com
+# link: open the service, turn IAP off, tell the app
+gcloud run deploy calcofi-preview --source . --project $P --region $R --service-account $SA \
+  --allow-unauthenticated --no-iap --update-env-vars PREVIEW_ACCESS=link
+# back to iap
+gcloud run deploy calcofi-preview --source . --project $P --region $R --service-account $SA \
+  --no-allow-unauthenticated --iap --update-env-vars PREVIEW_ACCESS=iap
+```
+
+Then upload each dataset's build with the same `PREVIEW_ACCESS` (`scripts/build_preview.sh`);
+a build made for the other mode answers 404. Deploying needs `roles/run.admin`,
+`roles/cloudbuild.builds.editor` and `roles/iam.serviceAccountUser` on the project.
 
 ## Run the tests
 

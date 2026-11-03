@@ -2,8 +2,29 @@
 import csv
 import io
 import re
+import secrets
 
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]*_[a-z0-9][a-z0-9-]*$")
+# link mode: the dataset key plus 64 bits nobody guesses, e.g. sio_cetacean-sightings-3f9a1c0e7b2d4a65
+SLUG_RE = re.compile(r"^([a-z0-9][a-z0-9-]*_[a-z0-9][a-z0-9-]*)-([0-9a-f]{16})$")
+
+
+def mint_slug(key: str) -> str:
+    if not KEY_RE.match(key):
+        raise ValueError(f"not a dataset key: {key}")
+    return f"{key}-{secrets.token_hex(8)}"
+
+
+def slug_key(slug: str) -> str | None:
+    """The dataset key a link-mode slug names, or None when it is not one."""
+    m = SLUG_RE.match(slug)
+    return m.group(1) if m else None
+
+
+def may_view_link(slug: str, build: dict) -> bool:
+    """Link mode: the slug carries the secret and the build on show opted in to it."""
+    key = slug_key(slug)
+    return key is not None and build.get("access") == "link" and build.get("dataset_key") == key
 
 
 def parse_access(text: str) -> dict[str, frozenset[str]]:
