@@ -31,8 +31,10 @@ fs.mkdirSync(out, { recursive: true });
     const page = await browser.newPage();
     try {
       await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
-      await page.goto(u.href, { waitUntil: "networkidle2", timeout: 90000 });
-      await new Promise((r) => setTimeout(r, 2500));          // maps and charts finish drawing
+      await page.goto(u.href, { waitUntil: "load", timeout: 90000 });
+      // the Explorer and the Finder pull DuckDB-WASM and the candidate's parquet before they draw:
+      // measured 2026-11-03, both are complete well inside 30 s and blank at 5 s
+      await new Promise((r) => setTimeout(r, Number(process.env.SHOT_SETTLE_MS || 30000)));
       await page.screenshot({ path: file, type: "png" });
       console.log(`${file}  ${u.href}`);
     } catch (e) {

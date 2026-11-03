@@ -24,11 +24,12 @@ import base64
 import binascii
 import html
 import json
+import re
 import secrets
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from . import __version__
 from .access import link_slug, may_view, may_view_link, parse_access, slug_key, visible_keys
@@ -290,7 +291,7 @@ def dataset(slug: str, email: str | None, store, via: str) -> HTMLResponse:
     return page(name, email, body)
 
 
-def dataset_file(slug: str, path: str, email: str | None, store, via: str):
+def dataset_file(slug: str, path: str, email: str | None, store, via: str, request: Request | None = None):
     b = allowed_build(email, slug, store, via)
     if path == "" or path.endswith("/"):
         path += "index.html"
@@ -298,10 +299,10 @@ def dataset_file(slug: str, path: str, email: str | None, store, via: str):
         name = safe_path("datasets", slug, str(b["build_id"]), path)
     except ValueError:
         raise HTTPException(400, "bad path") from None
-    return stream(store, name, "not in this build")
+    return stream(store, name, "not in this build", request)
 
 
-def dataset_data(slug: str, path: str, email: str | None, store, via: str):
+def dataset_data(slug: str, path: str, email: str | None, store, via: str, request: Request | None = None):
     """The candidate release the build's site and Explorer read: only under the build's data_roots,
     so neither access.csv nor consent/ nor another dataset's build can be reached this way."""
     b = allowed_build(email, slug, store, via)
@@ -312,14 +313,44 @@ def dataset_data(slug: str, path: str, email: str | None, store, via: str):
     roots = [safe_path(r) for r in b.get("data_roots", [])]
     if not any(name.startswith(r + "/") for r in roots):
         raise HTTPException(404, "not in this preview")
-    return stream(store, name, "not in this preview")
+    return stream(store, name, "not in this preview", request)
 
 
-def stream(store, name: str, missing: str) -> StreamingResponse:
+RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+
+def stream(store, name: str, missing: str, request: Request | None = None):
+    """The object, whole or by byte range (206), with HEAD answered from its size: DuckDB-WASM in the
+    Explorer and the Finder reads parquet by ranges and asks HEAD first; without this it downloads
+    whole objects (and the wasm bundle's HEAD was a 405)."""
+    size = store.size(name)
+    if size is None:
+        raise HTTPException(404, missing)
+    headers = {"Cache-Control": "private, no-store", "Accept-Ranges": "bytes"}
+    ctype = content_type(name)
+    if request is not None and request.method == "HEAD":
+        return Response(status_code=200, media_type=ctype, headers={**headers, "Content-Length": str(size)})
+    rng = request.headers.get("range") if request is not None else None
+    m = RANGE_RE.match(rng) if rng else None
+    if m and size > 0:
+        a, b = m.group(1), m.group(2)
+        if a == "" and b == "":
+            raise HTTPException(416, "bad range")
+        if a == "":                       # the last N bytes
+            start, end = max(size - int(b), 0), size - 1
+        else:
+            start = int(a)
+            end = size - 1 if b == "" else min(int(b), size - 1)
+        if start > end or start >= size:
+            return Response(status_code=416, headers={**headers, "Content-Range": f"bytes */{size}"})
+        chunks = store.stream(name, start, end)
+        return StreamingResponse(chunks, status_code=206, media_type=ctype,
+                                 headers={**headers, "Content-Range": f"bytes {start}-{end}/{size}",
+                                          "Content-Length": str(end - start + 1)})
     chunks = store.stream(name)
     if chunks is None:
         raise HTTPException(404, missing)
-    return StreamingResponse(chunks, media_type=content_type(name), headers={"Cache-Control": "private, no-store"})
+    return StreamingResponse(chunks, media_type=ctype, headers={**headers, "Content-Length": str(size)})
 
 
 def consent(slug: str, decision: str, comment: str, build_id: str, name: str, email_typed: str,
@@ -411,14 +442,14 @@ def dataset_iap(slug: str, email: str | None = Depends(who), store=Depends(get_s
     return dataset(slug, email, store, "iap")
 
 
-@app.get("/d/{slug}/f/{path:path}")
-def dataset_file_iap(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
-    return dataset_file(slug, path, email, store, "iap")
+@app.api_route("/d/{slug}/f/{path:path}", methods=["GET", "HEAD"])
+def dataset_file_iap(request: Request, slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_file(slug, path, email, store, "iap", request)
 
 
-@app.get("/d/{slug}/data/{path:path}")
-def dataset_data_iap(slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
-    return dataset_data(slug, path, email, store, "iap")
+@app.api_route("/d/{slug}/data/{path:path}", methods=["GET", "HEAD"])
+def dataset_data_iap(request: Request, slug: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_data(slug, path, email, store, "iap", request)
 
 
 @app.post("/d/{slug}/consent")
@@ -453,14 +484,14 @@ def dataset_link(key: str, token: str, email: str | None = Depends(who), store=D
     return dataset(_slug(key, token), email, store, "link")
 
 
-@app.get("/{key}/{token}/f/{path:path}")
-def dataset_file_link(key: str, token: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
-    return dataset_file(_slug(key, token), path, email, store, "link")
+@app.api_route("/{key}/{token}/f/{path:path}", methods=["GET", "HEAD"])
+def dataset_file_link(request: Request, key: str, token: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_file(_slug(key, token), path, email, store, "link", request)
 
 
-@app.get("/{key}/{token}/data/{path:path}")
-def dataset_data_link(key: str, token: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
-    return dataset_data(_slug(key, token), path, email, store, "link")
+@app.api_route("/{key}/{token}/data/{path:path}", methods=["GET", "HEAD"])
+def dataset_data_link(request: Request, key: str, token: str, path: str, email: str | None = Depends(who), store=Depends(get_store)):
+    return dataset_data(_slug(key, token), path, email, store, "link", request)
 
 
 @app.post("/{key}/{token}/consent")
