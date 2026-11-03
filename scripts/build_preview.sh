@@ -47,7 +47,19 @@ echo "preview $KEY: candidate release $VERSION, build $BUILD"
   npx vite build --outDir "$OUT/explore" --emptyOutDir --logLevel warn)
 
 # 3. the ingest notebook's render, which never goes into the public repo for a held dataset ----
-[ -n "$NOTEBOOK" ] && cp "$NOTEBOOK" "$OUT/ingest.html"
+# Quarto puts the page's stylesheets, scripts and widgets in a sibling <name>_files/ directory and
+# references it by relative path; the page is unstyled without it (seen 2026-11-03), so it comes
+# along as ingest_files/ and the references are rewritten to match.
+if [ -n "$NOTEBOOK" ]; then
+  NB_FILES="${NOTEBOOK%.html}_files"
+  NB_NAME="$(basename "${NOTEBOOK%.html}")_files"
+  if [ -d "$NB_FILES" ]; then
+    cp -R "$NB_FILES" "$OUT/ingest_files"
+    perl -pe "s{(?<![\\w/])\\Q$NB_NAME\\E/}{ingest_files/}g" "$NOTEBOOK" > "$OUT/ingest.html"
+  else
+    cp "$NOTEBOOK" "$OUT/ingest.html"
+  fi
+fi
 
 # 4. build.json: what is on show and the consent question it answers ----
 gcloud storage cat "gs://$BUCKET/$REL/$VERSION/datasets.json" > "$OUT/.datasets.json"
