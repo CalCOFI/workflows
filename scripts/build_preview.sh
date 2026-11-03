@@ -28,7 +28,8 @@ KEY="${PROVIDER}_${DATASET}"
 ACCESS="${PREVIEW_ACCESS:-iap}"
 case "$ACCESS" in
   iap)  TOKEN=""; SLUG="$KEY"; URLBASE="/d/$KEY";;
-  link) TOKEN="${PREVIEW_TOKEN:-$(LC_ALL=C tr -dc a-z0-9 </dev/urandom | head -c 8)}"
+  # minted without a pipeline: under pipefail, `tr … | head -c 8` ends the script silently
+  link) TOKEN="${PREVIEW_TOKEN:-$(python3 -c 'import secrets, string; print("".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(8)))')}"
         SLUG="$KEY-$TOKEN"; URLBASE="/$KEY/$TOKEN";;
   *)    echo "PREVIEW_ACCESS must be iap or link, not $ACCESS" >&2; exit 1;;
 esac
