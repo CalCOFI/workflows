@@ -2740,12 +2740,20 @@ if (length(meta_paths) > 0) {
 if (file.exists(meta_json_path)) {
   cat_registries <- read_catalog_registries(here("metadata"))
   net_ok     <- !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))
+  # a PREVIEW run (CALCOFI_RELEASE_BUCKET other than calcofi-db) probes no URL: the record's object
+  # URLs are built on the public bucket (calcofi4db CC_STORAGE_HTTPS) and a private bucket answers
+  # no anonymous request, so every probe would be `url_dead` by construction (measured 2026-11-03:
+  # 24 dead URLs, every one a preview object or the held notebook's public page). The structural
+  # checks and the live-service fetches below still run; the upload itself verified each object,
+  # and the preview site rewrites the URLs to its sign-in route (scripts/build_preview.sh).
+  probe_ok   <- net_ok && release_bucket == "calcofi-db"
   erddap_now <- if (net_ok) fetch_erddap_datasets() else NULL
   netcdf_now <- if (net_ok) fetch_netcdf_manifests(c(names(ingest_yaml), paste0(names(ingest_yaml), "_full"))) else list()
   # since_version is a fact about the PROMOTED history, so it is always derived from the
   # production prefix — a staging run's own versions.json holds three throwaway versions and
   # would date every dataset to the oldest of them (measured 2026-09-05: ichthyo "since v2026.08.25")
-  prod_https <- glue("https://storage.googleapis.com/{gcs_bucket}/ducklake/releases")
+  # (the promoted history lives in the public bucket whatever bucket this run writes to)
+  prod_https <- "https://storage.googleapis.com/calcofi-db/ducklake/releases"
   prod_versions <- tryCatch(jsonlite::fromJSON(glue("{prod_https}/versions.json"), simplifyVector = FALSE),
                             error = function(e) NULL)
   since <- if (!is.null(prod_versions) && net_ok) dataset_since_versions(prod_versions, base = prod_https) else character()
@@ -2763,7 +2771,7 @@ if (file.exists(meta_json_path)) {
   # this release's own STAC tree is uploaded in §3d, AFTER this check: a dataset in its first
   # release has no collection there yet, so a dead URL under that root is `url_pending` here and
   # is re-probed right after the upload (calcofi4db >= 4.17.1; calcofi_ctd-derived, 2026-09-24)
-  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = net_ok,
+  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = probe_ok,
                                          pending_base = release_stac_base(release_prefix))
   assert_dataset_catalog(d_catalog_chk)
   d_catalog_chk |>
@@ -2944,7 +2952,7 @@ stac_paths <- build_stac(
   dir            = dir_stac,
   base_url       = stac_base,
   metadata       = meta_json_path)
-stac_chk <- check_stac(dir_stac, network = net_ok)
+stac_chk <- check_stac(dir_stac, network = probe_ok)
 assert_stac(stac_chk)
 stac_chk |>
   filter(finding != "ok") |>
@@ -2961,7 +2969,7 @@ cat(glue("STAC: {length(stac_paths)} documents -> gs://{gcs_bucket}/{stac_prefix
          "({sum(stac_chk$finding == 'ok')} ok, {sum(stac_chk$level == 'warn')} warn)\n"))
 # the catalog URLs the check left pending on this upload must answer now, before anything is
 # promoted: a new dataset's collection that the upload did not write is a dead link (a gate)
-if (exists("d_catalog_chk") && net_ok) {
+if (exists("d_catalog_chk") && probe_ok) {
   d_pending <- recheck_pending_urls(d_catalog_chk)
   assert_dataset_catalog(d_pending)
   cat(glue("catalog URLs pending on this upload: {nrow(d_pending)} re-probed, ",
