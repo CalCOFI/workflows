@@ -35,15 +35,26 @@ class LocalStore:
         f = self.root / safe_path(name)
         return f.read_bytes() if f.is_file() else None
 
-    def stream(self, name: str):
-        """Chunks of the object, or None when it is absent."""
+    def size(self, name: str) -> int | None:
+        f = self.root / safe_path(name)
+        return f.stat().st_size if f.is_file() else None
+
+    def stream(self, name: str, start: int = 0, end: int | None = None):
+        """Chunks of the object (bytes start..end inclusive, or to the end), or None when absent."""
         f = self.root / safe_path(name)
         if not f.is_file():
             return None
 
         def chunks():
+            left = None if end is None else end - start + 1
             with f.open("rb") as fh:
-                while b := fh.read(CHUNK):
+                fh.seek(start)
+                while left is None or left > 0:
+                    b = fh.read(CHUNK if left is None else min(CHUNK, left))
+                    if not b:
+                        break
+                    if left is not None:
+                        left -= len(b)
                     yield b
         return chunks()
 
@@ -75,22 +86,24 @@ class GcsStore:
         except NotFound:
             return None
 
-    def stream(self, name: str):
-        """Chunks of the object, or None when it is absent. Streamed, never buffered: a buffered
-        Cloud Run response stops at 32 MiB, and a release table (obs_bio) is about that size."""
-        from google.api_core.exceptions import NotFound
-        blob = self.bucket.blob(safe_path(name))
-        try:
-            blob.reload()
-        except NotFound:
+    def size(self, name: str) -> int | None:
+        blob = self.bucket.get_blob(safe_path(name))
+        return None if blob is None else blob.size
+
+    def stream(self, name: str, start: int = 0, end: int | None = None):
+        """Chunks of the object (bytes start..end inclusive, or to the end), or None when absent."""
+        blob = self.bucket.get_blob(safe_path(name))
+        if blob is None:
             return None
+        last = (blob.size or 0) - 1 if end is None else min(end, (blob.size or 0) - 1)
 
         def chunks():
-            with blob.open("rb", chunk_size=CHUNK) as fh:
-                while b := fh.read(CHUNK):
-                    yield b
+            pos = start
+            while pos <= last:
+                stop = min(pos + CHUNK - 1, last)
+                yield blob.download_as_bytes(start=pos, end=stop, checksum=None)
+                pos = stop + 1
         return chunks()
-
     def list_prefixes(self, prefix: str) -> list[str]:
         it = self.bucket.client.list_blobs(self.bucket, prefix=safe_path(prefix) + "/", delimiter="/")
         list(it)  # prefixes fill in as the pages are read
