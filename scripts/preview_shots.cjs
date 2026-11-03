@@ -21,7 +21,8 @@ fs.mkdirSync(out, { recursive: true });
 
 (async () => {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new",
-    args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars", "--window-size=1280,800"] });
+    // no --disable-gpu: the Explorer's map is WebGL and renders blank without it (2026-11-04)
+    args: ["--no-sandbox", "--hide-scrollbars", "--window-size=1280,800"] });
   let failed = 0;
   for (let i = 0; i < urls.length; i++) {
     const u = new URL(urls[i]);
