@@ -24,7 +24,9 @@ mkdir -p "$OUT"; cp -R "$FINDER/public/." "$OUT/"
 (cd "$FINDER" && python3 scripts/resolve_release.py --catalog "$B/catalog.json" --out-dir "$B/build" \
    --tables-json "$B/tables.json" --tables obs,taxon >/dev/null)
 # the rendered SQL: the private bucket, behind the token; outputs into the preview's copy
-SECRET="INSTALL httpfs; LOAD httpfs; CREATE OR REPLACE SECRET release_token (TYPE http, BEARER_TOKEN '$TOKEN');"
+# scoped to the bucket: an unscoped http secret sends the token to every host, and GitHub answers a
+# Google token with 404 (build_vars.sql reads metadata/measurement_type.csv from raw.githubusercontent.com)
+SECRET="INSTALL httpfs; LOAD httpfs; CREATE OR REPLACE SECRET release_token (TYPE http, BEARER_TOKEN '$TOKEN', SCOPE 'https://storage.googleapis.com/$BUCKET/');"
 for f in "$B"/build/*.sql; do
   perl -pi -e "s{https://storage\.googleapis\.com/calcofi-db/}{https://storage.googleapis.com/$BUCKET/}g; s{public/data/}{$OUT/data/}g" "$f"
   printf '%s\n' "$SECRET" | cat - "$f" > "$f.tmp" && mv "$f.tmp" "$f"
