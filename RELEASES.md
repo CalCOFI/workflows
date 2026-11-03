@@ -22,6 +22,16 @@ The `cruise_key` integrity ratchet records that dataset's baseline, 66 effort se
 `cruise_key` (the cruise labels CC2023-03 and CC2024-07 resolve no reference cruise, sightings Q14;
 one segment is misdated, Q07), reached only in that preview.
 
+## IFCB phytoplankton from the CalCOFI CTD (2022-2026)
+
+`sccoos_ifcb-ctd` is staged but held out of this release (`in_release: false`) until the provider confirms the license and citation (Q01, Q02); none of its rows is in the release yet. It holds 671 Imaging FlowCytobot samples (Surface and DCM bottles) from 10 cruises,
+Aug 2022 - Jul 2026, summarized by Vivian (Lin) Hou. 103 taxa (102 keyed to WoRMS, plus
+"unidentified cells", 37% of all images, as a dataset-local class; the provider's Hemiaulus is summed into Eucampia). `obs` carries `ifcb_abundance`
+(images per ml) and `ifcb_biovolume` (um3 per ml) per sample and taxon (37,468 rows); `obs_attribute`
+carries the four ESD size classes (29,658 rows); `sample_measurement` carries `ifcb_volume_analyzed`.
+Four measurement types are registered. License CC0-1.0 and DOI 10.6075/J05Q4WFB come from the CalOOS
+dataset sheet and are awaiting the provider's confirmation for the summary table (Q01).
+
 # v2026.10.30
 
 ## The July 2009 bottle casts join their cruise
@@ -45,16 +55,6 @@ the derived row satisfied the foreign key, 31M4 is MCARTHUR's own code, a derive
 its own events', and the overlap check compares cruises of one ship. Its new check 11 stops a
 release with any event on a derived cruise at a station that an ichthyo site occupied within 24 h
 on a different cruise. On v2026.10.21 it finds exactly these 315 samples and nothing else.
-
-## IFCB phytoplankton from the CalCOFI CTD (2022-2026)
-
-`sccoos_ifcb-ctd` is staged but held out of this release (`in_release: false`) until the provider confirms the license and citation (Q01, Q02); none of its rows is in the release yet. It holds 671 Imaging FlowCytobot samples (Surface and DCM bottles) from 10 cruises,
-Aug 2022 - Jul 2026, summarized by Vivian (Lin) Hou. 103 taxa (102 keyed to WoRMS, plus
-"unidentified cells", 37% of all images, as a dataset-local class; the provider's Hemiaulus is summed into Eucampia). `obs` carries `ifcb_abundance`
-(images per ml) and `ifcb_biovolume` (um3 per ml) per sample and taxon (37,468 rows); `obs_attribute`
-carries the four ESD size classes (29,658 rows); `sample_measurement` carries `ifcb_volume_analyzed`.
-Four measurement types are registered. License CC0-1.0 and DOI 10.6075/J05Q4WFB come from the CalOOS
-dataset sheet and are awaiting the provider's confirmation for the summary table (Q01).
 
 ## The CTD team answered two of the zero-rule questions
 
