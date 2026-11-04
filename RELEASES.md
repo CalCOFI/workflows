@@ -21,6 +21,12 @@ undated row is held out (Q05).
 
 What does ship is one registry row: `measurement_type` gains `toc` (µmol/L, `valid_min = 0`,
 `_prec_column` "TOC CV"; no upper bound).
+
+Two bottles of the 2017-01 cast 37 sit 19 and 24 m below the GEBCO seafloor; they are published as
+given and recorded as the dataset's held-out seafloor baseline (`DEPTH_SEAFLOOR_OVER_HELD`, Q06).
+`libs/download_edi.R` now falls back to EDI's DataONE member node when PASTA refuses anonymous
+access (every public call answered 403 "Public Access is not authorized" on 2026-11-04); the md5 pin
+is checked on both routes.
 ## A private preview can include a held dataset
 
 `release_database.qmd` can cut a candidate release into the private preview bucket
