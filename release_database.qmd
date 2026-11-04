@@ -1598,6 +1598,28 @@ if (all(c("cruise", "ship") %in% tbls)) {
      ORDER BY year DESC, month DESC")
   n_cs <- dbGetQuery(con_wdl, "SELECT COUNT(*) AS n FROM cruise")$n
   message(glue("Enriched cruise table: {n_cs} rows"))
+
+  # the cruise's month is its MEDIAN cast month (calcofi4db 4.33.0; Rasmus Swalethorp 2026-10-16,
+  # Ben Best 2026-10-20, agreed 2026-10-27): add_cruise_median_date() stamps date_median,
+  # month_median, season (DJF, MAM, JJA, SON) and season_year (December counts toward the
+  # following winter) on `cruise`. build_obs_slim() and build_climatology() read them
+  # (cruise_tbl = "cruise"), and the Explorer, ctd-transects and calcofi4r read the same
+  # columns, so every anomaly and season filter keys on one month. A cruise with no dated
+  # sample keeps its key's YYYY-MM.
+  stopifnot("add_cruise_median_date() needs calcofi4db >= 4.33.0; pull and install ../calcofi4db" =
+    packageVersion("calcofi4db") >= "4.33.0")
+  cruise_med <- add_cruise_median_date(con_wdl)
+  cat(glue("cruise median month: {sum(!is.na(cruise_med$date_median))} of {nrow(cruise_med)} cruises dated; ",
+           "{sum(cruise_med$month_changed, na.rm = TRUE)} centre on a month other than their key's\n"))
+  cruise_med |>
+    filter(month_changed) |>
+    datatable(caption = "Cruises whose median cast month is not the month their key designates (the month and season every anomaly keys on)")
+  stopifnot(
+    "every dated cruise has a median month and a season" =
+      with(cruise_med, all(is.na(date_median) | (!is.na(month_median) & season %in% calcofi4db::CC_SEASONS))),
+    "a December cruise belongs to the following winter" =
+      with(cruise_med, all(is.na(date_median) | month_median != 12L |
+                             season_year == as.integer(format(date_median, "%Y")) + 1L)))
 }
 tbl(con_wdl, "cruise") |>
   collect() |>
@@ -2034,8 +2056,9 @@ ss     <- build_sample_spatial(con_wdl)
 # the ONE seasonal baseline every anomaly is a departure from (calcofi4db >= 3.26.0): a plain mean per dataset x
 # station (sample.site_key since 4.8.0 — the inshore grid cells then held 2–4 stations, so the cell blended them;
 # the grid rebuilt in #130 has one official station per cell, and the climatology stays on the station;
-# grid_key rides along as the station's modal cell) x the cruise's month (cruise_key's MM, not the cast's date, since
-# calcofi4db 4.22.0: CalCOFI 2607 worked line 93.3 inshore on 30 June) x 10 m depth_bin x measurement type over
+# grid_key rides along as the station's modal cell) x the cruise's month (never the cast's date, since calcofi4db
+# 4.22.0: CalCOFI 2607 worked line 93.3 inshore on 30 June; the cruise's MEDIAN cast month, cruise.month_median, since
+# 4.33.0, not the cruise_key's MM — add_cruise_median_date() above) x 10 m depth_bin x measurement type over
 # 1993-2013, >= 5 cruises per cell (3 until v2026.09.06), the window
 # stamped on every row. ctd-transects, the Explorer's Sections lens and calcofi4r::cc_climatology() subtract this
 # table — each used to compute its own, and by 2026-08-31 the three had drifted (all-months pooling; 5 m bins over
@@ -2050,11 +2073,14 @@ ss     <- build_sample_spatial(con_wdl)
 #   baseline by the same rules. chl_integrated_depth is left out: it is the depth the sum reached (200 m unless the
 #   cast is shallower), bookkeeping for chl_integrated, not something with a normal; the retired
 #   mld_sigma_theta_003 is no longer emitted.
-# - a seasonal baseline (quarter of the cruise's month, Q1 Jan-Mar ... Q4 Oct-Dec, the Explorer's season filter)
-#   in `quarter` + `season_*` on every month of a passing quarter; a month that passes only as a season has a
+# - a seasonal baseline (the season of the cruise's month: 1 = DJF, 2 = MAM, 3 = JJA, 4 = SON since calcofi4db
+#   4.33.0 — Q1 Jan-Mar ... Q4 Oct-Dec through v2026.10.30 — the Explorer's season filter; cruise_quarter_sql())
+#   in `quarter` + `season_*` on every month of a passing season; a month that passes only as a season has a
 #   NULL clim_mean, which every consumer reads as "no monthly baseline".
-stopifnot("build_climatology(cast_types =, season =) needs calcofi4db >= 4.24.0; pull and install ../calcofi4db" =
-  packageVersion("calcofi4db") >= "4.24.0")
+stopifnot("build_climatology(cruise_tbl =, cast_types =, season =) needs calcofi4db >= 4.33.0; pull and install ../calcofi4db" =
+  packageVersion("calcofi4db") >= "4.33.0",
+  "the cruise table must carry month_median before the climatology is built" =
+    "month_median" %in% dbListFields(con_wdl, "cruise"))
 clim_cast_types <- c(
   "mld_sigma_theta_002", "mld_sigma_theta_0125", "mld_temperature_02",
   "chl_max_depth", "chl_max", "chl_integrated")
@@ -2068,7 +2094,7 @@ datatable(dbGetQuery(con_wdl, "
          count(*) FILTER (WHERE depth_bin IS NULL) AS n_cells_per_cast,
          count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
          min(n_cruises) AS min_cruises, round(avg(n_cruises), 1) AS mean_cruises, any_value(clim_yr_min) AS yr_min, any_value(clim_yr_max) AS yr_max
-  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — rows per dataset: monthly cells (≥ 5 cruises in the month), seasonal cells (≥ 5 in the quarter, on each of its months) and per-cast cells (depth_bin NULL); the window is on every row")
+  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — rows per dataset: monthly cells (≥ 5 cruises in the cruise's median month), seasonal cells (≥ 5 in the season DJF/MAM/JJA/SON, on each of its months) and per-cast cells (depth_bin NULL); the window is on every row")
 stopifnot(n_clim > 0, nrow(dbGetQuery(con_wdl, "SELECT DISTINCT clim_yr_min, clim_yr_max FROM climatology")) == 1)
 # every per-cast type the release asked for has a baseline somewhere (a typo or a renamed key would be silent)
 clim_cast_missing <- setdiff(clim_cast_types, dbGetQuery(con_wdl,

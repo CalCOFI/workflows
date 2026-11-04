@@ -581,10 +581,38 @@ contract <- tibble::tribble(
     "SELECT count(*) n FROM {rp('climatology')} WHERE clim_mean IS NOT NULL AND season_mean IS NULL"),
   "consumer: seasonal-only cells exist (a month below the floor inside a passing quarter)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('climatology')} WHERE clim_mean IS NULL AND season_mean IS NOT NULL"),
-  # the Explorer's season filter keys on the cruise's quarter (calcofi4db 4.24.0): 2607 worked line 93.3
-  # inshore on 30 June and must still be Q3
-  "consumer: a cruise's casts share its quarter (2607 = 2026-07-3322 is Q3)", "zero", glue(
+  # the Explorer's season filter keys on the cruise's season (calcofi4db 4.24.0): 2607 worked line 93.3
+  # inshore on 30 June and must still be summer (3 = JJA since 4.33.0; Q3 Jul-Sep before)
+  "consumer: a cruise's casts share its season (2607 = 2026-07-3322 is JJA = 3)", "zero", glue(
     "SELECT count(*) n FROM {rp('obs_env')} WHERE cruise_key = '2026-07-3322' AND quarter <> 3"),
+  # the cruise's month is its median cast month and the seasons are DJF/MAM/JJA/SON (calcofi4db 4.33.0;
+  # Rasmus Swalethorp 2026-10-16 / Ben Best 2026-10-20): read the way the Explorer, ctd-transects and
+  # calcofi4r do — cruise.month_median / season / season_year, obs_env.cruise_month / quarter / season_year
+  "consumer: cruise carries date_median, month_median, season and season_year", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('cruise')}
+     WHERE date_median IS NOT NULL AND month_median BETWEEN 1 AND 12
+       AND season IN ('DJF', 'MAM', 'JJA', 'SON') AND season_year IS NOT NULL"),
+  "integrity: a December cruise is DJF of the following year", "zero", glue(
+    "SELECT count(*) n FROM {rp('cruise')}
+     WHERE month_median = 12 AND NOT (season = 'DJF' AND season_year = year(date_median) + 1)"),
+  "integrity: a cruise's season is the season of its median month", "zero", glue(
+    "SELECT count(*) n FROM {rp('cruise')}
+     WHERE month_median IS NOT NULL AND season IS DISTINCT FROM
+       (CASE WHEN month_median IN (12, 1, 2) THEN 'DJF' WHEN month_median IN (3, 4, 5) THEN 'MAM'
+             WHEN month_median IN (6, 7, 8) THEN 'JJA' ELSE 'SON' END)"),
+  "integrity: obs_env quarter / cruise_month / season_year are the cruise's (1 = DJF ... 4 = SON)", "zero", glue(
+    "SELECT count(*) n FROM {rp('obs_env')} o JOIN {rp('cruise')} c USING (cruise_key)
+     WHERE c.month_median IS NOT NULL
+       AND (o.cruise_month <> c.month_median OR o.season_year <> c.season_year
+            OR o.quarter <> (CASE WHEN c.month_median IN (12, 1, 2) THEN 1 WHEN c.month_median IN (3, 4, 5) THEN 2
+                                  WHEN c.month_median IN (6, 7, 8) THEN 3 ELSE 4 END))"),
+  "consumer: a cruise that centres on the month beside its key's exists (the median rule changes something)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('cruise')}
+     WHERE date_median IS NOT NULL AND month_median <> TRY_CAST(substr(cruise_key, 6, 2) AS INTEGER)"),
+  "integrity: climatology quarter is the DJF season of its month", "zero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE quarter IS DISTINCT FROM (CASE WHEN month IN (12, 1, 2) THEN 1 WHEN month IN (3, 4, 5) THEN 2
+                                          WHEN month IN (6, 7, 8) THEN 3 ELSE 4 END)"),
   "integrity: climatology carries one window, stamped on every row", "zero", glue(
     "SELECT count(*) - 1 AS n FROM (SELECT DISTINCT clim_yr_min, clim_yr_max FROM {rp('climatology')})"),
   # no 500 m ceiling since calcofi4db 4.15.0: build_climatology()'s depth_max_m defaults to NULL

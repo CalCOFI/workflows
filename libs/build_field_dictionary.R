@@ -293,6 +293,40 @@ fd <- tribble(
   "Last event date observed for a cruise (from its own tows).",
   "", "", FALSE, "on cruise; see date_min",
 
+  "date_median", "DATE", "", "temporal",
+  paste0("The median datetime (UTC) of a cruise's root samples (casts, station occupations, bottle casts); ",
+         "its calendar month is the cruise's month, which every anomaly and season filter keys on. NULL ",
+         "for a cruise with no dated sample."),
+  "", "", FALSE, "on cruise; written at release by calcofi4db::add_cruise_median_date() (4.33.0)",
+
+  "month_median", "TINYINT", "", "temporal",
+  paste0("The cruise's month: the month of date_median, else the MM of its cruise_key. A cruise ID names ",
+         "sometimes the month a cruise started and sometimes the month it mostly covered, so the median cast ",
+         "date is the month the cruise samples (Rasmus Swalethorp 2026-10-16, Ben Best 2026-10-20)."),
+  "", "", FALSE, "on cruise; calcofi4db::add_cruise_median_date(); obs_env / obs_bio carry it as cruise_month",
+
+  "season", "VARCHAR", "", "temporal",
+  paste0("The cruise's meteorological season from month_median: DJF (winter), MAM (spring), JJA (summer), ",
+         "SON (fall) — calcofi4db::cruise_season_sql(). The numeric twin is quarter (1 = DJF ... 4 = SON)."),
+  "", "", FALSE, "on cruise; calcofi4db::add_cruise_median_date()",
+
+  "season_year", "SMALLINT", "", "temporal",
+  paste0("The year the cruise's season belongs to: the year of date_median (else of the key), plus one for ",
+         "December, so December counts toward the following year's winter (Dec 2025 + Jan-Feb 2026 = winter ",
+         "2026) and a winter is never split across two years."),
+  "", "", FALSE, "on cruise and, per observation, on obs_env / obs_bio (calcofi4db::build_obs_slim(), 4.33.0)",
+
+  "cruise_month", "TINYINT", "", "temporal",
+  paste0("The observation's cruise's month (cruise.month_median; the cruise_key's MM where the cruise table ",
+         "lacks it), the month its anomaly is matched to the climatology on."),
+  "", "", FALSE, "on obs_env / obs_bio, appended after hex7 (calcofi4db::build_obs_slim(), 4.33.0)",
+
+  "quarter", "TINYINT", "", "temporal",
+  paste0("The cruise's season as a number, 1 = DJF, 2 = MAM, 3 = JJA, 4 = SON, from the cruise's month ",
+         "(calcofi4db::cruise_quarter_sql(), 4.33.0; Q1 Jan-Mar ... Q4 Oct-Dec through release v2026.10.30). ",
+         "The Explorer's season filter and the climatology's seasonal baseline (season_*) key on it."),
+  "", "", FALSE, "on obs_env / obs_bio (calcofi4db::build_obs_slim()) and climatology (build_climatology(season = TRUE))",
+
   "cruise_key_method", "VARCHAR", "", "identifier",
   paste0("Two distinct uses of one name, at two grains. (1) On a per-event staging table ",
          "(casts, sample, ...): how resolve_cruise_key() settled THAT ROW's cruise_key -- span ",
