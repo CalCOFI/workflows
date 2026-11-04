@@ -8,6 +8,37 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Hypoxic boundary depths, the nitracline, the pycnocline and N² join the CTD-derived products
+
+`calcofi_ctd-derived` adds, per cast, the three **hypoxic boundary depths** of the CTD team's
+definition (Rasmus Swalethorp, 2026-09-24): the shallowest depth at which the station-corrected
+oxygen pair average falls to 2.4 mL/L (`hypoxic_depth_24`, the mild boundary), 1.4 mL/L
+(`hypoxic_depth_14`, the hypoxic boundary) and 0.5 mL/L (`hypoxic_depth_05`, the severe
+boundary, the core of the oxygen minimum zone), each interpolated between the 1 m bins that
+bracket it; the oxygen minimum can sit mid-profile, so the depth is always the shallowest
+crossing. These replace the 60 µmol/kg "OMZ depth" proposed on 2026-10-20. The **nitracline
+depth** (`nitracline_depth`) is where nitrate reaches 1 µmol/L by the same rule, on the
+bottle-fitted sensor estimate `est_nitrate_sta_corr`; `calcofi_bottle-derived` publishes the
+same key from the bottle database's own nitrate at the bottle depths (the team's bottle-era
+rule, D_NClineDepth.m: linear interpolation between the samples above and below). The
+**pycnocline depth** (`pycnocline_depth`) is where the buoyancy frequency squared N² (TEOS-10
+`gsw_Nsquared`, a 10 m running mean) is greatest between 10 and 200 m, with that maximum
+(`buoyancy_n2_max`), after the team's F_PycnoclineDepth.m (Fiedler et al. 2013) modernised with
+TEOS-10; N² itself is published at every CTD depth (`buoyancy_n2`) for the transect plotter. A
+profile already past a threshold at its first bin counts only when that bin is within 20 m of
+the surface; a cast that never crosses has no row. Every rule is a tested calcofi4db 4.32.0
+function (`profile_threshold_depth()`, `ctd_hypoxic_depth()`, `ctd_n2()`, `ctd_pycnocline()`),
+applied to final and preliminary-with-bottle casts after the provider's flags. Each per-cast
+key but `hypoxic_depth_05` (too few 1993–2013 casts reach the 0.5 mL/L core on a station-month)
+has a 1993–2013 baseline in `climatology`, so the Explorer and ctd-transects show its anomaly
+like the mixed-layer depth's. The one choice that is ours, the 10 m running mean on N² in
+place of the draft script's smoothing spline, is CTD-derived question Q11; the implemented
+definitions are Q10.
+
+**Consumers:** seven new measurement keys (`hypoxic_depth_24`, `hypoxic_depth_14`,
+`hypoxic_depth_05`, `nitracline_depth`, `pycnocline_depth`, `buoyancy_n2_max` in
+`sample_measurement`; `buoyancy_n2` in `obs_env`); `nitracline_depth` is published by two
+datasets, filter on `dataset_key`.
 ## A new dataset, staged not released: `cce-lter_poc-pon-cce-region`, POC and PON on CCE-LTER Process cruises, 2006–2024
 
 `ingest_cce-lter_poc-pon-cce-region.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.104.13`
