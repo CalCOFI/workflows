@@ -129,6 +129,17 @@ curiosity. The 2026-09-11 dry run of the flag rule (probe:
 changed / 238 filled / 1,434 removed; salinity 39,276 / 811 / 1,141; oxygen ml/L
 2,656,233 / 1,135,319 / 5,866; oxygen µmol/kg 4,274 / 3,529,141 / 780.
 
+**A derived series inherits its sensor's flag (2026-10-20, Ben; ctd-cast Q45).** The provider flags
+`SigThetaTS1Q` / `SigThetaTS2Q` less often than the `Temp` / `Salt` it computes them from (2607 casts 1U,
+5D, 6U: `Temp2Q` 9, `SigThetaTS2Q` blank; 4,994 + 5,788 sigma values on 28 cruises in v2026.10.19), and
+`sigma_theta_ave` and the sigma mixed-layer depths read only the sigma flags, so a bad sensor's sigma entered
+them. `ingest_calcofi_ctd-cast.qmd` § Inherit Flags Into Sigma-Theta now writes the sensor's 8/9 onto the
+sigma (`inherit_sensor_flags()` in `libs/ctd_flags.R`, tested in `tests/testthat/test-ctd_flags.R`), after
+the provider's flags, the accepted ledger and the overrides; `ingest_calcofi_ctd-derived.qmd` § Assert the Flag
+Rule asserts the average itself. Any new series computed from flagged sensors takes the same step. The dry
+run is `scripts/ctd_2607_override_diff/` (it reproduces the released `sigma_theta_ave` and `climatology`
+exactly before changing anything).
+
 **Where flags are still weak.** The source flags are sparse (1,635 temperature and
 10,154 salinity scans flagged 8/9 in v2026.09.10; no 1/2 codes survive into the
 per-sensor series) and missed every failure the averages hid (the halved salinity,

@@ -1,0 +1,90 @@
+{
+  "type": "Collection",
+  "stac_version": "1.0.0",
+  "stac_extensions": ["https://stac-extensions.github.io/table/v1.2.0/schema.json", "https://stac-extensions.github.io/scientific/v1.0.0/schema.json"],
+  "id": "cce-lter_iron",
+  "title": "CCE-LTER Dissolved Iron (CalCOFI Cruises)",
+  "description": "Dissolved iron (Fe) concentrations from CalCOFI cruises in the southern California Current System, Nov. 2002 - July 2004 (completed). Surface (0 m) samples collected with a pole sampler, analyzed by FeLume flow-injection analysis. The source also carries total iron (no real values) and a shipboard iron-addition bioassay response (Chla response to Fe+, units unconfirmed); neither is released yet.\n",
+  "keywords": ["Dissolved Nutrients", "Phytoplankton Biomass and Diversity", "CalCOFI Network", "Iron"],
+  "license": "custom",
+  "providers": [
+    {
+      "name": "California Current Ecosystem Long Term Ecological Research",
+      "roles": ["producer", "licensor"],
+      "url": "https://ccelter.ucsd.edu"
+    },
+    {
+      "name": "CalCOFI",
+      "roles": ["processor", "host"],
+      "url": "https://calcofi.io"
+    }
+  ],
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [-124.323, 29.85, -117.307, 35.088]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2002-01-01T00:00:00Z",
+          "2004-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "sci:doi": "10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1",
+  "sci:citation": "California Current Ecosystem LTER, CalCOFI - Scripps Institution of Oceanography, and K. Barbeau. 2017. Measurements of dissolved inorganic concentrations of nutrient iron and of iron limitation at selected stations and depths from CalCOFI cruises in the California Current System, Nov. 2002 - July 2004 (completed) ver 3. Environmental Data Initiative. https://doi.org/10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1.\n",
+  "table:tables": [
+    {
+      "name": "sample",
+      "description": "One row per physical sampling event at its native grain (site, tow, net, subsample, cast, bottle, water, filter, underway, transect, sighting, deployment, scan, region pool). An adjacency list: `parent_sample_key` points at the containing event and `root_sample_key` at the top of the chain, so counting distinct events at any level is a single `GROUP BY`."
+    },
+    {
+      "name": "obs",
+      "description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
+    },
+    {
+      "name": "measurement_type"
+    }
+  ],
+  "summaries": {
+    "calcofi:category": ["Nutrients & Chemistry"],
+    "calcofi:variables": ["dissolved_iron", "nmol/L", "Nutrients & Chemistry"]
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/catalog.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "self",
+      "href": "https://storage.googleapis.com/calcofi-db/stac/collections/cce-lter_iron/collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "about",
+      "href": "https://calcofi.io/datasets/cce-lter_iron/",
+      "type": "text/html",
+      "title": "Dataset page"
+    },
+    {
+      "rel": "license",
+      "href": "https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.21.3",
+      "type": "text/html",
+      "title": "Custom terms stated by the provider"
+    },
+    {
+      "rel": "cite-as",
+      "href": "https://doi.org/10.6073/pasta/63c4e57f87861db3acaf80d1dec103e1",
+      "type": "text/html"
+    }
+  ]
+}
