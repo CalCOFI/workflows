@@ -9,8 +9,20 @@
 # entity name fully determines the bytes. That makes it the preferred route for
 # any CCE-LTER dataset that is mirrored on EDI.
 #
-# Sourced by libs/download_euphausiids.R and
-# libs/download_picoplankton_bacteria.R; not called directly from a notebook.
+# Sourced by libs/download_euphausiids.R, libs/download_iron.R,
+# libs/download_picoplankton_bacteria.R and libs/download_toc.R; not called
+# directly from a notebook.
+#
+# DataONE mirror (2026-11-04): PASTA began refusing every anonymous call
+# (`User 'EDI-... (Public Access)' is not authorized to execute service method
+# listDataEntities / readMetadata / readDataEntity`; the portal shows a "Human
+# Verification Check"). EDI is a DataONE member node (urn:node:LTER,
+# https://gmn.lternet.edu/mn/v2), and the coordinating node indexes every
+# revision's EML, so the same bytes stay reachable: the entity id is read from
+# the mirrored EML by entity name and the file comes from the member node. The
+# md5 pin is checked the same way on both routes (checked 2026-11-04 on
+# knb-lter-cce.253.3: md5 17b393b6f06441c8f682907b58a87403 on both). PASTA is
+# still tried first and the route used is printed.
 
 #' Resolve the latest revision of an EDI package
 #'
@@ -18,10 +30,69 @@
 #' @param id    package id, e.g. 313
 #' @return integer revision (the highest published)
 edi_latest_rev <- function(scope, id) {
-  revs <- readLines(
-    glue::glue("https://pasta.lternet.edu/package/eml/{scope}/{id}"),
-    warn = FALSE)
+  revs <- tryCatch(
+    suppressWarnings(readLines(
+      glue::glue("https://pasta.lternet.edu/package/eml/{scope}/{id}"),
+      warn = FALSE)),
+    error = function(e) NULL)
+  if (is.null(revs)) {
+    # PASTA refused (anonymous access closed, see header): list the revisions
+    # the DataONE coordinating node has indexed for this package
+    stopifnot(requireNamespace("jsonlite", quietly = TRUE))
+    q <- utils::URLencode(glue::glue(
+      "formatType:METADATA AND id:*package/metadata/eml/{scope}/{id}/*"), reserved = TRUE)
+    docs <- jsonlite::fromJSON(glue::glue(
+      "{EDI_DATAONE_CN}/query/solr/?q={q}&fl=id&rows=1000&wt=json"))$response$docs
+    revs <- sub(".*/", "", docs$id[grepl(glue::glue("/eml/{scope}/{id}/[0-9]+$"), docs$id)])
+    if (!length(revs)) stop(glue::glue("no revision of {scope}.{id} on PASTA or DataONE"))
+  }
   max(as.integer(revs[nzchar(revs)]))
+}
+
+# DataONE coordinating node and EDI's member node (urn:node:LTER)
+EDI_DATAONE_CN <- "https://cn.dataone.org/cn/v2"
+EDI_DATAONE_MN <- "https://gmn.lternet.edu/mn/v2"
+
+#' A PASTA resource path as a DataONE object identifier (URL-encoded PASTA URL)
+#' @param path path under https://pasta.lternet.edu/package/, e.g. "metadata/eml/knb-lter-cce/253/3"
+#' @return the encoded identifier, ready to append to `{node}/object/`
+edi_dataone_id <- function(path)
+  utils::URLencode(paste0("https://pasta.lternet.edu/package/", path), reserved = TRUE)
+
+#' The entity ids of an EDI package, by entity name, from its PASTA listing
+#' @return named character vector (names = entity names, values = entity ids),
+#'   or NULL when PASTA refuses
+edi_entities_pasta <- function(scope, id, rev) {
+  ents <- tryCatch(
+    suppressWarnings(readLines(
+      glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}"),
+      warn = FALSE)),
+    error = function(e) NULL)
+  if (is.null(ents)) return(NULL)
+  ents <- ents[nzchar(ents)]
+  names(ents) <- vapply(ents, function(e) {
+    paste(readLines(
+      glue::glue("https://pasta.lternet.edu/package/name/eml/{scope}/{id}/{rev}/{e}"),
+      warn = FALSE), collapse = "")
+  }, character(1))
+  ents
+}
+
+#' The entity ids of an EDI package, by entity name, from the EML the DataONE
+#' coordinating node mirrors (every dataTable / otherEntity / spatial* entity's
+#' `distribution/online/url` ends in the PASTA entity id)
+#' @return named character vector (names = entity names, values = entity ids)
+edi_entities_dataone <- function(scope, id, rev) {
+  stopifnot(requireNamespace("xml2", quietly = TRUE))
+  eml <- xml2::read_xml(paste0(
+    EDI_DATAONE_CN, "/object/", edi_dataone_id(glue::glue("metadata/eml/{scope}/{id}/{rev}"))))
+  xml2::xml_ns_strip(eml)
+  nodes <- xml2::xml_find_all(
+    eml, ".//dataTable | .//otherEntity | .//spatialRaster | .//spatialVector | .//view")
+  nm  <- xml2::xml_text(xml2::xml_find_first(nodes, "./entityName"))
+  url <- xml2::xml_text(xml2::xml_find_first(nodes, ".//distribution/online/url"))
+  keep <- !is.na(url) & grepl(glue::glue("/data/eml/{scope}/{id}/{rev}/"), url)
+  stats::setNames(sub(".*/", "", url[keep]), nm[keep])
 }
 
 #' Download one named data entity from an EDI package
@@ -62,17 +133,15 @@ download_edi_entity <- function(
   if (is.null(rev))
     rev <- edi_latest_rev(scope, id)
 
-  pkg  <- glue::glue("{scope}.{id}.{rev}")
-  ents <- readLines(
-    glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}"),
-    warn = FALSE)
-  ents <- ents[nzchar(ents)]
-
-  names(ents) <- vapply(ents, function(e) {
-    paste(readLines(
-      glue::glue("https://pasta.lternet.edu/package/name/eml/{scope}/{id}/{rev}/{e}"),
-      warn = FALSE), collapse = "")
-  }, character(1))
+  pkg   <- glue::glue("{scope}.{id}.{rev}")
+  route <- "PASTA"
+  ents  <- edi_entities_pasta(scope, id, rev)
+  if (is.null(ents)) {
+    # PASTA refused (anonymous access closed, see header): same package, same
+    # bytes, from EDI's DataONE member node
+    route <- "DataONE mirror (PASTA refused anonymous access)"
+    ents  <- edi_entities_dataone(scope, id, rev)
+  }
 
   if (!entity_name %in% names(ents))
     stop(glue::glue(
@@ -80,11 +149,15 @@ download_edi_entity <- function(
       "{paste(names(ents), collapse = '; ')}"))
 
   entity_id <- ents[[entity_name]]
-  url <- glue::glue(
-    "https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}/{entity_id}")
+  url <- if (route == "PASTA") {
+    glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}/{entity_id}")
+  } else {
+    paste0(EDI_DATAONE_MN, "/object/",
+           edi_dataone_id(glue::glue("data/eml/{scope}/{id}/{rev}/{entity_id}")))
+  }
 
   dir.create(dirname(dest), showWarnings = FALSE, recursive = TRUE)
-  if (verbose) cat(glue::glue("EDI: downloading {pkg} '{entity_name}'\n\n"))
+  if (verbose) cat(glue::glue("EDI: downloading {pkg} '{entity_name}' via {route}\n\n"))
   utils::download.file(url, dest, mode = "wb", quiet = !verbose)
 
   if (!is.null(md5)) {
