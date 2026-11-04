@@ -8,6 +8,22 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## A new dataset, staged not released: `cce-lter_poc-pon-cce-region`, POC and PON on CCE-LTER Process cruises, 2006–2024
+
+`ingest_cce-lter_poc-pon-cce-region.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.104.13`
+(Aluwihare, doi:10.6073/pasta/9feb1de01eb3795e7ea39a8b7ba325e6, CC0 1.0; CalCOFI/workflows#84):
+3,216 samples (3,159 Niskin bottles and 57 underway surface samples) with 6,432 `obs` of `poc` and
+`pon`, the types `cce-lter_poc-pon` registers. Process cruises follow water parcels rather than the
+CalCOFI grid, so these samples carry no `cruise_key` and no `site_key`; each still gets a `grid_key`
+from its position. The `cruise_key` integrity ratchet records that as the dataset's baseline (all
+3,216 root samples, reached only in a private preview). It is **held out of the release**
+(`in_release: false`) until the provider answers the questions on the 76 held-out rows (Q02–Q04) and
+agrees to publication (consent Q06).
+
+What ships is registry content only: the `_source_datasets` of `poc` and `pon` also name
+`cce-lter_poc-pon-cce-region`. The holding's catalog abstract, which had described a nitrate
+stable-isotope dataset, is replaced by the EDI package's own (Q01).
+
 ## A new dataset, staged not released: `cce-lter_hplc-pigments-calcofi`, HPLC pigments on CalCOFI cruises, 2002–2023
 
 `ingest_cce-lter_hplc-pigments-calcofi.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.316.1`
@@ -66,6 +82,7 @@ What does ship is registry content:
 - `ship_renames.csv` gains CCE-LTER's code `32BH` → NODC `39C2` (Bold Horizon). CCE-LTER labels
   recent ships with CalCOFI's own codes (325S, 33SR, 33RL, 31OS, 32BH), so the notebook translates
   them to NODC by code before keying cruises; without that, 7,717 samples had no `cruise_key`.
+
 ## A private preview can include a held dataset
 
 `release_database.qmd` can cut a candidate release into the private preview bucket

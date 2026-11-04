@@ -1,0 +1,8 @@
+table,column,name_long,units,description_md
+poc_sample,core_sample_type,Sample Type,,"Core `sample_type` of the row: `underway` for the source's 'Underway surface samples', `bottle` otherwise."
+poc_sample,cruise_key,Cruise Key,,NULL on every sample: CCE Process cruises are not CalCOFI cruises and are not in the SWFSC cruise reference.
+poc_sample,site_key,Site Key,,NULL on every sample: Process-cruise stations are not CalCOFI line/stations.
+poc_sample,geom,Geometry,,Point geometry (WGS84) from longitude/latitude via `add_point_geom()`.
+poc_sample,grid_key,Grid Key,,"CalCOFI grid cell; FK to `grid`. Derived via `assign_grid_key()`; NULL where the position is outside the grid."
+poc_sample,sample_id,Sample ID,,"Integer pivot FK between `poc_sample` and `poc_measurement`; the published key is `sample_key_id`."
+poc_sample,sample_key_id,Sample Key ID,,"Natural sample key `study_name`-`cast_number`-`bottle_number` (bottles) or `study_name`-uw-`cast_number` (underway); asserted unique; the id part of `sample.sample_key`."
