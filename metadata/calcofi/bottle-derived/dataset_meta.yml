@@ -23,10 +23,10 @@
   link_calcofi_org: https://calcofi.org/data/oceanographic-data/bottle-database/
   # the data these are computed from (this dataset's own page does not exist until it is published)
   link_data_source: https://calcofi.org/data/oceanographic-data/bottle-database/
-  # a derived product inherits its source's terms, and the source states none yet:
-  # calcofi_bottle's license is empty pending its Q10 (proposed CC-BY-4.0). Left
-  # empty here too, see questions.csv Q01 -- never invented
-  license: ""
+  # a derived product inherits its source's terms: calcofi_bottle is CC-BY-4.0
+  # (its Q10, Rasmus Swalethorp 2026-11-01: "I propose we continue with CC-BY-4.0"),
+  # see questions.csv Q01
+  license: CC-BY-4.0
   # the source states no PI; follows calcofi_bottle Q11, see questions.csv Q01
   pi_names: ""
   methods_md: |
@@ -55,10 +55,11 @@
     the two differ by a median of about 0.004 kg m-3. Bottles where they differ by
     more than 0.1 kg m-3 are listed for the provider (questions.csv Q03).
 
-    **Withheld.** A cruise whose input is known to be wrong gets no derived value
-    until the provider answers: cruise 2021-05-3322, whose published salinity
-    equals its own sigma-theta, so the salinity column holds sigma-theta
-    (calcofi_bottle Q13; this dataset's Q03).
+    **Excluded by the provider's flags.** A value the provider tells us to exclude
+    is flagged 8 in calcofi_bottle and so enters no derived value: the salinity of
+    cruise 2021-05-3322, whose published salinity equals its own sigma-theta
+    (calcofi_bottle Q13, answered 2026-11-01; this dataset's Q03), and four
+    2020-07-33P4 bottle salinities (calcofi_bottle Q13 and Q17).
 
     Every rule is a function in calcofi4db (`bottle_spice_sigma0()`, which calls
     `ctd_spice()`) with unit tests that compare it to the Gibbs SeaWater toolbox

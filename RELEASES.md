@@ -54,6 +54,33 @@ agrees to publication (consent Q06).
 What ships is registry content only: the `_source_datasets` of `poc` and `pon` also name
 `cce-lter_poc-pon-cce-region`. The holding's catalog abstract, which had described a nitrate
 stable-isotope dataset, is replaced by the EDI package's own (Q01).
+## The bottle provider's answers of 1–3 November: salinity of 2021-05 and four 2020-07 bottles, nitrate of 1976-02, and cast 24415
+
+Rasmus Swalethorp answered ten `calcofi_bottle` questions and two `calcofi_ctd-cast` ones in
+comments on the provider question Sheet (1 and 3 November); each is recorded verbatim in
+`questions.csv`. The ones that change data are rows of two new registries in
+`metadata/calcofi/bottle/`, applied by `ingest_calcofi_bottle.qmd` § Apply Provider Answers
+(`libs/bottle_answers.R`, tested), so every decision is visible in a diff and restored by
+deleting its row. Measured against v2026.10.30:
+
+- **Flagged 8 (suspect), values kept** (`qual_overrides.csv`; excluded by `cc_qual_ok_sql()` /
+  `qual_ok`): every `salinity` of cruise 2021-05-3322, whose column holds sigma-theta (Q13;
+  918 values), the salinity of two unflagged 2020-07-33P4 surface bottles 0.2–0.7 off the CTD
+  (Q17; bottles 889874 and 890872), and every `nitrate` of 1976-02-31AX (Q14; 78 values, after
+  the declared `valid_max` of 60 µmol/L had already removed six). 998 codes change; no value
+  changes. The two 2020-07-33P4 50 m salinities of Q13 (bottles 891039 and 891075, beside
+  temperatures of 99.0 and 56.9 °C) carry the flag in the registry but were already removed
+  with their impossible temperatures.
+- **Removed** (`sample_exclusions.csv`): bottle cast 24415 (1986-03-32NM, station 075.0 040.0),
+  placed on land near Paso Robles (Q15): 1 cast and 17 bottles from `sample`, 247 `obs`,
+  5 `sample_measurement` rows.
+- **`calcofi_bottle-derived`** no longer withholds 2021-05-3322 by name: its flagged salinity
+  keeps it out by the flag rule (Q03), as before; the two Q17 bottles and cast 24415 lose their
+  spice and TEOS-10 sigma-theta (19 rows of each type).
+- `metadata/measurement_qual.csv` documents bottle code 4 as a value zeroed at or below the
+  detection limit, or negative (Q16); it stays a usable code.
+- **The licence of `calcofi_bottle` is now CC-BY-4.0** (Q10), and `calcofi_bottle-derived`
+  inherits it (its Q01).
 
 ## A new dataset, staged not released: `cce-lter_hplc-pigments-calcofi`, HPLC pigments on CalCOFI cruises, 2002–2023
 
