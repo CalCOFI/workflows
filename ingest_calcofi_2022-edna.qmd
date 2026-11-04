@@ -28,7 +28,7 @@ calcofi:
     - {table: sample_measurement, shared: true, note: "co-collected water chemistry, DNA concentration and the per-assay raw and filtered read totals (the normalisers for edna_reads_*)"}
     - {table: taxon, shared: true}
     - {table: dataset_taxon, shared: true}
-    - {table: measurement_type, shared: true, note: "adds edna_reads_dloop, edna_reads_12s, edna_reads_raw_dloop, edna_reads_raw_12s, edna_reads_filtered_dloop, edna_reads_filtered_12s, oxygen_mg_l, dna_concentration; reuses edna_presence (sio_cetacean-edna)"}
+    - {table: measurement_type, shared: true, note: "adds edna_reads_dloop, edna_reads_12s, edna_reads_raw_dloop, edna_reads_raw_12s, edna_reads_filtered_dloop, edna_reads_filtered_12s, edna_asvs_dloop, edna_asvs_12s, oxygen_mg_l, dna_concentration; reuses edna_presence (sio_cetacean-edna)"}
   erd:
     color: "#bbe0f0"
 editor_options:
@@ -451,10 +451,14 @@ kept, at two grains (both asserted below, not assumed):
   `edna_reads_raw_<assay>` and `edna_reads_filtered_<assay>`; the filtered total
   is the denominator of `edna_reads_<assay>`.
 
-One library-level value is **not** published, pending the provider (Q04): the
-"Total number of OTUs or ASVs assigned to taxa", which is not an OTU count -- it
-equals the library's summed `organismQuantity` (a read count) in nearly every
-library. The evidence is computed below.
+- **ASVs assigned to taxa** -- `edna_asvs_<assay>`, the distinct amplicon
+  sequence variants (`DNA_sequence`) over the filter's libraries of each assay.
+  Until archive v1.2 the provider's "Total number of OTUs or ASVs assigned to
+  taxa" was a summed read count (Q04); Garret O'Donnell corrected it in v1.3
+  (2026-10-20) to an ASV count per library. PCR replicates share ASVs, so the
+  library values are not summed: the filter's count is taken from the sequences
+  themselves, and a filter with one library of an assay is asserted to carry
+  exactly the provider's number.
 
 ```{r}
 #| label: emof-context
@@ -534,7 +538,16 @@ d_ctx_library <- d_emof_m |>
   group_by(parentEventID, measurement_type = paste0(measurement_type, "_", assay)) |>
   summarize(measurement_value = sum(value), .groups = "drop")
 
-d_context <- bind_rows(d_ctx_filter, d_ctx_library)
+# ASVs assigned to taxa (Q04, v1.3): distinct sequences over the filter's libraries
+# of each assay, never the sum of the per-library values (replicates share ASVs)
+d_ctx_asv <- dbGetQuery(con, "
+  SELECT a.parentEventID, 'edna_asvs_' || a.assay AS measurement_type,
+         COUNT(DISTINCT d.DNA_sequence)::DOUBLE AS measurement_value
+  FROM edna_assay a JOIN edna_dna d USING (occurrenceID)
+  GROUP BY ALL")
+stopifnot("every occurrence must carry a DNA_sequence" = !anyNA(d_dna$DNA_sequence))
+
+d_context <- bind_rows(d_ctx_filter, d_ctx_library, d_ctx_asv)
 stopifnot("edna_context must be unique per filter x measurement_type" =
             !anyDuplicated(d_context[, c("parentEventID", "measurement_type")]))
 dbWriteTable(con, "edna_context", as.data.frame(d_context), overwrite = TRUE)
@@ -554,7 +567,9 @@ cat(glue(
 ```{r}
 #| label: emof-held-evidence
 
-# raw >= filtered in every library, and the evidence for the value held back (Q04)
+# raw >= filtered in every library, and the provider's ASV count (Q04, v1.3) against
+# the sequences: per library it is the number of the library's ASVs, and a filter
+# with one library of an assay publishes exactly that number
 d_lib_qc <- dbGetQuery(con, glue("
   SELECT a.eventID, a.assay,
          MAX(CASE WHEN e.measurementType = '{src_raw}'  THEN TRY_CAST(e.measurementValue AS BIGINT) END) AS raw,
@@ -566,26 +581,37 @@ d_lib_qc <- dbGetQuery(con, glue("
     d_assay |> group_by(eventID) |> summarize(reads_published = sum(reads)),
     by = "eventID")
 
-n_lib          <- nrow(d_lib_qc)
-n_otu_eq_reads <- sum(d_lib_qc$otu_or_asv == d_lib_qc$reads_published)
-n_otu_ge_reads <- sum(d_lib_qc$otu_or_asv >= d_lib_qc$reads_published)
+n_lib <- nrow(d_lib_qc)
+d_lib_asv <- dbGetQuery(con, "
+  SELECT a.eventID, a.parentEventID, a.assay, COUNT(DISTINCT d.DNA_sequence) AS n_asv
+  FROM edna_assay a JOIN edna_dna d USING (occurrenceID)
+  GROUP BY ALL")
+d_lib_qc <- d_lib_qc |> left_join(d_lib_asv, by = c("eventID", "assay"))
+d_one_lib <- d_lib_qc |> add_count(parentEventID, assay, name = "n_lib_assay") |>
+  filter(n_lib_assay == 1) |>
+  left_join(d_ctx_asv |> mutate(assay = str_remove(measurement_type, "^edna_asvs_")) |>
+              select(parentEventID, assay, published = measurement_value),
+            by = c("parentEventID", "assay"))
 stopifnot(
   "every library must carry a raw and a filtered read total" =
     !anyNA(d_lib_qc$raw) && !anyNA(d_lib_qc$filtered),
   "filtered reads can never exceed raw reads" = all(d_lib_qc$filtered <= d_lib_qc$raw),
   "published reads can never exceed the library's filtered reads" =
-    all(d_lib_qc$reads_published <= d_lib_qc$filtered))
+    all(d_lib_qc$reads_published <= d_lib_qc$filtered),
+  "the provider's ASV count must equal the library's distinct sequences (archive v1.3)" =
+    all(d_lib_qc$otu_or_asv == d_lib_qc$n_asv),
+  "a filter with one library of an assay must publish the provider's ASV count" =
+    all(d_one_lib$published == d_one_lib$otu_or_asv))
 cat(glue(
   "raw >= filtered >= published reads in all {n_lib} libraries"), "\n")
 cat(glue(
-  "'OTUs or ASVs assigned to taxa' equals the library's summed organismQuantity in ",
-  "{n_otu_eq_reads} of {n_lib} libraries (>= it in {n_otu_ge_reads}); range ",
-  "{min(d_lib_qc$otu_or_asv)}-{max(d_lib_qc$otu_or_asv)} -- a read count, not ",
-  "richness; not published (Q04)"), "\n")
+  "the provider's ASV count equals the library's distinct sequences in all {n_lib} ",
+  "libraries (range {min(d_lib_qc$otu_or_asv)}-{max(d_lib_qc$otu_or_asv)}); ",
+  "{nrow(d_one_lib)} filter x assay pairs with one library publish it unchanged"), "\n")
 
 d_lib_qc |>
   arrange(assay, eventID) |>
-  datatable(caption = "Per-library read totals (otu_or_asv held back, Q04)",
+  datatable(caption = "Per-library read totals and ASVs assigned to taxa (provider vs sequences)",
             rownames = FALSE)
 ```
 
