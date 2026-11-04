@@ -1,0 +1,114 @@
+# descriptive metadata for cce-lter_hplc-pigments-calcofi -- provider-editable
+# (Google Sheet tab `metadata`, scripts/sync_dataset_meta_sheets.R). New dataset
+# key minted 2026-10-06 (CalCOFI/workflows#84 holdings triage): the CalOOS
+# holding cce-lter_hplc-pigments points at EDI knb-lter-cce.72 (CCE Process
+# cruises); this ingest is the CalCOFI-cruise table, EDI knb-lter-cce.316
+# (DataZoo dataset 316), so it gets its own key. The structural keys
+# (dataset_name, dataset_name_short, category, color) live in
+# ingest_cce-lter_hplc-pigments-calcofi.qmd.
+
+# source: WS-R1 2026-09-05 default
+visibility: public
+
+# source: condensed from `abstract` below for the calcofi.io card/table, 2026-10-06
+description: >
+  Chlorophyll and carotenoid pigment concentrations (ug/L) measured by HPLC on
+  Niskin bottle samples from three to eight depths in the photic zone on CalCOFI
+  cruises, 2002 to 2023 and ongoing. Analysed by the Goericke Lab (SIO) through
+  2014 and by Horn Point Laboratory (UMCES) since.
+
+# source: EML knb-lter-cce.316.1 abstract, checked 2026-10-06 (verbatim)
+abstract: >
+  High Performance Liquid Chromatography (HPLC) samples are collected from
+  rosette bottles (from three to eight different depths in the photic zone) at
+  stations located within the CCE region on CalCOFI cruises (since 2002,
+  ongoing). The HPLC method is used to measure concentrations of chlorophylls
+  and carotenoids in samples of particulate matter, which includes filtering
+  and freezing the filter while at sea. The taxon-specific phyto-pigments are
+  extracted back onshore. Concentrations of chlorophyll a are used as a proxy
+  for phytoplankton biomass and concentrations of other taxon-specific pigments
+  are used to determine contributions of phytoplankton taxa to total
+  phytoplankton biomass.
+
+# source: EML knb-lter-cce.316.1 methods (General Methods, Quality Control), checked 2026-10-06, condensed
+methods_md: >
+  Samples are concentrated on GF/F filters by vacuum filtration and stored in
+  liquid N2. Pigments are extracted in acetone and analyzed by reverse-phase
+  HPLC for major chlorophylls and taxon-specific carotenoids (Goericke & Repeta
+  1993). 2002-2014 samples were analyzed by the Goericke Lab (SIO), 2014 on by
+  the analytical facility at Horn Point Laboratory (UMCES). A 2023
+  inter-laboratory comparison found Chl a, divinyl Chl a, Chl b, Chl c,
+  fucoxanthin, hexanoyloxyfucoxanthin and alloxanthin reasonably comparable;
+  diadinoxanthin, peridinin, zeaxanthin and butanoyloxyfucoxanthin with
+  sample-to-sample differences but no distinct bias; neoxanthin and
+  prasinoxanthin typically higher at UMCES. Every sample carries a quality flag:
+  0 none, 1 TChl a <= 0, 2 accessory-pigment to TChl a ratio outside 2 SD of the
+  MAREDAT relationship (Peloquin et al. 2013), 3 HPLC vs fluorometric TChl a
+  outside 2 SD of their relationship (~5% of samples; not necessarily wrong).
+  No data were removed for a flag. Protocol:
+  https://ccelter.ucsd.edu/taxon-specific-photo-pigments-2023/
+
+# source: EML knb-lter-cce.316.1 creators, checked 2026-10-06
+creators:
+- name: Ralf Goericke
+  organization: Scripps Institution of Oceanography (SIO)
+  email: rgoericke@ucsd.edu
+  role: lead
+- name: Mike Stukel
+  organization: Florida State University (FSU)
+  email: mstukel@fsu.edu
+  role: co-lead
+- name: Shonna Dovel
+  organization: Scripps Institution of Oceanography (SIO)
+  email: sdovel@ucsd.edu
+  role: contributor
+
+# source: EML knb-lter-cce.316.1 creator, checked 2026-10-06
+contact: rgoericke@ucsd.edu
+
+# source: caloos-sheet row 18, 2026-09-05; EML keywords added 2026-10-06
+keywords:
+- Phytoplankton Biomass and Diversity
+- chlorophyll
+- phytoplankton
+- HPLC
+- CalCOFI Network
+
+# source: EML knb-lter-cce.316.1 Quality Control flag + source inspection 2026-10-06
+quality_control_md: >-
+  QC flags present: Yes, one per sample (0-3, see methods), published as
+  measurement_qual (code set hplc-pigments-calcofi in measurement_qual.csv).
+  Rows with a conflicting depth or with values crossed between QC flags, and one
+  carotene value of 10,575 ug/L, are held out by the ingest (Q01, Q02, Q04).
+
+# source: caloos-sheet row 18, 2026-09-05
+maintenance: ongoing
+
+# source: https://cite.edirepository.org/cite/knb-lter-cce.316.1?style=ESIP,
+# checked 2026-10-06 -- EDI's own rendering, verbatim
+citation_main: >
+  California Current Ecosystem LTER, CalCOFI - Scripps Institution of
+  Oceanography, R. Goericke, M. Stukel, and S. Dovel. 2023. High Performance
+  Liquid Chromatography (HPLC) pigment analysis from rosette bottle samples at
+  various depths from CalCOFI-CCE Augmented cruises in the California Current
+  System, 2002 to 2023 (ongoing). ver 1. Environmental Data Initiative.
+  https://doi.org/10.6073/pasta/99e2bad73df5fd4890237d31415820b8.
+
+# source: EML knb-lter-cce.316.1 intellectualRights, checked 2026-10-06:
+# "This data package is released to the public domain under Creative Commons
+# CC0 1.0 No Rights Reserved"
+license: CC0-1.0
+
+# source: EML knb-lter-cce.316.1 alternateIdentifier, checked 2026-10-06
+doi: 10.6073/pasta/99e2bad73df5fd4890237d31415820b8
+
+# source: EML knb-lter-cce.316.1 creators, checked 2026-10-06
+pi_names: Ralf Goericke; Mike Stukel
+
+# source: EML knb-lter-cce.316.1 packageId, checked 2026-10-06
+link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.316.1
+
+# source: EML knb-lter-cce.316.1 alternateIdentifier ('316') -- the provider's
+# own DataZoo catalog page
+link_others:
+  - https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/316

@@ -7,8 +7,12 @@ versioned; not in git, which is public) which dataset each address sees. `link`,
 the token is 8 characters nobody guesses, the build (datasets/{key}-{token}/) opted in
 ("access": "link" in build.json), the provider gets the link by email and may pass it on,
 and the decision form asks for a name and address.
-Either way a decision is written once to consent/{key}/ and folded into the dataset's
-consent question by scripts/pull_preview_consent.R.
+Either way a decision is written once to consent/{key}/; scripts/pull_preview_consent.R (a
+launchd timer on the data team's machine, every 10 min) folds each one into the dataset's consent
+question in metadata/{provider}/{dataset}/questions.csv (yes: answered + answer, who, answered_date;
+not_yet: a dated line in context), pushes that row to the provider's Google Sheet, commits the CSV
+on main and marks the object applied ({name}.applied.json beside it), so the Sheet, git and the
+release gate hold one answer.
 
   datasets/{slug}/current.txt         the build on show (slug = the key in iap mode, key-token in link mode)
   datasets/{slug}/{build}/build.json  what the build is: dataset_key, name, pages, consent

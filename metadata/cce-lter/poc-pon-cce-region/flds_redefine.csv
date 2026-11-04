@@ -1,0 +1,29 @@
+tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
+ParticulateOrganicCarbonandNitrogen,poc_sample,studyName,study_name,VARCHAR,VARCHAR,"CCE Process cruise identifier (P + YYMM, then a ship suffix on the earlier cruises: KN, TN, MV).",,"verified 2026-10-06: 11 distinct, P0605KN to P2402; part of sample_key_id"
+ParticulateOrganicCarbonandNitrogen,poc_sample,Datetime UTC,datetime_start_utc,VARCHAR,TIMESTAMP,Sample date and time (UTC) from the event log.,,"'0000-00-00 00:00:00' on 16 rows (P1706 casts 7 and 58), held out (Q03); otherwise 2006-05-11 to 2024-03-17"
+ParticulateOrganicCarbonandNitrogen,poc_sample,Transect,transect,VARCHAR,VARCHAR,"Lagrangian experiment, survey or cycle label (e.g. 'Cycle 1', 'EFRONT1', 'SeaSoar1'). Not published.",,cruise-local label; blank on 96 rows
+ParticulateOrganicCarbonandNitrogen,poc_sample,Station,,VARCHAR,,"Station identifier (e.g. 'S1-2'). Not published: a cruise-local label, not a CalCOFI line/station.",,blank on most rows
+ParticulateOrganicCarbonandNitrogen,poc_sample,Latitude (º),latitude,VARCHAR,DOUBLE,Sample latitude in decimal degrees (WGS84).,decimal_degrees,"fld_old is the literal source header including its unit suffix; blank on 17 rows (held out, Q03); range 31.52-36.56N"
+ParticulateOrganicCarbonandNitrogen,poc_sample,Longitude (º),longitude,VARCHAR,DOUBLE,Sample longitude in decimal degrees (WGS84; west negative).,decimal_degrees,"fld_old is the literal source header including its unit suffix; blank on 17 rows (held out, Q03); range -130.55 to -120.02"
+ParticulateOrganicCarbonandNitrogen,poc_sample,R2R Event,,VARCHAR,,Rolling Deck to Repository event id. Not published.,,"set on 468 rows; on P1908 the R2R ids sit in Notes instead"
+ParticulateOrganicCarbonandNitrogen,poc_sample,CCE Event,cce_event,VARCHAR,INTEGER,CCE cruise event-log sequence number. Not published.,,dataset-local provenance
+ParticulateOrganicCarbonandNitrogen,poc_sample,Cast Number,cast_number,VARCHAR,INTEGER,"CTD cast number within the cruise; for underway samples, the intake sample's sequence number (902-958 on P2107).",,dataset-local provenance; part of sample_key_id
+ParticulateOrganicCarbonandNitrogen,poc_sample,Sample Type,core_sample_type,VARCHAR,VARCHAR,"Source sample type ('CTD', 'Underway surface samples' or blank), mapped to the core sample_type: 'Underway surface samples' -> underway, otherwise bottle.",,"57 underway rows, all on P2107"
+ParticulateOrganicCarbonandNitrogen,poc_sample,Bottle Number,bottle_number,VARCHAR,INTEGER,Rosette (Niskin) bottle number on the cast.,,blank on the 57 underway rows; part of sample_key_id
+ParticulateOrganicCarbonandNitrogen,poc_sample,Depth (m),depth_m,VARCHAR,DOUBLE,Nominal sample depth below surface.,m,"blank on 57 rows (held out, Q04); range 1-801 m; underway samples 4 m"
+ParticulateOrganicCarbonandNitrogen,poc_sample,N (µg/L),pon_ug_l,VARCHAR,DOUBLE,Particulate organic nitrogen in µg/L. Not published: equals pon x 14.0067 (asserted).,ug/L,
+ParticulateOrganicCarbonandNitrogen,poc_sample,C (µg/L),poc_ug_l,VARCHAR,DOUBLE,Particulate organic carbon in µg/L. Not published: equals poc x 12.0107 (asserted).,ug/L,
+ParticulateOrganicCarbonandNitrogen,poc_sample,C/N Molar Ratio,cn_molar_ratio,VARCHAR,DOUBLE,Carbon to nitrogen molar ratio. Not published: equals poc / pon (asserted).,,
+ParticulateOrganicCarbonandNitrogen,poc_sample,Notes,notes,VARCHAR,VARCHAR,Free-text log entry. Not published (Q05).,,"329 rows: 328 R2R event ids on P1908, 1 analyst note"
+ParticulateOrganicCarbonandNitrogen,poc_sample,Cruise,cruise,VARCHAR,VARCHAR,Cruise name (CCE-P0605 for P0605KN). Not published: repeats studyName (asserted).,,
+ParticulateOrganicCarbonandNitrogen,poc_sample,Associative Bottle Number,associative_bottle_number,VARCHAR,INTEGER,Second rosette bottle number. Not published (Q05).,,set on 5 rows (P1208MV casts 3-7)
+ParticulateOrganicCarbonandNitrogen,poc_sample,,sample_id,,INTEGER,Integer pivot FK between poc_sample and poc_measurement (not the published key; see sample_key_id).,,"derived: row_number() in (study_name, cast_number, bottle_number) order"
+ParticulateOrganicCarbonandNitrogen,poc_sample,,sample_key_id,,VARCHAR,"Natural sample key: study_name-cast_number-bottle_number for bottles, study_name-uw-cast_number for underway samples (asserted unique); the id part of sample_key.",,derived from the source's own columns so a republished revision cannot shift a key
+ParticulateOrganicCarbonandNitrogen,poc_sample,,cruise_key,,VARCHAR,"NULL on every sample: CCE Process cruises are not CalCOFI cruises.",,declared NULL
+ParticulateOrganicCarbonandNitrogen,poc_sample,,site_key,,VARCHAR,"NULL on every sample: Process-cruise stations are not CalCOFI line/stations.",,declared NULL
+ParticulateOrganicCarbonandNitrogen,poc_measurement,C (µmol/L),,VARCHAR,,Particulate organic carbon concentration.,umol/L,"pivoted to measurement_type='poc'; never blank; range 0.40-240.8 umol/L"
+ParticulateOrganicCarbonandNitrogen,poc_measurement,N (µmol/L),,VARCHAR,,Particulate organic nitrogen concentration.,umol/L,"pivoted to measurement_type='pon'; never blank; range 0.014-61.0 umol/L"
+ParticulateOrganicCarbonandNitrogen,poc_measurement,,measurement_id,,INTEGER,Sequential measurement identifier; primary key of poc_measurement.,,derived (row_number)
+ParticulateOrganicCarbonandNitrogen,poc_measurement,,sample_id,,INTEGER,FK to poc_sample.sample_id.,,
+ParticulateOrganicCarbonandNitrogen,poc_measurement,,measurement_type,,VARCHAR,FK to measurement_type.measurement_type (poc or pon).,,units carried by measurement_type.csv
+ParticulateOrganicCarbonandNitrogen,poc_measurement,,measurement_value,,DOUBLE,Numeric value of the measurement; units carried by measurement_type.,,

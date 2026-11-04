@@ -40,6 +40,27 @@ reviewer ──► Cloud Run service calcofi-preview
 - **Into git.** A pull script folds each decision into the dataset's consent question in
   `questions.csv` (answer, who, answered_date), the same record a verbal or emailed yes lands in.
 
+## Timers on the data team's machine
+
+Two launchd agents on the Mac mini run every 10 minutes as the calcofi-admin service account
+(`~/.config/calcofi/env.sh`) against the `~/Github/CalCOFI/workflows` checkout, logging to
+`~/_big/calcofi/logs/`: `io.calcofi.preview-feedback` files each feedback report as a private
+issue (`scripts/preview_feedback_issues.py`) and `io.calcofi.preview-consent` folds each
+decision into the dataset's consent question, pushes the row to the provider's Sheet and commits
+the CSV on main (`scripts/pull_preview_consent.R --execute --push-sheets --commit`). The
+templates are in `scripts/launchd/`; Ben loads them:
+
+```sh
+mkdir -p ~/_big/calcofi/logs
+cp scripts/launchd/io.calcofi.preview-*.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/io.calcofi.preview-feedback.plist
+launchctl load ~/Library/LaunchAgents/io.calcofi.preview-consent.plist
+launchctl list | grep io.calcofi.preview      # loaded; `launchctl unload …` stops one
+```
+
+A dry run by hand, touching nothing: `Rscript scripts/pull_preview_consent.R` (and
+`python3 scripts/preview_feedback_issues.py --dry-run`).
+
 ## Switching the mode
 
 ```sh
