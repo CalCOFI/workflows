@@ -22,6 +22,643 @@ calibrated (a `calcofi_bottle` or `calcofi_ctd-cast` cast at the same station wi
 What ships is registry content only: the `_source_datasets` of `temperature_1`, `salinity_1` and
 `oxygen_ml_l_1` now also name `swfsc_ctd-noaa`.
 
+## A private preview can include a held dataset
+
+`release_database.qmd` can cut a candidate release into the private preview bucket
+(`CALCOFI_RELEASE_BUCKET=calcofi-preview`, a staging-style run under `ducklake-preview/`) that
+includes datasets every public release holds out (`CALCOFI_RELEASE_INCLUDE`), so a provider sees
+their dataset on calcofi.io and in the Explorer behind a sign-in before agreeing to publish it. A
+held dataset is refused for any public bucket. Public releases are unchanged; the first candidate
+(2026-11-02) includes `sio_cetacean-sightings`, which stays `in_release: false` until the Scripps
+Whale Acoustics Lab signs off.
+
+The `cruise_key` integrity ratchet records that dataset's baseline, 66 effort segments with no
+`cruise_key` (the cruise labels CC2023-03 and CC2024-07 resolve no reference cruise, sightings Q14;
+one segment is misdated, Q07), reached only in that preview.
+
+## IFCB phytoplankton from the CalCOFI CTD (2022-2026)
+
+`sccoos_ifcb-ctd` is staged but held out of this release (`in_release: false`) until the provider confirms the license and citation (Q01, Q02); none of its rows is in the release yet. It holds 671 Imaging FlowCytobot samples (Surface and DCM bottles) from 10 cruises,
+Aug 2022 - Jul 2026, summarized by Vivian (Lin) Hou. 103 taxa (102 keyed to WoRMS, plus
+"unidentified cells", 37% of all images, as a dataset-local class; the provider's Hemiaulus is summed into Eucampia). `obs` carries `ifcb_abundance`
+(images per ml) and `ifcb_biovolume` (um3 per ml) per sample and taxon (37,468 rows); `obs_attribute`
+carries the four ESD size classes (29,658 rows); `sample_measurement` carries `ifcb_volume_analyzed`.
+Four measurement types are registered. License CC0-1.0 and DOI 10.6075/J05Q4WFB come from the CalOOS
+dataset sheet and are awaiting the provider's confirmation for the summary table (Q01).
+
+# v2026.10.30
+
+## The July 2009 bottle casts join their cruise
+
+Every release through v2026.10.21 kept the 100 bottle casts and 230 picoplankton samples of the
+July 2009 cruise on a cruise of their own, `2009-07-31M4` (MCARTHUR), while SWFSC and the ichthyo,
+CTD, zooscan, PIC and Farallon datasets have the same dates, 2009-07-15 to 2009-08-03, as
+`2009-07-33MH` (MCARTHUR II). A join on `cruise_key` found nothing for them, and none got a
+`station_uuid`. The bottle database's Cast file names the ship MCARTHUR (31M4, Cruise_ID
+`2009-07-14-C-31M4`) for that cruise, and picoplankton's `studyName` carries the same id, although
+the McArthur's last CalCOFI cruise was in October 2002. DIC's EXPOCODE `31M420090714` has the same
+error, which is why its 51 samples from that cruise had no `cruise_key` at all. A ship rename by name
+and code would also move 198502, a real McArthur cruise, so the new
+`metadata/cruise_ship_corrections.csv` corrects 31M4 to 33MH for cruise 200907 only, in all three
+ingests (`correct_cruise_ship()`, calcofi4db 4.31.0).
+The derived `2009-07-31M4` row leaves `cruise`. The providers are asked to confirm (bottle Q19,
+picoplankton Q09).
+
+`check_cruise_key_integrity()` passed this in every release because each check looks at one key:
+the derived row satisfied the foreign key, 31M4 is MCARTHUR's own code, a derived cruise's span is
+its own events', and the overlap check compares cruises of one ship. Its new check 11 stops a
+release with any event on a derived cruise at a station that an ichthyo site occupied within 24 h
+on a different cruise. On v2026.10.21 it finds exactly these 315 samples and nothing else.
+
+## The CTD team answered two of the zero-rule questions
+
+CTD question Q48 (`est_nitrate_cruise_corr` is 0 on every row of 2301, 2304, 2307 and 2411) is
+answered: the CTD team asks that the values stay as published until those DECODR-era cruises are
+reprocessed with Kraken, which will replace them. Q49 (the contaminated July baseline of
+`est_chlorophyll_a_cruise_corr`) stays open; it is on the team's cruise processing issues log, and
+`est_chlorophyll_a_sta_corr` is the series to use for anomalies meanwhile. No data change.
+
+## Every live dataset carries a standing consent question
+
+Each of the 20 released datasets now has one question asking its PI whether CalCOFI.io may publish
+it as shown, under its licence (`related_field = consent`), so a PI's yes is recorded where the
+provider Sheets already sync, with who, when and the email it came in. Ten are answered: seven are
+openly licensed at their public source and three have a yes by email (Rasmus Swalethorp for the
+bottle- and CTD-derived products, CDFW for the Dungeness crab megalopae). Nine are open and go to
+their PIs through Betty Huang and Erin Satterthwaite; the PIC net-tow dataset waits until Linsey Sala
+is ready. The provider Sheets were also brought up to date with answers recorded since September. No
+data change.
+
+## A provider Sheet that is behind git can no longer undo a recorded answer
+
+Both Sheet syncs had a blind spot: a pull took every cell that differed from git as an edit, so a
+Sheet nobody had refreshed would have put old values back. On 2026-10-22 the question tabs would
+have reverted the eDNA, CUFES and ichthyo answers to open, and the metadata tabs would have blanked
+102 fields and restored Farallon's licence from CC-BY-4.0 to custom. Now a pull never blanks a value
+git holds, never moves a question's status back, flags a different answer on a question git already
+closed as a conflict rather than applying it, and treats a metadata value the sidecar held at an
+earlier commit as the Sheet being behind, not an edit. A push, which rewrites whole tabs, refuses
+while a tab holds an edit nobody has pulled. The one real edit waiting was the team's own triage of
+ten holdings, now in `datasets.json` (`status.priority` PR or IP for ten, `status.owner` betty for
+seven); every Sheet was then pushed in step with git. No data change.
+
+# v2026.10.21
+
+## The October 2022 eDNA survey moves to its corrected v1.3, and every CTD source archive is kept
+
+This release fixes v2026.10.20's two metadata defects, takes the provider's corrected eDNA archive
+and closes the gap that let calcofi.org's 1995-98 CTD files disappear with no copy kept. The
+sections below give each change; the bottle, ichthyoplankton, zooplankton and other datasets carry
+the same rows as v2026.10.20. Cite this release, not v2026.10.20, for the measurement categories and
+faces.
+
+## eDNA: archive v1.3, the ASVs assigned to taxa, and the provider's answers
+
+`calcofi_2022-edna` now reads `dwca-calcofi_october2022_edna-v1.3.zip` (IPT, published 2026-10-19),
+in which Garret O'Donnell corrected the "Total number of OTUs or ASVs assigned to taxa": through v1.2
+it was a summed read count, so it was held back (question Q04). It is published as two new types,
+`edna_asvs_dloop` and `edna_asvs_12s`: the distinct sequences over a filter's libraries of each assay,
+not the sum of the per-library values, because PCR replicates share sequences. A filter with one
+library of an assay carries exactly the provider's number, which the ingest asserts. The occurrence
+and DNA tables are unchanged from v1.2. The citation names Version 1.3; the dataset links the
+bioinformatics scripts (github.com/CalCOFI/eDNA_patch) beside the paper. Questions Q04, Q06, Q07,
+Q08 and Q10 are answered: the archive carries detections only, because edna2obis drops blanks and
+filters with no detection, and it stays that way, as the provider publishes it.
+
+## Every CTD archive the ingest reads is kept on GCS, and a failed download stops the render
+
+calcofi.org listed FinalQC zips for nine cruises that returned 404, and the CTD ingest only warned;
+v2026.10.20 recovered eight of them from our archived FinalDB copies. Two gaps let that happen. On
+the Mac mini, where releases are cut, the downloads folder is not synced back to GCS, so a zip fetched
+from calcofi.org existed on one machine. And a failed download was a `warning()`, which a rendered
+notebook hides. Now `calcofi4db::archive_sources()` (4.29.0) keeps each archive the ingest reads,
+once by content, at `gs://calcofi-files-public/archive/sources/calcofi/ctd-cast/{md5}/{file}`; a
+corrected file re-published under the same name lands beside the old one. `metadata.json`
+`sources[]` names each archive's `md5`, calcofi.org `url` and `archive` copy, so the sidecars record
+which bytes a release read. Every failed download is listed in the render, and one that leaves its
+cruise with no final or preliminary archive stops it unless a provider question names it.
+
+The rebuild was diffed against v2026.10.20 before release (`diff_stage_vs_release()`): the headline
+`obs` rows are identical, and `obs_ctd_full` differs by five values, the station-corrected nitrate
+and four oxygen estimates of a single upcast scan (cast `0604_014u`, cruise 2006-04-32NM, 403 m),
+which the rebuild no longer emits; no value or quality flag changed anywhere else. Its `obs_id`
+sequence shifts by those five rows, which is why 22 cruise partitions have new signatures with the
+same content. Why that one scan dropped is not yet known. The ingest recorded 295 source archives;
+two of them, the raw-cast zips of 2208BH and 1203NH, are 196-byte error pages saved in October 2025
+in place of the archive (the ingest does not read raw-cast zips, so no data are affected).
+
+## Farallon's seabird data are CC BY 4.0, the PIC dataset links its collection, and eight questions are filed
+
+`farallon_bird-mammal` was recorded under `custom` terms, pointing at the Farallon Institute's Data
+Sharing Agreement (23 July 2025); the agreement releases the data under CC BY 4.0, so the licence
+is now `CC-BY-4.0`, and the dataset carries the agreement's requested attribution statement as its
+`acknowledgement`.
+
+
+`sio_pic-zooplankton` names the Pelagic Invertebrate Collection's page as its data source, as
+promised with the front-door review. Its question Q07 (preservative and net side) is answered by
+Linsey Sala's Parent Net Event table and the net crosswalk (workflows#198). New questions: the
+MOCNESS mouth area for gear M2 (Ed Weber, `swfsc_ichthyo`), cruise 1501NH's dual processing and reused
+cast numbers (CTD team, `calcofi_ctd-cast`, workflows#134), and bottle cast 24415 of cruise
+1986-03-32NM, whose position falls on land near Paso Robles (`calcofi_bottle`, a likely 1° longitude
+typo; the position is published as given). Four more came out of measuring the bottle provider's
+zero rule and the TEOS-10 sigma-theta: `est_nitrate_cruise_corr` is 0 on every row of cruises 2301,
+2304, 2307 and 2411, which looks like a placeholder and gives anomalies of -4 to -12 µmol/L
+(`calcofi_ctd-cast` Q48); the July baseline of `est_chlorophyll_a_cruise_corr` is dominated by
+values above 20 µg/L from 2000-10 and 2001-07 (Q49); bottle nitrate's code 4 on 277 zeros of
+2015-01 (`calcofi_bottle` Q16); and two surface salinities on 2020-07-33P4 (Q17). All four series
+are published as given until the provider answers.
+
+## The sixteen METS keys get their category back
+
+v2026.10.20 shipped 16 `calcofi_mets` keys with a NULL category (its known issue). The ingest rebuilds
+the `measurement_type` rows it owns and carried only the bounds and `derivation` across the rebuild;
+it now carries every registry column, so a blank is filled from the registry and a value the
+notebook sets still wins, and it stops if an owned row comes out with a blank where it went in with a
+value. `metadata/measurement_type.csv` was never committed blank, so the next re-ingest writes it
+unchanged. `sst_c`, `sss_psu`, `tsg1_temp_c`, `tsg1_salinity_psu`, `oxygen`, `uws_flow` and
+`bottom_depth_m` return to Physical Oceanography, `par_surf` to Productivity & Pigments and `sw_ph`
+to Carbonate System.
+
+## TEOS-10 sigma-theta has a face of its own, and the face registries are checked at release
+
+`sigma_theta_teos10` was registered as a stand-in for `sigma_theta`'s face while carrying its own
+NERC P01 (SIGTPR03). A stand-in borrows the lender's chain, so calcofi.io's face check refused it at
+the v2026.10.20 deploy, and the key has no face on calcofi.io until the next release. It now takes
+`scale`, like `sigma_theta`. `release_database.qmd` runs `validate_measurement_faces()` with the
+measurement type registry before it builds `measurements.json` and stops on any finding, including
+the new `standsin_own_p01` rule (calcofi4db 4.28.1).
+
+# v2026.10.20
+
+## SWFSC's 14 October export: squid eggs are *Abraliopsis felis*, FROSTI's cruises key by 18DN, and each net carries its side and tow number
+
+Ed Weber's 2026-10-14 export of the SWFSC CalCOFI database answers the ten questions of
+2026-10-06 (`metadata/swfsc/ichthyo/questions.csv` Q14, Q17–Q25; `metadata/swfsc/cufes/questions.csv`
+Q09–Q15). `swfsc_ichthyo` and `swfsc_cufes` are re-ingested from it; no column was added or removed
+in any of its 17 tables. The sections below are what a consumer sees change.
+
+## CUFES "squid eggs" are *Abraliopsis felis*, not market squid
+
+"Bill says we can safely call these Abraliopsis felis, sppcode 9561, AphiaID 341849, because they
+are the only squid in this region that have pelagic eggs" (Ed Weber, 2026-10-14; `swfsc_cufes` Q11,
+the opposite of what we had proposed). `metadata/measurement_taxon.csv` keys `squid_eggs` and
+`squid_eggs_per_m3` to *Abraliopsis felis* (`worms:341849`, ITIS 82401); through v2026.10.19 they
+were keyed to *Doryteuthis opalescens* (`worms:574540`).
+
+**Consumers:** every `obs_bio` row of `swfsc_cufes` with `measurement_type` `squid_eggs` /
+`squid_eggs_per_m3` (82,334 rows: 41,167 counts and 41,167 concentrations, 18,131 of each with eggs)
+changes `taxon_key` from `worms:574540` to `worms:341849`; the
+species face and the Explorer label change from "Market squid" to *Abraliopsis felis*. A query
+keyed on `worms:574540` finds no CUFES rows in this release.
+
+## FROSTI's seven cruises key by NODC 18DN, not OIFS
+
+SWFSC corrected the ship table: "I dug into the NODC codes for Frosti (yes, 18DN) and Bold Horizon
+today and now have a complete and correct table. Also NODC and ICES codes now correspond
+completely" (Ed Weber, 2026-10-14; `swfsc_ichthyo` Q14). `create_cruise_key()` mints `YYYY-MM-NODC`
+from `ship.ship_nodc`, so the seven FROSTI cruises change key (Ben Best, 2026-10-20, decision D1:
+adopt the corrected code; NODC's own platform list says 18DN). Every dataset that keys events to
+them (`swfsc_ichthyo`, `swfsc_cufes`, `cdfw_dungeness-crab`, `sio_pic-zooplankton`,
+`cce-lter_euphausiids`, `cce-lter_zoodb`; 4,999 `sample` rows in v2026.10.19) is re-rendered against
+the new `cruise` shard, and `ship_ices` now equals `ship_nodc` for every ship.
+
+**Consumers:** the old keys are gone from `cruise`, `sample`, `obs_bio`, `obs_env` and
+`climatology`; map them one to one:
+
+| v2026.10.19 | now |
+|---|---|
+| `2003-07-OIFS` | `2003-07-18DN` |
+| `2004-03-OIFS` | `2004-03-18DN` |
+| `2004-07-OIFS` | `2004-07-18DN` |
+| `2005-03-OIFS` | `2005-03-18DN` |
+| `2009-04-OIFS` | `2009-04-18DN` |
+| `2010-04-OIFS` | `2010-04-18DN` |
+| `2011-04-OIFS` | `2011-04-18DN` |
+
+`cruise.cruise_uuid` is unchanged for all seven, so a join on SWFSC's CruiseId needs no mapping.
+Measured against v2026.10.19 on the re-ingested shards: 2,750 `swfsc_cufes` and 2,047 `swfsc_ichthyo`
+`sample` rows change key (one fewer than the 2,048 of v2026.10.19: a removed net-less tow was on
+2011-04); the other four datasets re-key at the release run.
+
+## One ichthyo species code re-keys: 844 "Microdesmidae" is `worms:151793`
+
+SWFSC's rebuilt Species table re-points code 844 (*Microdesmidae*) from AphiaID 151423 (family
+Microdesmidae) to 151793 (subfamily Microdesminae, WoRMS's accepted placement). The ingest keys what
+the source supplies, so its 6 `obs_bio` rows (8 larvae) move from `taxon_key` `worms:151423` to
+`worms:151793`; SWFSC's verbatim name stays on `dataset_taxon`. Every other ichthyo `abundance` value
+is identical to v2026.10.19 (487,610 of 487,616 rows pair exactly), and `data/flagged/species_worms_lookup_check.csv`
+is empty: every code now keys its own source AphiaID and every `SpeciesWormsLookup` name agrees with
+WoRMS (11 rows at v2026.10.19).
+
+**Consumers:** `worms:151423` has no ichthyo rows in this release; read `worms:151793`.
+
+## Each ichthyoplankton net carries its side and tow number: `ichthyo_net`
+
+The core projection drops two source columns: `Net.NetSide` (starboard or port of a bongo pair) and
+`Tow.TowNumber` (which of several tows of one type at one station occupation). They are what tells
+the two nets of a CalBOBL or PairoVET tow, and two tows of one type at one occupation, apart, and the
+SIO Pelagic Invertebrate Collection's "Parent Net Event" table is matched to the released nets on
+exactly those (Linsey Sala; Ben Best, 2026-10-20, decision D2). New table **`ichthyo_net`**, one row
+per net (77,888): `sample_key` (the net's; primary key and FK to `sample`), `net_uuid` (SWFSC's
+NetId, = `sample.source_uuid`), `tow_uuid` (SWFSC's TowId), `net_side` (`S` on 56,248 nets, `P` on
+3,557, NULL on the 18,083 single-net C1, CalVET and Manta nets), `tow_number` (1 on all but 121 tows;
+up to 2 on C1, 3 on CalBOBL, 6 on Manta and 50 on PairoVET; (station, tow type, tow number) is unique)
+and `tow_type`. Declared in `core_relationships()` (calcofi4db 4.28.0), beside `fish`. Every two-net
+tow is one S and one P. `fish` itself is unchanged (10,796 rows identical to v2026.10.19).
+
+## The cruise reference is the union of SWFSC's dbo and stg schemas
+
+"You now have the union of my stg and dbo cruises" (Ed Weber, 2026-10-14; `swfsc_ichthyo` Q23).
+`Cruise.csv` goes 694 → 739 rows, 50 of them with no station: the two cruises whose ichthyoplankton
+are back in staging (198202JD, 198212JD — the ingest now asserts they have no Station, Tow or Net
+row rather than no Cruise row), CUFES-only cruises, and cruises only the bottle and CTD sources
+sample. Consequences in `cruise`:
+
+- 21 keys that v2026.10.19 completed as `cruise_key_method = 'derived'` rows (1952-09 BD, 1989-08
+  NH, and 19 bottle/CTD cruises from 2016-11 to 2025-07) are now `swfsc` rows with a `cruise_uuid`;
+  `derived` falls from 151 to 130, mostly 1949–1959 cruises.
+- A reference row with no station has no tow span, and the 21 above would have lost the span their
+  derived row carried. `complete_cruise_reference()` (calcofi4db 4.28.0) now fills a NULL span from
+  the events the other datasets key to the cruise, before adding any derived row, so check 6 of
+  `check_cruise_key_integrity()` (an event within its cruise's span) keeps covering them. A row with
+  its own tow span keeps it; a row no dataset keys to stays NULL.
+- The 40 `cce-lter_euphausiids` tows of February 1982 key `1982-02-31JD` again (they resolved no
+  cruise in v2026.10.05–v2026.10.19); the release's NULL-`cruise_key` ratchet for that dataset
+  returns to 420.
+- 24 brand-new SWFSC keys with no event in any dataset (e.g. `1993-09-31M4` beside `1993-09-31JD`,
+  and the Lasker's 2019-07, 2021-03, 2021-07, 2022-07).
+
+## Nine net-less tows and the egg stages 12–15 are gone at source; two proportions sorted corrected
+
+- `Tow` 74,394 → 74,385: the nine CalBOBL tows with no Net row "were all spoiled samples, spilled
+  samples, or lost vials. They are now removed" (`swfsc_ichthyo` Q21). They carried no observation
+  and no effort, so `sample` loses nine tow rows (1978-08 VA, 1982-03 PN, 1985-05 JD ×2, 1999-08 NH,
+  2007-04 JD, 2011-04 FR, 2012-03 SH, 2021-01 RL) and nothing else; true-zero tows go 6,302 → 6,293.
+  Three of them were their station's only tow, so three `site` rows (1978-08-57VA 136.7 023.0,
+  1982-03-90PN 093.3 035.0, 2021-01-33UD 080.0 060.0) now have no tow and a NULL `datetime`, as the
+  stations of the 15 tow-less cruises already did.
+- `EggStage` 18,914 → 18,245: every stage 12–15 row is removed at source — anchovy and sardine stage
+  12 was "a lazy, stupid hack that they did to flag some records for DEPM", and the Dover and Rex
+  sole rows go with them (Q22). The ingest already screened them out, so the published `stage`
+  distribution is unchanged; the screen is now a guard that expects zero rows.
+- Two C1 nets' `PropSorted` 3.4 → 0.294 and 4.286 → 0.233, and their `SmallPlankton` 10 → 34 and
+  7 → 30 ml (Q21): `sample_measurement` `prop_sorted` and `small_plankton_biomass` change on those
+  two nets and nowhere else (every other `sample_measurement` value of the dataset is identical). The
+  five "empty bongo tows with no zooplankton volume" are port-net-only tows, and a port net carries
+  no zooplankton volume by design ("I don't have any non-port bongo tows in the db without
+  zooplankton volumes"); the ingest now counts a missing volume on non-port nets only (0).
+- `Cufes` 202101 RL sample 100: `StopPumpSpeed` 40.0 → 0.64 (`swfsc_cufes` Q10), so that sample's
+  `pump_speed_mean` and `volume_pumped_m3` change and its one non-zero `egg_concentration` (squid)
+  goes 0.00113 → 0.0360 eggs/m³ (×31.75); its five other counts are zero. That is the only CUFES
+  value that changes: all 550,162 `obs_bio` rows pair with v2026.10.19 once the squid key is mapped.
+
+## NetDepth is the estimated depth with all wire out, and the stations where it is below the sea floor go back to SWFSC
+
+"It is the estimated depth when all wire is out. It is roughly the maximum depth of the tow but
+that estimate might be a little off. The 'possible' sounds too certain here" (Ed Weber, 2026-10-14;
+`swfsc_ichthyo` Q19). Every description that said "maximum possible depth" now says this; the data
+(`sample.depth_max_m` on tows and nets) and the release's own ratchet (210 stations more than 10 m
+below the deepest GEBCO cell around them) are unchanged, because `Net.NetDepth` is unchanged in the
+export. Those 210 stations, with their tow and net UUIDs, are in
+`data/flagged/netdepth_below_seafloor.csv` for SWFSC to screen ("If you send me the problems we can
+also try to screen some of these for errors").
+
+## `fish` is fish larger than larval size, counted in addition to the larvae
+
+"They are fish larger than larvae size. So generally juveniles but not exclusively. They are not in
+both tables" (Ed Weber, 2026-10-14; `swfsc_ichthyo` Q20). The table stays (Ben Best, 2026-10-20,
+decision D3) and is described so: additive to the larval abundance of the same net and species code,
+never double-counted, and still not projected into `obs` because no life stage in the vocabulary says
+exactly "larger than larval size". The 974 orphan `LarvaeMeasured` rows and the 629 lost larval-stage
+records are "expected. Some of these may be reconstructed from paper sheets" (Q17, Q18): still
+flagged, still unreleased.
+
+## Other answers recorded
+
+- CUFES "is ongoing. We cannot keep up with processing given our current staffing right now" (Q13);
+  the record still ends 2022-04-27. The 37 CUFES samples with a start but no stop position are kept
+  at their start position until SWFSC confirms whether "Yes to removing recs with no stop position"
+  means them (Q14, proposed; decision D5).
+- The five cruises with no station at v2026.10.05 "all have CUFES data … At least the last two have
+  unprocessed staged tow data that will eventually be uploaded" (Q24).
+- SWFSC rebuilt its ITIS and WoRMS lookups; `taxon.scientific_name` stays the WoRMS accepted name
+  and `dataset_taxon.ds_scientific_name` SWFSC's verbatim name, as provenance (Q25; decision D4). Any
+  code still keyed to another id than its source AphiaID is listed in
+  `data/flagged/species_worms_lookup_check.csv` for SWFSC, never patched by an override.
+- `swfsc_ichthyo` gains `link_data_source` (NOAA InPort item 20691, the provider's record of the
+  database), so calcofi.io shows an "Original at" link for it.
+
+## A new dataset: `calcofi_bottle-derived`, spice and TEOS-10 sigma-theta at every bottle since 1949
+
+Rasmus Swalethorp asked for values derived from the bottle database to live in a dataset of their own,
+back-calculated to the start of the record (thread "calcofi derived data", 2026-10-19), after
+Nastassia Patin asked for spice at each bottle depth. `ingest_calcofi_bottle-derived.qmd` computes two
+values per bottle from the bottle's own temperature and salinity, at the sea pressure of its depth
+(`gsw_p_from_z(-depth, latitude)`):
+
+- **`spiciness0`** (kg m⁻³), the same key and the same rule (`ctd_spice()`) as the CTD derived
+  products. Filter on `dataset_key` to keep the bottle and CTD series apart. The registry row now lists
+  both datasets in `_source_datasets` (Ben Best, decision D8).
+- **`sigma_theta_teos10`** (kg m⁻³), new: potential density anomaly at 0 dbar by TEOS-10
+  (`gsw_sigma0`), NERC P01 `SIGTPR03`. The bottle database's own `sigma_theta` is DECODR's legacy value
+  and stays as it is in `calcofi_bottle`. The new key does not join its `variable`, because both come
+  from the same bottles.
+
+Flags come first: a bottle whose `T_qual` or `S_qual` is 8 or 9 gets neither value. A cruise whose
+input is known to be wrong is withheld by name: all 918 bottles of 2021-05-3322, whose published
+salinity equals its own sigma-theta, so the salinity column holds sigma-theta (`calcofi_bottle` Q13,
+open with the provider). A value we know is wrong never enters a derived product (Ben Best,
+2026-10-20), and the cruise returns when Q13 is answered (Q03). Of 843,828 other bottles with a
+temperature and a salinity, 2,155 are flagged, so **841,673 bottles** (1949-02-28 to 2021-02-03) carry
+both values, 1,683,346 `obs_env` rows. The dataset emits no `sample`; every row sits on its
+`calcofi_bottle` bottle. `build_climatology()` takes every `obs_env` row, so both types get baseline
+cells under this `dataset_key`. The rule is calcofi4db's new `bottle_spice_sigma0()` (4.27.0), and its
+tests compare it to the Gibbs SeaWater functions directly. The declared bound for
+`sigma_theta_teos10` is −8 to 37 kg m⁻³: `gsw_sigma0` over the registered bottle temperature and
+salinity bounds (Q02). `spiciness0` keeps its −25 to 18 bound.
+
+Over 839,590 bottles that also have an unflagged legacy value, TEOS-10 minus legacy is a median
+0.0041 kg m⁻³ in absolute value (p99 0.0150, max 0.786). 10 bottles differ by more than 0.1 and are
+listed for the provider (Q03). Licence and PI inherit `calcofi_bottle`'s open questions (Q01).
+`ingest_calcofi_ctd-derived.qmd` now merges into `_source_datasets` rather than overwriting it, so
+re-rendering it no longer drops the bottle dataset from `spiciness0`.
+
+## CalCOFI 2607's second temperature sensor is judged by the provider's own flags, and a sigma-theta computed from a flagged sensor is flagged
+
+The 24 provisional flags on cruise 2026-07-3322 (casts 1-6, both directions, the secondary temperature
+sensor and the 11 series derived from it) are gone. We had set them on 2026-09-24 because the provider's
+cruise notes called the sensor faulty on all six casts; the provider's corrected file now carries its own
+codes (9 on casts 1U, 5U, 6D, 6U and 385 of the 515 bins of 5D) and Ben Gire wrote that the processed
+files are accurate. Casts 2-4 and the downcast of cast 1, which the provider leaves unflagged, therefore
+enter the sensor-pair averages again (the secondary reads about 0.15 degC from the primary there). Against
+v2026.10.19, from the provider's file: `temperature_ave` changes on 841 one-metre bins (at most 0.257
+degC), `salinity_ave_corr` on 889 (0.370), `oxygen_ml_l_ave_cruise_corr` on 889 (0.222 ml/L),
+`oxygen_ml_l_ave_sta_corr` on 194 (0.281 ml/L) and `oxygen_umol_kg_ave_sta_corr` on 194 (12.31 umol/kg),
+and the derived `spiciness0` on 889 bins (0.269). Of those bins, 151 (temperature), 157 (salinity and
+spiciness) and 41 (oxygen, sta_corr) sit at depths published in `obs`. The 12 sensor-2 series change only
+in `measurement_qual` on the bins the provider did not flag (9,864 values); no sensor-2 value changes, and
+nothing else outside 2607 moves for this change. **Consumers:** a 2607 anomaly or section built on these
+averages shifts by up to the amounts above.
+
+Where the provider flags a temperature or salinity 8 or 9 it often leaves the sigma-theta computed from it
+unflagged (`SigThetaTS2Q` is blank on 2607 casts 1U, 5D and 6U where `Temp2Q` is 9), and the derived
+`sigma_theta_ave` and mixed-layer depths read only the sigma flags. A bad sensor's sigma-theta therefore
+entered the average. The ingest now writes the sensor's flag onto its sigma-theta (`sigma_theta_1` from
+`temperature_1` and `salinity_1`, `sigma_theta_2` from the second pair; 9 over 8; the provider's own 8/9 is
+kept), after the provider's flags and before anything is averaged, and `calcofi_ctd-derived` asserts that no
+`sigma_theta_ave` includes a sensor whose sigma, temperature or salinity is flagged. Against v2026.10.19 this
+touches 28 cruises and 194 casts, 2607 included, and no sigma value changes: `sigma_theta_1` gains a flag on
+4,994 values (419 at depths published in `obs`) and `sigma_theta_2` on 5,788 (not published in `obs`);
+`sigma_theta_ave` changes on 10,188 one-metre bins (at most 4.27 kg/m3, in 2005-07-32NM) and disappears on 413
+where both sensors are now flagged (825 changed or removed at depths published in `obs`, 24 of them removed);
+the per-cast `mld_sigma_theta_002` changes on 24 casts (at most 26.2 m) and `mld_sigma_theta_0125` on 31 (at
+most 59.9 m), and each vanishes on 3 casts. The largest effects outside 2607 are 2016-11-33P4, 2012-07-32I1,
+2018-02-3322, 2008-01-31JD, 2005-04-32NM, 2001-01-31JD, 2005-07-32NM and 2001-07-32NM. The `climatology`
+(1993-2013 baseline) moves on 336 monthly cells of `sigma_theta_ave` (at most 0.251 kg/m3), 221 of
+`sigma_theta_1` (0.174), 16 of `mld_sigma_theta_002` (5.95 m) and 23 of `mld_sigma_theta_0125` (6.36 m); no
+cell appears or disappears. **Consumers:** `sigma_theta_1` rows with `measurement_qual` 8 or 9 are now more
+numerous, so a query that does not apply `cc_qual_ok_sql()` / `qual_ok_sql()` / `qualOkSQL()` sees values it
+did not see flagged before, and a `sigma_theta_ave` anomaly on those cruises changes.
+
+The bottle database's `sigma_theta` and `r_dynamic_height` are now described as legacy DECODR values:
+computed by the bottle database's old DECODR algorithm, which does not reproduce a Sea-Bird or TEOS-10
+computation from the same temperature and salinity (Ben Gire, 2026-10-16). They are kept as published
+(Rasmus Swalethorp: "keep legacy, add modern, document"); no value changes. A TEOS-10 recomputation is
+planned as a separate dataset.
+
+## Eight CTD cruises from 1995–98 return: 9501JD, 9712SP and 9803SP–9812SP
+
+These cruises had no CTD casts in any earlier release; they return with 368 casts and 320,384 `obs_env`
+rows from `calcofi_ctd-cast` (1995-01-31JD 134 casts and 125,232 rows; 1997-12-32QU 18 and 15,975;
+1998-03-32QU 32 and 21,352; 1998-05-32QU 38 and 28,329; 1998-08-32QU 38 and 34,877; 1998-10-32QU 38
+and 33,764; 1998-11-32QU 38 and 34,591; 1998-12-32QU 32 and 26,264). No other 1995–98 cruise changed
+against v2026.10.19. calcofi.org listed a final (`CTDFinalQC`) zip for
+each, but every one returned 404, so the ingest skipped it with only a warning, and it also skipped the
+cruise's `CTDFinalDB` copy on the Shared Drive (from JRW's pre-1998 archive) as a duplicate of the web
+final it never got. By 2026-10-20 calcofi.org lists only the raw zips for these cruises, so the
+`CTDFinalDB` copies are read (Ben Best, 2026-10-20). `19-9712SP_CTDFinalDB` writes cast 005d at 521 m
+twice, 9 s apart; that one scan is recorded in the duplicate-scan ratchet as new coverage
+(`1997-12-32QU` = 1). The ingest now stops when a web final it means to read fails to download while its
+Shared Drive copy is skipped, so a cruise cannot vanish this way again. Whether `CTDFinalDB` is the
+record for these cruises is ctd-cast Q46, open with the CTD team.
+
+## Known issue: sixteen underway and meteorology keys carry no category
+
+Re-running the `calcofi_mets` ingest for this release blanked the `category` of its own rows in
+`metadata/measurement_type.csv`: the notebook rebuilds the rows it owns and carried only the bounds
+and `derivation` across the rebuild. So in this release's `measurement_type` table and
+`measurements.json`, 16 keys have a NULL category. No value changed. calcofi.io gives such a key its
+dataset's category, Meteorology & Sea State, which is right for seven of them; until the next
+release, which carries the fix, `sst_c`, `sss_psu`, `tsg1_temp_c`, `tsg1_salinity_psu`, `oxygen`,
+`uws_flow` and `bottom_depth_m` show there instead of under Physical Oceanography, `par_surf` instead
+of Productivity & Pigments, and `sw_ph` instead of Carbonate System.
+
+# v2026.10.19
+## Each measurement key has an authored short title
+
+`measurements.json` gains `short_label` per key (calcofi.io issue #30, decision D13): the name a
+measurement page head shows beside its picture, such as "Dissolved oxygen (ml/L)", while `label`
+keeps the full name with its method notes. It is authored in a new `short_label` column of
+`metadata/measurement_face.csv` and validated by calcofi4db 4.26.0: at most 48 characters, unique
+across keys, no trailing punctuation. Until now calcofi.io cut `label` at its first comma or colon.
+Keys that would have shared a title are told apart by where they were measured, for example
+"Surface PAR (CTD cast)" and "Surface PAR (underway)". `dissolved_iron`, which had no row in the face
+registry, now has one (`face_kind` none: dissolved iron is defined by the filter, a mix of Fe(II),
+Fe(III) and organically bound iron, so there is no single thing to draw).
+
+## The euphausiid dataset credits Mark D. Ohman as its PI
+
+`cce-lter_euphausiids` listed Rasmus Swalethorp and Linsey Sala as PIs and Mark D. Ohman and Moira
+Decima as creators. Mark D. Ohman's correction: PI Mark D. Ohman; creators Mark D. Ohman and Linsey
+Sala. The calcofi_bottle description now says what its "Cast" file is (the rosette cast the bottles
+came up on), since a reader took it for the CTD Cast Files dataset.
+
+## A `#` inside a registry field is no longer cut off as a comment
+
+The registry readers skipped comments with `readr::read_csv(comment = "#")`, which cuts every line at
+its first `#`. The two `measurement_chem.csv` rows for chlorophyll-a's method product (pheophytin a,
+on `chlorophyll_a` and `btl_chlorophyll_a`) cite a calcofi.org URL with a text fragment
+(`#:~:text=…`), so they lost the fragment and their `note` ("what acid turns it into"). calcofi4db
+4.26.0 skips only the leading block of `#` lines, and both rows now read whole.
+
+# v2026.10.14
+
+## BOEM wind leases, oil and gas leases, planning areas and Chumash Heritage are areas you can filter by
+
+Seven boundary layers come from the [Ocean Metrics gazetteer](https://oceanmetrics.io/places/) and
+were map layers only: the Explorer listed them in the Area filter but greyed them out, because
+`ingest_spatial.qmd` skipped them. They are now in `spatial` and `sample_spatial` like every other
+layer. Each one's `places.parquet` is read at a pinned gazetteer version, its sha256 checked
+(`calcofi4db::read_gazetteer_layer()`, calcofi4db 4.25.0), and the pins are kept in
+`data/parquet/spatial/gazetteer_pins.csv`. All seven are at gazetteer v1.1.0 in this release.
+
+Each layer's regions and root samples (counted in the v2026.10.14 staging build's `sample_spatial`):
+
+| layer | gazetteer collection | regions | with samples | root samples |
+|---|---|---|---|---|
+| BOEM OCS Planning Areas | `boem_ocs_planning` | 4 | 4 | 293,149 |
+| BOEM 11th National OCS Program | `boem_program_11_draft` | 3 | 3 | 286,942 |
+| National Marine Sanctuaries | `noaa_sanctuaries` | 7 | 7 | 48,562 |
+| BOEM Pacific Oil & Gas Leases | `boem_pacific_og_leases` | 30 | 30 | 1,444 |
+| SoCal Aquaculture AOAs | `noaa_aoa_socal` | 10 | 8 | 713 |
+| BOEM Wind Leases | `boem_wind_leases` | 5 | 5 | 554 |
+| BOEM Wind Planning Areas | `boem_wind_planning_rescinded` | 235 | 33 | 45 |
+
+- **Status travels with each region.** `spatial_attribute` carries the gazetteer's `status`,
+  `status_date`, `status_source`, the source's own code `status_upstream` and the dated
+  `status_history`. `spatial_layers.json` gains the layer status (`status`, `status_label`,
+  `status_history`, `created`, `source_date`, `gazetteer_version`) and, for every layer, `region_status`
+  (`name`, `status`, `status_date` of each region that holds samples). So the Explorer can say "BOEM
+  Wind Planning Areas (rescinded 2025-07-30)" and "OCS-P 0564 Commercial - Golden State Wind LLC
+  (settlement pending 2026-04-27)".
+- **The California wind leases have a dated history.** It comes from BOEM's lease documents.
+  - OCS-P 0561 (RWE): settlement 2026-08-04, relinquished 2026-09-03.
+  - OCS-P 0564 (Golden State Wind): settlement pending since 2026-04-27.
+  - OCS-P 0565 (Invenergy): settlement 2026-06-12, cancelled 2026-07-10.
+  - OCS-P 0562 and 0563: active.
+  
+  The geometries are kept whatever the status. A rescinded or cancelled area stays a region you can
+  filter by, with its status beside its name.
+- **Only features touching the CalCOFI study area join `spatial`.** The study area is the extent of
+  the station grid, 135.25°W–105.75°W and 18.4°N–49.25°N. Features are kept whole, never clipped, so
+  membership stays exact. The national layers shrink: sanctuaries 47 → 7, wind planning areas
+  3,325 → 235 (outlines and OCS blocks), OCS planning areas 27 → 4. Four samples outside the box lose
+  a gazetteer region they touched: three 2015 CUFES underway points off SE Alaska and a 2002 ichthyo
+  station off Oahu.
+- **National Marine Sanctuaries now come from the gazetteer** (NOAA ONMS via MarineCadastre). This adds
+  **Chumash Heritage** (designated 2024; explore#34), splits Channel Islands into its Northern and Santa
+  Barbara sections, and drops the bad name "Flower Garden BanksUpdated 03/23/21". **Consumers:** the
+  region names change from the short form ("Channel Islands", "Monterey Bay") to the full name
+  ("Monterey Bay National Marine Sanctuary"). The Explorer widens an old short name to the regions it
+  prefixes.
+- **SoCal Aquaculture AOAs now come from the gazetteer.** The AOA codes stay the names (CN1-A … N2-E).
+  The duplicate registry row `noaa_aoa_socal` is removed; the Explorer maps its slug to
+  `noaa_aquaculture_aoas`.
+- **BOEM Wind Planning Areas is a different layer from the one v2026.10.08 carried.** That one was
+  BOEM's 2023 planning areas, with Humboldt and Morro Bay (793 samples in 3 areas). BOEM's current
+  layer holds only the areas never leased, all rescinded on 2025-07-30. The California WEAs became
+  leases OCS-P 0561–0565, so they are in BOEM Wind Leases.
+- **The Pacific oil and gas leases drop four renewable leases.** BOEM's Pacific cadastral service lists
+  OCS-P 0560 and 0562–0564 as `RENACV`. 0562–0564 are wind leases, in BOEM Wind Leases with their dated
+  status.
+- **`spatial.geojson` keeps only the gazetteer regions that hold samples**, so the national layers do
+  not bloat the sidecar. The Explorer draws the full layers from the gazetteer's PMTiles.
+
+## CTD quality code 4 means "below detection limit"
+
+The provider defined CTD code 4 (Ben Gire, 2026-10-13): **below detection limit**, reported as 0. On the
+corrected chlorophyll-a and nitrate estimates only a negative value is set to 0 and coded 4; the code
+may be used on any CTD sensor series. `metadata/measurement_qual.csv` renames the code from
+`set_to_zero` to `below_detection` and says so. No value changes: the zeros still count in averages,
+integrated chlorophyll and anomalies. Cruises after 2107 are to be reprocessed with the same rule;
+earlier cruises, the 1993–2013 baseline included, keep their negatives or gaps for now.
+
+# v2026.10.13
+
+## CalCOFI 2607 (2026-07-3322): the corrected preliminary CTD files
+
+The CTD team re-published `20-2607SH_CTDPrelim.zip` on calcofi.org on 2026-10-12 (Ben Gire). The
+Shared Drive copy the pipeline reads was replaced with it the next day. The bins and columns are the
+same as before. Diffed per measurement type against the shards v2026.10.08 was cut from, **nothing
+outside 2607 changed** (0 of 4,931 `obs` and 0 of 6,093 `obs_ctd_full` cruise × type cells). In 2607:
+
+- **A new CTD quality code, 4**: a corrected chlorophyll-a or nitrate estimate that came out negative
+  is now 0 instead of blank. It is registered in `metadata/measurement_qual.csv` as `set_to_zero`, and
+  `qual_ok` keeps it: the zero is a real value and counts in averages, integrated chlorophyll and
+  anomalies. This fills about 1,000–2,900 bins per estimate (`est_chlorophyll_a_*`,
+  `est_nitrate_*`).
+- **The nitrate and chlorophyll estimates were recalibrated by the provider**: nitrate by up to
+  1.0 µM (`est_nitrate_sta_corr`), chlorophyll by up to 0.003 µg/L.
+- **Sensor-2 oxygen** (`oxygen_umol_kg_2_*`) was recalibrated (up to 1.06 µmol/kg), and 2,213 of its
+  values were blanked and flagged 9 on the early casts. **The averaged oxygen and temperature are
+  unchanged**: the pipeline already used sensor 1 alone on casts 1–6 (`flag_overrides.csv`, from the
+  provider's cruise note that the secondary temperature sensor was faulty; question Q37), and
+  rebuilds every pair with `combine_sensor_pair_sql()`.
+- **`btl_temperature` is new for 2607** (2,396 bins: the provider filled the file's `BTL_Temp`
+  column). Two bottles' nutrients moved out of their 1 m bins.
+- **Derived products:** `chl_integrated` changed on 72 casts (mean +0.01 mg/m², at most +0.75), and
+  `chl_integrated_depth` deepened on 54 casts (mean +5 m, at most +132 m), because the zeros now count
+  as good bins instead of ending the integral. The mixed-layer depths, `chl_max_depth`, `spiciness0`
+  and `sigma_theta_ave` are unchanged.
+
+## Anomalies for the derived CTD products, and a seasonal baseline
+
+Rasmus Swalethorp asked for both (2026-10-06, 2026-10-07). The `climatology` table (calcofi4db
+4.24.0) now carries:
+
+- **Per-cast baselines** for the derived products in `sample_measurement`: the three mixed-layer
+  depths (`mld_sigma_theta_002`, `mld_sigma_theta_0125`, `mld_temperature_02`), `chl_max_depth`,
+  `chl_max` and `chl_integrated`. They use the same rules (station, cruise month, 1993–2013, at least
+  5 cruises). Such a value has no depth, so its row's **`depth_bin` is NULL**. `relationships.json`
+  declares that column as `nullable_key_columns`.
+- **A seasonal baseline beside the monthly one**: new columns `quarter`, `season_mean`, `season_sd`,
+  `season_n`, `season_n_cruises`, by the quarter of the cruise's month (Q1 Jan–Mar … Q4 Oct–Dec).
+  They are set on every month of a quarter that has at least 5 cruises. Where only the season passes
+  (mostly the northern lines 60–73.3), the row has a seasonal mean and a **NULL `clim_mean`**.
+
+**`obs_env` / `obs_bio` `year` and `quarter` are the cruise's**, not the cast's calendar date. 2607's
+inshore 93.3 casts were worked on 30 June and now fall in Q3 with the rest of the July cruise, the
+same season their baseline is filed under.
+
+**Consumers:** a row that exists is no longer always a monthly baseline. Test `clim_mean IS NOT NULL`
+before subtracting. A per-bin join on `depth_bin = <n>` never matches a per-cast cell. Columns were
+appended, never renamed.
+
+## The US EEZ, territorial sea and contiguous zone are areas you can filter by
+
+`sample_spatial` had no memberships for the three US maritime zones, because the NOAA limits they
+were drawn from are lines (workflows#169). They are now polygons of the Pacific coast from the Marine
+Regions Maritime Boundaries Geodatabase (Flanders Marine Institute; EEZ v12, 12 NM and 24 NM v4;
+CC BY 4.0), so the Explorer's Area filter and Regions lens can use them. The layer ids and names are
+unchanged: `200NM EEZ` (0–200 NM), `12NM Territorial Sea` (0–12 NM) and `24NM Contiguous Zone`, the
+band from 12 to 24 NM. All three are named `Pacific Coast`.
+
+BOEM's 2023 Wind Planning Areas, which BOEM rescinded on 30 July 2025, are no longer an area layer:
+`spatial` and `sample_spatial` drop `BOEM Wind Planning Areas` (in v2026.10.08, 793 samples in 3
+areas). The Explorer draws BOEM's current wind leases, the rescinded planning areas and three other BOEM
+layers from the Ocean Metrics gazetteer instead; those are map layers only, not areas you can filter
+samples by.
+
+## Seabird and marine mammal surveys of July 2021 and August 2022 now have their cruise
+
+`farallon_bird-mammal` matches each survey to the CalCOFI cruise its observers rode by the stations
+occupied the same day. The track was the ichthyoplankton tows alone, so the two surveys on cruises
+without a tow, `CAC2021_7` (`2021-07-33P4`) and `CAC2022_8` (`2022-08-39C2`), had a NULL
+`cruise_key` (workflows#74). The track now includes the CTD casts. `Fronts_0711`, a CCE-LTER process
+cruise with no CalCOFI cruise, stays NULL. `CAC2021_7`'s 466 transects carry no observations in the
+source (question Q11, also open for January 2021 and October 2022), so 2021-07-33P4 is a third
+farallon cruise with effort and no sightings.
+
+# v2026.10.08
+
+## The three marine mammal datasets are withdrawn until the lab that collected them has reviewed them
+
+`sio_cetacean-sightings`, `sio_cetacean-sonobuoy` and `sio_cetacean-edna` entered in v2026.10.05 from
+CalCOFI/marmam-app, the copy a Shiny app was built on, with their licences and citations still being
+asked of the provider. We published before the Scripps Whale Acoustics Lab had reviewed them. Simone
+Baumann-Pickering (2026-10-07) explained that the app's data were exploratory, not the lab's final
+QA/QC'd product, that the lab had meant to hold marine mammal data until Michaela Alksne's density
+manuscript is submitted, and that the eDNA screens were generated by the Semmens team. All three are
+now `in_release: false`, so none of their rows is in this release:
+
+- **`sio_cetacean-sightings`** is being re-ingested from the QA/QC'd on-effort sightings and segments
+  Michaela Alksne prepared, and returns only when the lab signs off on it, its licence and its
+  citation.
+- **`sio_cetacean-sonobuoy`** waits until the lab identifies the product to distribute publicly.
+- **`sio_cetacean-edna`** waits on the Semmens team.
+
+Their ingest notebooks are also off calcofi.io/workflows. The `sample_type` values (`sighting`,
+`deployment`, `scan`, `water`) and the `measurement_type` rows they introduced stay in the registry
+with no rows behind them; `edna_presence` is still filled by `calcofi_2022-edna`.
+
+**v2026.10.05 and v2026.10.06 are retired.** They carried the marmam-app rows, so their parquet is
+removed (`scripts/thin_releases.R --withdraw`); nothing in them was rewritten. Their catalogs,
+sidecars, release notes and DOIs stay, and each `retired.json` names this release as the one to read
+instead.
+
+**Consumers:** a query filtered on `dataset_key LIKE 'sio_cetacean%'` now returns no rows.
+
 # v2026.10.06
 
 ## The climatology is filed by the cruise's month, so a cruise that began in June has a July baseline

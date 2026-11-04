@@ -285,6 +285,84 @@ test_that("dm_apply_pull_dataset ignores a measured (non-editable) field even if
   expect_equal(res$lines, sidecar)
 })
 
+# a stale sheet never reverts git (2026-10-22) ----------------------------------
+# every metadata tab had fallen behind git; a pull would have blanked 102 fields
+# and put Farallon's licence back from CC-BY-4.0 to custom
+
+test_that("dm_apply_pull_dataset keeps git's value when the sheet cell is blank", {
+  sidecar <- c("# header", "  license: CC-BY-4.0")
+  rows <- data.frame(field = "license", value = "", edited_by = "", edited_date = "",
+                     stringsAsFactors = FALSE)
+  res <- dm_apply_pull_dataset(sidecar, rows, licenses = c("CC-BY-4.0", "custom"))
+  expect_equal(nrow(res$diffs), 0)
+  expect_equal(res$kept$field, "license")
+  expect_match(res$kept$note, "blank")
+  expect_equal(res$lines, sidecar)
+})
+
+test_that("dm_apply_pull_dataset keeps git's value when the sheet holds an earlier git value", {
+  sidecar <- c("# header", "  license: CC-BY-4.0")
+  rows <- data.frame(field = "license", value = "custom", edited_by = "", edited_date = "",
+                     stringsAsFactors = FALSE)
+  res <- dm_apply_pull_dataset(sidecar, rows, licenses = c("CC-BY-4.0", "custom"),
+                               history = list(list(license = "CC-BY-4.0"), list(license = "custom")))
+  expect_equal(nrow(res$diffs), 0)
+  expect_match(res$kept$note, "earlier git value")
+  expect_equal(res$lines, sidecar)
+})
+
+test_that("dm_apply_pull_dataset applies a value git never held (a provider edit)", {
+  sidecar <- c("# header", "  pi_names: Mark D. Ohman")
+  rows <- data.frame(field = "pi_names", value = "Mark D. Ohman; Jane Provider", edited_by = "Jane",
+                     edited_date = "2026-10-22", stringsAsFactors = FALSE)
+  res <- dm_apply_pull_dataset(sidecar, rows,
+                               history = list(list(pi_names = "Rasmus Swalethorp; Linsey Sala")))
+  expect_equal(res$diffs$field, "pi_names")
+  expect_equal(nrow(res$kept), 0)
+})
+
+test_that("dm_apply_holdings_pull fills a blank but never blanks or reverts git", {
+  sidecar <- c("# header", "  status: planned", "  priority: ''", "  owner: ben", "  next_step: ask")
+  row <- list(status = "planned", priority = "PR", owner = "", next_step = "an older step")
+  res <- dm_apply_holdings_pull(sidecar, row, statuses = c("planned", "external"),
+                                history = list(list(next_step = "an older step")))
+  expect_equal(res$diffs$field, "priority")
+  expect_setequal(res$kept$field, c("owner", "next_step"))
+})
+
+test_that("a pull keeps a sidecar's blank lines between entries (2026-10-22: they were all dropped)", {
+  sidecar <- c("# source: a", "provider: x", "", "# source: b", "status: planned", "", "# source: c",
+               "next_step: ask")
+  res <- dm_apply_holdings_pull(sidecar, list(status = "planned", priority = "PR", owner = "", next_step = "ask"),
+                                statuses = "planned")
+  expect_equal(res$lines, c(sidecar, "", "priority: PR"))
+})
+
+test_that("a block value with a paragraph break parses as one entry (bottle-derived's quality_control_md)", {
+  sidecar <- c("# h", "  quality_control_md: |-", "    First paragraph.", "", "    **Pressure.** Second.",
+               "", "  # source: x", "  license: CC0-1.0")
+  pk <- dm_parse_kv_block(dm_split_header(sidecar)$body, indent = 2L)
+  expect_equal(vapply(pk$entries, `[[`, "", "key"), c("quality_control_md", "license"))
+  expect_equal(pk$entries[[1]]$lines, sidecar[2:5])
+  expect_equal(dm_render_sidecar(dm_split_header(sidecar)$header, pk$entries, pk$trailing), sidecar)
+})
+
+test_that("every sidecar in the repo parses and re-renders byte for byte", {
+  for (p in Sys.glob(here::here("metadata/*/*/dataset_meta.yml"))) {
+    ln <- readLines(p, warn = FALSE); sp <- dm_split_header(ln)
+    pk <- dm_parse_kv_block(sp$body, indent = dm_detect_indent(sp$body))
+    expect_equal(dm_render_sidecar(sp$header, pk$entries, pk$trailing), ln, info = p)
+  }
+})
+
+test_that("dm_sidecar_history reads a tracked sidecar at its earlier commits", {
+  p <- here::here("metadata/farallon/bird-mammal/dataset_meta.yml")
+  skip_if_not(file.exists(p))
+  h <- dm_sidecar_history(p)
+  expect_gt(length(h), 1)
+  expect_true("custom" %in% vapply(h, function(x) x$license %||% "", character(1)))
+})
+
 # holdings tab --------------------------------------------------------------------
 
 test_that("dm_holdings_row shapes one row from a holding sidecar", {

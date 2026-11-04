@@ -60,8 +60,15 @@ taxon,scientificNameAuthorship,Scientific Name Authorship,,Authority string for 
 taxa_rank,,Taxa Rank,,Lookup table mapping taxonomic rank names to sort order
 taxa_rank,taxonRank,Taxon Rank,,Taxonomic rank name (e.g. Kingdom; Species). Primary key.
 taxa_rank,rank_order,Rank Order,,Integer sort order from broadest (1=Kingdom) to most specific
-fish,,Fish,,"Fish grown past the larval stage (SWFSC Fish table): counts per net and CalCOFI species code. Not in obs: whether these fish are also in the larval count, and which life stage they are, is asked (swfsc_ichthyo_20)."
+fish,,Fish,,"Fish larger than larval size (SWFSC Fish table): generally juveniles but not exclusively, counted per net and CalCOFI species code in addition to the larvae of the same net, never in both (Ed Weber, 2026-10-14, swfsc_ichthyo_20). Not in obs: no life stage in the vocabulary says exactly ""larger than larval size""."
 fish,sample_key,Sample Key,,"The net (sample_type net) the fish were counted in; FK to sample."
 fish,species_id,Species ID,,"CalCOFI species code (SWFSC SppCode); with sample_key the primary key. Its name is dataset_taxon.ds_scientific_name for ds_taxa_code = species_id."
 fish,taxon_key,Taxon Key,,"The taxon the species code resolves to (by its WoRMS AphiaID); FK to taxon."
-fish,tally,Tally,count,"Raw count of fish in the sorted portion of the net (not standardized; see the net's std_haul_factor and prop_sorted in sample_measurement)."
+fish,tally,Tally,count,"Raw count of fish larger than larval size in the sorted portion of the net (not standardized; see the net's std_haul_factor and prop_sorted in sample_measurement). Additive to the larval abundance of the same net and species code."
+ichthyo_net,,Ichthyo Net,,"One row per SWFSC ichthyoplankton net with the two source columns the core projection drops: the net's side of a bongo pair and the tow's number at its station occupation, beside SWFSC's own NetId and TowId and the tow type. Join sample (sample_type = 'net', dataset_key = 'swfsc_ichthyo') USING (sample_key). What tells the two nets of a bongo tow, and two tows of one type at one occupation, apart; the SIO Pelagic Invertebrate Collection's Parent Net Event crosswalk matches on it."
+ichthyo_net,sample_key,Sample Key,,"The net's sample_key (swfsc_ichthyo:net:<NetId>); primary key and FK to sample."
+ichthyo_net,net_uuid,Net UUID,,"SWFSC's NetId, the provider's identifier of the net (= sample.source_uuid of the net row)."
+ichthyo_net,tow_uuid,Tow UUID,,"SWFSC's TowId, the provider's identifier of the tow the net was on (= sample.source_uuid of the net's parent tow row)."
+ichthyo_net,net_side,Net Side,,"Side of a bongo pair the net was on: S (starboard) or P (port) on CalBOBL (CB) and PairoVET (PV) tows; NULL on the single-net C1, CalVET (CV) and Manta (MT) tows. Zooplankton volume is measured on the starboard net only."
+ichthyo_net,tow_number,Tow Number,,"Which of several tows of one type at one station occupation this net's tow is (SWFSC TowNumber): 1 for all but 121 of 74,385 tows, up to 50. (site, tow type, tow number) is unique."
+ichthyo_net,tow_type,Tow Type,,"The tow's gear code (C1, CB, CV, MT, PV), as on sample.tow_type; see gear.csv."
