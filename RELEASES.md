@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.11.04
+
 ## Hypoxic boundary depths, the nitracline, the pycnocline and N² join the CTD-derived products
 
 `calcofi_ctd-derived` adds, per cast, the three **hypoxic boundary depths** of the CTD team's
