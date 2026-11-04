@@ -1,13 +1,13 @@
 generated: '2026-11-04'
-n_total: 67
-n_meta: 35
+n_total: 68
+n_meta: 36
 categories:
 - id: ingest
   title: Ingest
   blurb: Acquire, standardize, and load a source dataset into the integrated database.
     Cards are grouped by data provider.
   layout: cards
-  count: 23
+  count: 24
   groups:
   - label: CalCOFI
     items:
@@ -266,6 +266,16 @@ categories:
       bbox: 29.8–35.6°N, 124.3–117.3°W
       color: '#bbe0f0'
       link_data_source: https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/159
+      provider: cce-lter
+    - url: ingest_cce-lter_poc-pon.html
+      title: ingest_cce-lter_poc-pon
+      dataset_name: CCE-LTER Particulate Organic Carbon and Nitrogen (CalCOFI Cruises)
+      description: Particulate organic carbon (POC) and nitrogen (PON) in micromoles
+        per liter from Niskin bottle samples at multiple depths on CalCOFI cruises,
+        2004 to 2023 and ongoing. Samples are filtered onto glass-fiber filters and
+        analyzed onshore by high-temperature combustion.
+      color: '#ead8c8'
+      link_data_source: https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-cce.54.10
       provider: cce-lter
     - url: ingest_cce-lter_toc.html
       title: ingest_cce-lter_toc
@@ -536,6 +546,7 @@ dag_mermaid: |-
     ingest_cce_lter_euphausiids(["ingest_cce_lter_euphausiids"]):::c_ingest_cce_lter_euphausiids
     ingest_cce_lter_iron(["ingest_cce_lter_iron"]):::c_ingest_cce_lter_iron
     ingest_cce_lter_picoplankton_bacteria(["ingest_cce_lter_picoplankton_bacteria"]):::c_ingest_cce_lter_picoplankton_bacteria
+    ingest_cce_lter_poc_pon(["ingest_cce_lter_poc_pon"]):::c_ingest_cce_lter_poc_pon
     ingest_cce_lter_toc(["ingest_cce_lter_toc"]):::c_ingest_cce_lter_toc
     ingest_cce_lter_zoodb(["ingest_cce_lter_zoodb"]):::c_ingest_cce_lter_zoodb
     ingest_cce_lter_zooscan(["ingest_cce_lter_zooscan"]):::c_ingest_cce_lter_zooscan
@@ -568,6 +579,8 @@ dag_mermaid: |-
     ingest_swfsc_ichthyo --> ingest_cce_lter_euphausiids
     ingest_swfsc_ichthyo --> ingest_cce_lter_iron
     ingest_swfsc_ichthyo --> ingest_cce_lter_picoplankton_bacteria
+    ingest_swfsc_ichthyo --> ingest_cce_lter_poc_pon
+    ingest_calcofi_bottle --> ingest_cce_lter_poc_pon
     ingest_swfsc_ichthyo --> ingest_cce_lter_toc
     ingest_calcofi_bottle --> ingest_cce_lter_toc
     ingest_swfsc_ichthyo --> ingest_cce_lter_zoodb
@@ -600,6 +613,7 @@ dag_mermaid: |-
     ingest_cce_lter_euphausiids --> release_database
     ingest_cce_lter_iron --> release_database
     ingest_cce_lter_picoplankton_bacteria --> release_database
+    ingest_cce_lter_poc_pon --> release_database
     ingest_cce_lter_toc --> release_database
     ingest_cce_lter_zoodb --> release_database
     ingest_cce_lter_zooscan --> release_database
@@ -625,6 +639,7 @@ dag_mermaid: |-
     classDef c_ingest_cce_lter_euphausiids fill:#d2f0bb,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_iron fill:#f0e0c0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_picoplankton_bacteria fill:#bbe0f0,stroke:#00000033,color:#10161c;
+    classDef c_ingest_cce_lter_poc_pon fill:#ead8c8,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_toc fill:#dde5c8,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zoodb fill:#d9c2f0,stroke:#00000033,color:#10161c;
     classDef c_ingest_cce_lter_zooscan fill:#c2e8f0,stroke:#00000033,color:#10161c;
