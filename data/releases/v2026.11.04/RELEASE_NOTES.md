@@ -221,7 +221,7 @@ line 80)` (URL-encoded; the layer and region names are those of `spatial`).
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.04 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.11.04
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.04 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.23965256
 
 Cite the source datasets you use alongside the release:
 
