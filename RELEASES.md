@@ -24,6 +24,49 @@ What ships is registry content only: the `_source_datasets` of `poc` and `pon` a
 `cce-lter_poc-pon-cce-region`. The holding's catalog abstract, which had described a nitrate
 stable-isotope dataset, is replaced by the EDI package's own (Q01).
 
+## A new dataset, staged not released: `cce-lter_hplc-pigments-calcofi`, HPLC pigments on CalCOFI cruises, 2002–2023
+
+`ingest_cce-lter_hplc-pigments-calcofi.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.316.1`
+(Goericke, Stukel, Dovel; doi:10.6073/pasta/99e2bad73df5fd4890237d31415820b8, CC0 1.0;
+CalCOFI/workflows#84): 9,136 Niskin bottle samples with 154,459 `obs` of chlorophylls and carotenoids
+(µg/L). Samples were analysed by the Goericke Lab (SIO) through 2014 and by Horn Point Laboratory
+(UMCES) since, and the provider's own comparison finds some pigments not comparable between the two,
+so each lab's values get their own types; which can be joined is left to a `variable` crosswalk. The
+provider's per-sample QC flag is published as `measurement_qual`. It is **held out of the release**
+(`in_release: false`) until the provider answers the questions on held-out rows (Q01, Q02, Q04) and
+which QC flags a user should exclude (Q06). The catalog holding `cce-lter_hplc-pigments` (EDI 72,
+Process cruises) is a different table and stays a holding.
+
+What ships is registry content:
+
+- `measurement_type` gains 44 types, `hplc_{pigment}_sio` and `hplc_{pigment}_umces` (µg/L,
+  `valid_min = 0`; `metadata/cce-lter/hplc-pigments-calcofi/pigment_columns.csv` maps each source
+  column).
+- `measurement_qual` gains the code set `hplc-pigments-calcofi` (0 no flag, 1 TChl a ≤ 0,
+  2 accessory-pigment ratio, 3 HPLC vs fluorometer mismatch). `calcofi4r`'s `CC_QUAL_EXCLUDE` does
+  not list the dataset yet, so no flag is excluded by default until Q06 is answered.
+- `ship_renames.csv` gains CCE-LTER's code `33SH` → NODC `3322` (Bell M. Shimada, 2021-05).
+
+## A new dataset, staged not released: `cce-lter_toc`, total organic carbon on CalCOFI cruises, 2008–2017
+
+`ingest_cce-lter_toc.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.253.3` (Aluwihare,
+doi:10.6073/pasta/ba2ce7e921448a75372109d9f2f5cab2, CC0 1.0), fetched and md5-pinned by
+`libs/download_toc.R` (CalCOFI/workflows#84): 10,089 Niskin bottle samples with 10,147 `toc` obs
+(µmol/L; a bottle analysed more than once keeps each analysis as its own obs). The source's
+coefficient of variation is published as `measurement_prec` (standard deviation = TOC × CV / 100).
+It is **held out of the release** (`in_release: false`) until the provider answers Q01: 13 values near
+2,100 µmol/L, in the range of seawater inorganic carbon. Two exact duplicate rows are dropped and one
+undated row is held out (Q05).
+
+What does ship is one registry row: `measurement_type` gains `toc` (µmol/L, `valid_min = 0`,
+`_prec_column` "TOC CV"; no upper bound).
+
+Two bottles of the 2017-01 cast 37 sit 19 and 24 m below the GEBCO seafloor; they are published as
+given and recorded as the dataset's held-out seafloor baseline (`DEPTH_SEAFLOOR_OVER_HELD`, Q06).
+`libs/download_edi.R` now falls back to EDI's DataONE member node when PASTA refuses anonymous
+access (every public call answered 403 "Public Access is not authorized" on 2026-11-04); the md5 pin
+is checked on both routes.
+
 ## A new dataset, staged not released: `cce-lter_poc-pon`, particulate organic carbon and nitrogen on CalCOFI cruises, 2004–2023
 
 `ingest_cce-lter_poc-pon.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.54.10` (Goericke,
