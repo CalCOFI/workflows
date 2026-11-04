@@ -130,6 +130,18 @@ before writing — `license` against `metadata/license.csv`, `contact` as an ema
 changed value plus an `edited:` stamp, never the whole file. WS-R1's CalOOS-sheet proposals sit beside
 each sidecar as `dataset_meta.proposed.yml` until a provider confirms them.
 
+**A Sheet behind git is not an edit, and a push never erases one.** Commits change `questions.csv`
+and the sidecars without touching the Sheets, so a Sheet drifts behind; until 2026-10-22 a pull took
+every differing cell as an edit, and a pull that day would have reopened the eDNA, CUFES and ichthyo
+answers, blanked 102 metadata fields and restored Farallon's licence from CC-BY-4.0 to custom. Both
+pulls now keep git's value when the Sheet cell is blank; the questions pull never moves a status back
+(`qs_status_rank()`), auto-flips open → answered only on an answer git does not already hold (an open
+row may carry a partial note), and reports a different value on a row git closed as a `conflict`; the
+metadata pull treats a value the sidecar held at an earlier commit as stale (`dm_stale_note()` over
+`dm_sidecar_history()`). Each push first runs the pull's comparison and refuses while a tab holds an
+edit nobody pulled (`--force` overrides). So the order is always pull `--execute`, commit, push
+`--execute`; after a commit that edits a question or a sidecar, push that provider.
+
 
 ## Conventions the registries enforce
 

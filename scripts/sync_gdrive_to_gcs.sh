@@ -115,14 +115,16 @@ if ! command -v gcloud &> /dev/null; then
     exit 1
 fi
 
-# verify rclone remotes exist
-if ! rclone listremotes | grep -q "^${GDRIVE_REMOTE}:$"; then
+# verify rclone remotes exist; a connection-string remote ("name,root_folder_id=…",
+# the default since de975d0) is listed by its name alone, so compare the part before
+# the first comma
+if ! rclone listremotes | grep -q "^${GDRIVE_REMOTE%%,*}:$"; then
     log "ERROR: rclone remote '${GDRIVE_REMOTE}' not configured"
     log "Run: rclone config"
     exit 1
 fi
 
-if ! rclone listremotes | grep -q "^${GCS_REMOTE}:$"; then
+if ! rclone listremotes | grep -q "^${GCS_REMOTE%%,*}:$"; then
     log "ERROR: rclone remote '${GCS_REMOTE}' not configured"
     log "Run: rclone config"
     exit 1

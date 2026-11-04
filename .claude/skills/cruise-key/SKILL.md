@@ -113,3 +113,37 @@ identifiers are released as **typed columns beside the namespaced keys**:
   `metadata/calcofi/dic/questions.csv` Q07).
 
 
+
+## A ship named wrongly on one cruise, and the gate that missed it
+
+Every release through v2026.10.21 kept the July 2009 bottle casts (100) and
+picoplankton samples (230) on `2009-07-31M4` (MCARTHUR, `derived`) beside SWFSC's
+`2009-07-33MH` (MCARTHUR II) with identical dates, 2009-07-15 to 2009-08-03. The
+bottle Cast file names the ship 31M4 for cruise 200907 (Cruise_ID
+`2009-07-14-C-31M4`), picoplankton's `studyName` copies that id and DIC's EXPOCODE
+is `31M420090714` (its 51 samples resolved no cruise at all), although the
+McArthur's last cruise was 2002-10. It was there from the first release that keyed
+bottle casts (v2026.06.26, `casts.cruise_key`); no ingest change introduced it.
+It was found 2026-10-30 by the AI-readiness benchmark's agents, not by any gate.
+
+- **Why nothing caught it.** `complete_cruise_reference()` minted a `derived` row
+  for the key, so the FK held (check 4); 31M4 is MCARTHUR's own NODC (check 3); a
+  derived cruise's span is its own events' (check 6 skips derived rows); the
+  overlap ratchet (check 8) compares one ship's cruises only. `resolve_cruise_key()`
+  found no MCARTHUR span in 2009 and fell back to the source's own designation,
+  correctly by its rules. Every check looked at one key in isolation.
+- **Check 11 (`derived_co_occupied`, calcofi4db 4.31.0)** compares across keys: a
+  root sample on a derived cruise at a `site_key` an `swfsc_ichthyo` site occupied
+  within 24 h on a different cruise is the same occupation under two keys. On
+  v2026.10.21 it flagged exactly the 315 July 2009 samples (bottle 85 of 100,
+  picoplankton 230 of 230) and nothing else. The same join WITHOUT the derived
+  filter also lists SWFSC-keyed pairs (pic-zooplankton 1964-01 31BD vs 31AX on
+  204 samples, 1996-08 32NM vs 32QM on 79, euphausiids 2014-04 32I1 vs 3322 on 8,
+  and 1950s two-ship months): these are either two ships really at one station or
+  ship mislabels in those sources, and they are open rather than gated.
+- **The fix is per cruise, not per ship.** `ship_renames.csv` renames by name +
+  code everywhere, which would also move 198502 (a real 31M4 cruise).
+  `metadata/cruise_ship_corrections.csv` names `ship_code` + `cruise_ym` and
+  `correct_cruise_ship()` applies it before `derive_cruise_key_on_casts()`; a row
+  for the dataset that matches nothing stops the ingest, so a corrected source
+  forces the row's removal.
