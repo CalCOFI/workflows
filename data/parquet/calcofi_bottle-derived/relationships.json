@@ -4,12 +4,19 @@
   "dataset": "bottle-derived",
   "primary_keys": {
     "obs": "obs_id",
+    "sample_measurement": "sample_measurement_id",
     "measurement_type": "measurement_type",
     "dataset": "dataset_key"
   },
   "foreign_keys": [
     {
       "table": "obs",
+      "column": "measurement_type",
+      "ref_table": "measurement_type",
+      "ref_column": "measurement_type"
+    },
+    {
+      "table": "sample_measurement",
       "column": "measurement_type",
       "ref_table": "measurement_type",
       "ref_column": "measurement_type"
