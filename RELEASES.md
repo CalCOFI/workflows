@@ -107,6 +107,27 @@ carries the four ESD size classes (29,658 rows); `sample_measurement` carries `i
 Four measurement types are registered. License CC0-1.0 and DOI 10.6075/J05Q4WFB come from the CalOOS
 dataset sheet and are awaiting the provider's confirmation for the summary table (Q01).
 
+## Kahru's satellite areas 2–6 are a region layer
+
+A new boundary layer, **Kahru Satellite Areas** (`kahru_satellite_areas`, group *Satellite Regions*),
+holds the areas Mati Kahru (SIO) averages satellite chlorophyll over (Kahru et al. 2012, *Deep-Sea
+Research II*), for the State of the California Current report: north of line 80, area 3 is the coastal
+band 0–100 km from shore and area 2 the transition, 100–300 km; south of it area 6 is coastal, 5 the
+transition and 4 offshore. Area 1 (offshore, north) holds too few stations and is left out. Kahru's
+station lists (via Rasmus Swalethorp, 2026-10-27) are `metadata/spatial/kahru_areas_stations.csv`, and
+each area is the union of the `calcofi4r::cc_grid` cells of its stations, built by
+`ingest_spatial.qmd` (`libs/kahru_areas.R`), so the five areas are rows of `spatial` and every sample
+inside one has a `sample_spatial` membership.
+
+Version 1 keeps **whole cells**: a line-80 cell is in the one area Kahru listed it in, and the cells
+on the 100 km and 300 km borders are not halved, as Rasmus would like them to be when averaging. The
+nine SCCOOS inshore stations are not on Kahru's lists, so their cells along the Southern California
+coast are in no area.
+
+In the Explorer the layer is in the Regions picker (`lens=region&layer=Kahru Satellite Areas`), and
+the Area filter keeps one area: `area=in:Kahru Satellite Areas|Kahru area 5 (transition, south of
+line 80)` (URL-encoded; the layer and region names are those of `spatial`).
+
 # v2026.10.30
 
 ## The July 2009 bottle casts join their cruise
