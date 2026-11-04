@@ -1064,6 +1064,24 @@ stopifnot(
 d_over <- check_depth_vs_seafloor(con_wdl, sf_sample, tolerance_m = 10,
                                   nominal_datasets = DEPTH_NOMINAL_DATASETS)
 d_over_nominal <- attr(d_over, "nominal")
+# a held dataset a PREVIEW run includes (CALCOFI_RELEASE_INCLUDE) is ratcheted apart,
+# against the count measured at its first preview run (DEPTH_SEAFLOOR_OVER_HELD, one
+# entry per dataset, default 0): the public ratchet never sees it (release_include is
+# empty in a public run), so it is neither raised nor weakened, and the finding stays
+# a question for the provider (named per entry) until the dataset is un-held, when its
+# samples join the public count and the ingest must have fixed or held them out
+DEPTH_SEAFLOOR_OVER_HELD <- c(
+  "sio_cetacean-sightings" = 0L)
+d_over_held <- d_over |> filter(dataset_key %in% release_include)
+d_over      <- d_over |> filter(!dataset_key %in% release_include)
+if (nrow(d_over_held)) {
+  held_over <- d_over_held |> count(dataset_key, name = "n") |>
+    mutate(allowance = coalesce(DEPTH_SEAFLOOR_OVER_HELD[dataset_key], 0L))
+  print(as.data.frame(held_over))
+  stopifnot(
+    "a held dataset has more samples below the seafloor than its recorded baseline (DEPTH_SEAFLOOR_OVER_HELD) — fix at the ingest or record the measured count with its question" =
+      all(held_over$n <= held_over$allowance))
+}
 attr(d_over, "summary") |>
   datatable(caption = paste(
     "Root samples deeper than the seafloor (+10 m over the deepest GEBCO cell",
