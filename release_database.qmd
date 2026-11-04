@@ -1720,7 +1720,15 @@ d_cki <- check_cruise_key_integrity(
       # reference cruise, CC2023-03 (29 segments, Mar-Apr 2023) and CC2024-07 (36,
       # Jul-Aug 2024; sightings Q14), plus the one segment it holds as misdated
       # (2022-11-05; Q07). Baseline, not a target.
-      "sio_cetacean-sightings"        = 66L)),
+      "sio_cetacean-sightings"        = 66L,
+      # poc-pon-cce-region (held, in_release: false; reaches a release only through
+      # CALCOFI_RELEASE_INCLUDE in the private preview): every one of its 3,216 root
+      # samples (3,159 Niskin bottles + 57 underway), measured at the 2026-11-04 Mac mini
+      # render (PR #156) — CCE-LTER Process cruises are not CalCOFI cruises and do not
+      # visit CalCOFI stations, so the ingest declares cruise_key and site_key empty
+      # (ingest_cce-lter_poc-pon-cce-region.qmd § Emit Core Tables); grid_key is still
+      # assigned from position. Baseline, not a target.
+      "cce-lter_poc-pon-cce-region"   = 3216L)),
   halt = TRUE)
 
 d_cki |>
@@ -2057,7 +2065,11 @@ stopifnot("build_climatology(cast_types =, season =) needs calcofi4db >= 4.24.0;
   packageVersion("calcofi4db") >= "4.24.0")
 clim_cast_types <- c(
   "mld_sigma_theta_002", "mld_sigma_theta_0125", "mld_temperature_02",
-  "chl_max_depth", "chl_max", "chl_integrated")
+  "chl_max_depth", "chl_max", "chl_integrated",
+  # the threshold depths and the pycnocline (calcofi4db 4.32.0; Rasmus Swalethorp 2026-09-24):
+  # hypoxic_depth_05 is left out because few 1993-2013 casts reach the 0.5 mL/L core on a
+  # station-month floor of 5 cruises; a type listed here must have at least one monthly cell
+  "hypoxic_depth_24", "hypoxic_depth_14", "nitracline_depth", "pycnocline_depth", "buoyancy_n2_max")
 n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L,
                             cast_types = clim_cast_types, season = TRUE)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))

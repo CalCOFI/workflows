@@ -8,6 +8,52 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Hypoxic boundary depths, the nitracline, the pycnocline and N² join the CTD-derived products
+
+`calcofi_ctd-derived` adds, per cast, the three **hypoxic boundary depths** of the CTD team's
+definition (Rasmus Swalethorp, 2026-09-24): the shallowest depth at which the station-corrected
+oxygen pair average falls to 2.4 mL/L (`hypoxic_depth_24`, the mild boundary), 1.4 mL/L
+(`hypoxic_depth_14`, the hypoxic boundary) and 0.5 mL/L (`hypoxic_depth_05`, the severe
+boundary, the core of the oxygen minimum zone), each interpolated between the 1 m bins that
+bracket it; the oxygen minimum can sit mid-profile, so the depth is always the shallowest
+crossing. These replace the 60 µmol/kg "OMZ depth" proposed on 2026-10-20. The **nitracline
+depth** (`nitracline_depth`) is where nitrate reaches 1 µmol/L by the same rule, on the
+bottle-fitted sensor estimate `est_nitrate_sta_corr`; `calcofi_bottle-derived` publishes the
+same key from the bottle database's own nitrate at the bottle depths (the team's bottle-era
+rule, D_NClineDepth.m: linear interpolation between the samples above and below). The
+**pycnocline depth** (`pycnocline_depth`) is where the buoyancy frequency squared N² (TEOS-10
+`gsw_Nsquared`, a 10 m running mean) is greatest between 10 and 200 m, with that maximum
+(`buoyancy_n2_max`), after the team's F_PycnoclineDepth.m (Fiedler et al. 2013) modernised with
+TEOS-10; N² itself is published at every CTD depth (`buoyancy_n2`) for the transect plotter. A
+profile already past a threshold at its first bin counts only when that bin is within 20 m of
+the surface; a cast that never crosses has no row. Every rule is a tested calcofi4db 4.32.0
+function (`profile_threshold_depth()`, `ctd_hypoxic_depth()`, `ctd_n2()`, `ctd_pycnocline()`),
+applied to final and preliminary-with-bottle casts after the provider's flags. Each per-cast
+key but `hypoxic_depth_05` (too few 1993–2013 casts reach the 0.5 mL/L core on a station-month)
+has a 1993–2013 baseline in `climatology`, so the Explorer and ctd-transects show its anomaly
+like the mixed-layer depth's. The one choice that is ours, the 10 m running mean on N² in
+place of the draft script's smoothing spline, is CTD-derived question Q11; the implemented
+definitions are Q10.
+
+**Consumers:** seven new measurement keys (`hypoxic_depth_24`, `hypoxic_depth_14`,
+`hypoxic_depth_05`, `nitracline_depth`, `pycnocline_depth`, `buoyancy_n2_max` in
+`sample_measurement`; `buoyancy_n2` in `obs_env`); `nitracline_depth` is published by two
+datasets, filter on `dataset_key`.
+## A new dataset, staged not released: `cce-lter_poc-pon-cce-region`, POC and PON on CCE-LTER Process cruises, 2006–2024
+
+`ingest_cce-lter_poc-pon-cce-region.qmd` ingests the CCE-LTER EDI package `knb-lter-cce.104.13`
+(Aluwihare, doi:10.6073/pasta/9feb1de01eb3795e7ea39a8b7ba325e6, CC0 1.0; CalCOFI/workflows#84):
+3,216 samples (3,159 Niskin bottles and 57 underway surface samples) with 6,432 `obs` of `poc` and
+`pon`, the types `cce-lter_poc-pon` registers. Process cruises follow water parcels rather than the
+CalCOFI grid, so these samples carry no `cruise_key` and no `site_key`; each still gets a `grid_key`
+from its position. The `cruise_key` integrity ratchet records that as the dataset's baseline (all
+3,216 root samples, reached only in a private preview). It is **held out of the release**
+(`in_release: false`) until the provider answers the questions on the 76 held-out rows (Q02–Q04) and
+agrees to publication (consent Q06).
+
+What ships is registry content only: the `_source_datasets` of `poc` and `pon` also name
+`cce-lter_poc-pon-cce-region`. The holding's catalog abstract, which had described a nitrate
+stable-isotope dataset, is replaced by the EDI package's own (Q01).
 ## The bottle provider's answers of 1–3 November: salinity of 2021-05 and four 2020-07 bottles, nitrate of 1976-02, and cast 24415
 
 Rasmus Swalethorp answered ten `calcofi_bottle` questions and two `calcofi_ctd-cast` ones in
@@ -94,6 +140,7 @@ What does ship is registry content:
 - `ship_renames.csv` gains CCE-LTER's code `32BH` → NODC `39C2` (Bold Horizon). CCE-LTER labels
   recent ships with CalCOFI's own codes (325S, 33SR, 33RL, 31OS, 32BH), so the notebook translates
   them to NODC by code before keying cruises; without that, 7,717 samples had no `cruise_key`.
+
 ## A private preview can include a held dataset
 
 `release_database.qmd` can cut a candidate release into the private preview bucket
@@ -117,6 +164,27 @@ Aug 2022 - Jul 2026, summarized by Vivian (Lin) Hou. 103 taxa (102 keyed to WoRM
 carries the four ESD size classes (29,658 rows); `sample_measurement` carries `ifcb_volume_analyzed`.
 Four measurement types are registered. License CC0-1.0 and DOI 10.6075/J05Q4WFB come from the CalOOS
 dataset sheet and are awaiting the provider's confirmation for the summary table (Q01).
+
+## Kahru's satellite areas 2–6 are a region layer
+
+A new boundary layer, **Kahru Satellite Areas** (`kahru_satellite_areas`, group *Satellite Regions*),
+holds the areas Mati Kahru (SIO) averages satellite chlorophyll over (Kahru et al. 2012, *Deep-Sea
+Research II*), for the State of the California Current report: north of line 80, area 3 is the coastal
+band 0–100 km from shore and area 2 the transition, 100–300 km; south of it area 6 is coastal, 5 the
+transition and 4 offshore. Area 1 (offshore, north) holds too few stations and is left out. Kahru's
+station lists (via Rasmus Swalethorp, 2026-10-27) are `metadata/spatial/kahru_areas_stations.csv`, and
+each area is the union of the `calcofi4r::cc_grid` cells of its stations, built by
+`ingest_spatial.qmd` (`libs/kahru_areas.R`), so the five areas are rows of `spatial` and every sample
+inside one has a `sample_spatial` membership.
+
+Version 1 keeps **whole cells**: a line-80 cell is in the one area Kahru listed it in, and the cells
+on the 100 km and 300 km borders are not halved, as Rasmus would like them to be when averaging. The
+nine SCCOOS inshore stations are not on Kahru's lists, so their cells along the Southern California
+coast are in no area.
+
+In the Explorer the layer is in the Regions picker (`lens=region&layer=Kahru Satellite Areas`), and
+the Area filter keeps one area: `area=in:Kahru Satellite Areas|Kahru area 5 (transition, south of
+line 80)` (URL-encoded; the layer and region names are those of `spatial`).
 
 # v2026.10.30
 
