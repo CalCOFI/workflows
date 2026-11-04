@@ -178,9 +178,10 @@ Rscript scripts/build_workflows_index.R
   breakdown is not a dry run (`measurement-bounds` skill).
 - **One `climatology` table for every anomaly** (`build_climatology()`:
   1993–2013, dataset × station (`site_key`, with `grid_key` as the station's
-  modal cell) × calendar month × 10 m bin × type, ≥ 5 cruises in the release).
-  Month-matched always; pass an explicit color ramp, Plotly's `"RdBu"` runs
-  blue → red.
+  modal cell) × the cruise's month × 10 m bin × type, ≥ 5 cruises in the release).
+  Per-cast types ride in it with `depth_bin` NULL; the seasonal baseline is the
+  `season_*` columns by cruise quarter, and a NULL `clim_mean` means "no monthly
+  baseline". Pass an explicit color ramp, Plotly's `"RdBu"` runs blue → red.
 
 ## Cruise keys and provider ids — `cruise-key` skill
 
@@ -205,7 +206,8 @@ Rscript scripts/build_workflows_index.R
   `measurement_type.csv` (read with `read_measurement_type()`, append with
   `register_measurement_types()`, set fields with
   `declare_measurement_fields()`), `category.csv`, `life_stage.csv`, `gear.csv`,
-  `provider.csv`, `license.csv`, `distribution.csv` (never delete a row; status
+  `provider.csv`, `license.csv`, `cruise_ship_corrections.csv` (a ship code
+  fixed on one source cruise), `distribution.csv` (never delete a row; status
   it), `portal.csv`, `measurement_taxon.csv`, `taxon_override.csv`,
   `relationships_cross.csv`, and per dataset `metadata/{provider}/{dataset}/`
   (`tbls_redefine.csv`, `flds_redefine.csv`, `questions.csv`, `dataset_meta.yml`).

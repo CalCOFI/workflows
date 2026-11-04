@@ -168,6 +168,25 @@ sidecar_root <- if (staging) "data/releases-staging" else "data/releases"
 stage_root   <- if (staging) "releases-staging" else "releases"
 if (staging)
   message(glue("STAGING release: prefix {release_prefix}, layout {release_layout}, sidecars {sidecar_root}"))
+
+# a PREVIEW run writes a candidate release into the private bucket behind the
+# calcofi-preview service (CALCOFI_RELEASE_BUCKET=calcofi-preview), and only there
+# may it include datasets every public release holds out (CALCOFI_RELEASE_INCLUDE,
+# comma-separated `{provider}_{dataset}` keys), so a provider sees their dataset in
+# calcofi.io and the Explorer before they agree to publish it (plan 2026-11-02)
+release_bucket  <- Sys.getenv("CALCOFI_RELEASE_BUCKET", "calcofi-db")
+release_include <- trimws(strsplit(Sys.getenv("CALCOFI_RELEASE_INCLUDE"), ",")[[1]])
+release_include <- release_include[nzchar(release_include)]
+if (release_bucket != "calcofi-db" && !staging)
+  stop(glue("a release into gs://{release_bucket} must be a staging run: set ",
+            "CALCOFI_RELEASE_PREFIX and CALCOFI_TABLES_PREFIX (e.g. ducklake-preview/…)"))
+if (length(release_include) && release_bucket %in% calcofi4db::CC_PUBLIC_BUCKETS)
+  stop(glue("CALCOFI_RELEASE_INCLUDE ({paste(release_include, collapse = ', ')}) names held ",
+            "datasets, which never go to the public bucket gs://{release_bucket}; set ",
+            "CALCOFI_RELEASE_BUCKET to the private preview bucket"))
+if (release_bucket != "calcofi-db")
+  message(glue("PREVIEW release: gs://{release_bucket}/{release_prefix}, including held ",
+               "{if (length(release_include)) paste(release_include, collapse = ', ') else 'none'}"))
 message(glue("Release version: {release_version}"))
 
 # --- refuse to re-cut the version consumers are currently reading -------------
@@ -196,7 +215,7 @@ message(glue("Release version: {release_version}"))
 # `latest.txt` points elsewhere and lets a run overwrite the release consumers
 # are actively reading. A guard that fails open for an hour after every
 # promotion is worse than no guard, because it reads as protection.
-promoted <- calcofi4db::read_promoted_release(bucket = "calcofi-db", prefix = release_prefix)
+promoted <- calcofi4db::read_promoted_release(bucket = release_bucket, prefix = release_prefix)
 
 if (!is.na(promoted) && identical(promoted, release_version) &&
     !isTRUE(as.logical(Sys.getenv("CALCOFI_ALLOW_REPUBLISH", "FALSE"))))
@@ -240,6 +259,12 @@ load_duckdb_extension(con_wdl, "spatial")
 # but nothing of it reaches the frozen release. That is how a dataset under
 # review (currently cdfw_dungeness-crab) is staged without leaking into a release.
 ds_excluded <- release_excluded_datasets(here())
+# a preview run includes the held datasets it names (CALCOFI_RELEASE_INCLUDE above)
+if (length(release_include)) {
+  stopifnot("CALCOFI_RELEASE_INCLUDE names only datasets held by in_release: false" =
+              all(release_include %in% ds_excluded))
+  ds_excluded <- setdiff(ds_excluded, release_include)
+}
 if (length(ds_excluded))
   message(glue("Held out of this release (in_release: false): ",
                "{paste(ds_excluded, collapse = ', ')}"))
@@ -270,7 +295,8 @@ message(glue(
 
 # --- authoritative dataset metadata + ERD coloring from ingest YAML ----
 # table -> provider_dataset(s) owned, from each ingest's calcofi.tables_owned
-ingest_yaml   <- read_ingest_yaml(here(), in_release_only = TRUE)
+ingest_yaml   <- read_ingest_yaml(here())
+ingest_yaml   <- ingest_yaml[!names(ingest_yaml) %in% ds_excluded]
 table_dataset <- list()
 add_owner <- function(tbl, pd) {
   if (is.null(tbl)) return(invisible())
@@ -513,7 +539,7 @@ build_supplemental <- as.logical(Sys.getenv("BUILD_OBS_CTD_FULL", "TRUE"))
 supp_tbls <- supplemental_core_tables(here(), build_supplemental)
 if (length(supp_tbls))
   message(glue("supplemental tables: {paste(supp_tbls, collapse = ', ')}"))
-core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls)
+core_n <- assemble_core(con_wdl, root = here(), supplemental = supp_tbls, exclude = ds_excluded)
 
 # Vernacular names, applied ONCE to the merged `taxon` rather than in each of the
 # 10 taxa-emitting ingests. `common_name` only ever came from a dataset's own
@@ -675,7 +701,7 @@ q <- function(sql) dbGetQuery(con_wdl, sql)$n
 # a stronger check: it catches a shard silently dropped by the union, which the
 # canonical-first registry would otherwise do without complaint.
 shard_total <- function(tbl) {
-  paths <- core_shard_paths(tbl, root = here())
+  paths <- core_shard_paths(tbl, root = here(), exclude = ds_excluded)
   if (!length(paths)) return(0)
   sum(vapply(paths, function(p) {
     rd <- if (grepl("\\*\\*", p))
@@ -796,6 +822,10 @@ TAXON_LOCAL_ALLOW <- c(
   # says something false about what was counted.
   "cce-lter_picoplankton-bacteria:picoeukaryotes",  # a <2-3 um SIZE fraction
   "cce-lter_picoplankton-bacteria:het_bacteria",    # the non-cyanobacterial fraction
+  # IFCB: cells the classifier could not assign (nanoplankton_mix, flagellate, colony,
+  # coccolithophorid all map to one name with no AphiaID; Q03 in
+  # sccoos/ifcb-ctd/questions.csv)
+  "sccoos_ifcb-ctd:unidentified_cells",
   # phytoplankton: two different things, kept apart on purpose (Q05 in
   # calcofi/phytoplankton/questions.csv). Nine codes are absent from the source
   # Definitions sheet altogether, so there is no name to resolve; 232 is present
@@ -973,14 +1003,17 @@ if (n_und < BOUNDS_UNDECLARED_MAX)
 # `seafloor_depth_m` (bilinear GEBCO 2025, positive down, land 0, NA outside the
 # raster) is stamped on `sample` so every consumer can make the same comparison.
 DEPTH_SEAFLOOR_OVER_MAX <- 694L  # ratchet: measured at v2026.08.25 (695 at v2026.08.14 incl. the CTD test cast); only ever DOWN
-# A NOMINAL depth is not a finding of the same kind: swfsc_ichthyo's tow and net
-# depth_max_m is SWFSC's Net.NetDepth, the MAXIMUM POSSIBLE depth of the net (Ben,
-# 2026-10-04; swfsc_ichthyo_19 asks Ed to confirm), and over a shallower floor the
-# net did not reach it. Those datasets' depths are measured apart
-# (check_depth_vs_seafloor(nominal_datasets =), calcofi4db dev) with their own
-# ratchet, so DEPTH_SEAFLOOR_OVER_MAX keeps meaning "a depth that cannot be right".
+# An ESTIMATED depth is not a finding of the same kind: swfsc_ichthyo's tow and net
+# depth_max_m is SWFSC's Net.NetDepth, "the estimated depth when all wire is out.
+# It is roughly the maximum depth of the tow but that estimate might be a little
+# off" (Ed Weber, 2026-10-14, swfsc_ichthyo_19; estimated from wire out and wire
+# angle, not measured), and over a shallower floor the net did not reach it. Those
+# datasets' depths are measured apart (check_depth_vs_seafloor(nominal_datasets =))
+# with their own ratchet, so DEPTH_SEAFLOOR_OVER_MAX keeps meaning "a depth that
+# cannot be right". The stations over are sent to SWFSC to screen
+# (data/flagged/netdepth_below_seafloor.csv, written by the ichthyo ingest).
 DEPTH_NOMINAL_DATASETS        <- c("swfsc_ichthyo")
-DEPTH_SEAFLOOR_NOMINAL_OVER_MAX <- 210L  # ratchet: measured on the 2026-09-26 ichthyo export (2026-10-04); only ever DOWN
+DEPTH_SEAFLOOR_NOMINAL_OVER_MAX <- 210L  # ratchet: measured on the 2026-09-26 ichthyo export (2026-10-04; NetDepth unchanged in the 2026-10-14 export); only ever DOWN
 
 gebco_tif <- path.expand(Sys.getenv(
   "CALCOFI_GEBCO_TIF",
@@ -1031,6 +1064,24 @@ stopifnot(
 d_over <- check_depth_vs_seafloor(con_wdl, sf_sample, tolerance_m = 10,
                                   nominal_datasets = DEPTH_NOMINAL_DATASETS)
 d_over_nominal <- attr(d_over, "nominal")
+# a held dataset a PREVIEW run includes (CALCOFI_RELEASE_INCLUDE) is ratcheted apart,
+# against the count measured at its first preview run (DEPTH_SEAFLOOR_OVER_HELD, one
+# entry per dataset, default 0): the public ratchet never sees it (release_include is
+# empty in a public run), so it is neither raised nor weakened, and the finding stays
+# a question for the provider (named per entry) until the dataset is un-held, when its
+# samples join the public count and the ingest must have fixed or held them out
+DEPTH_SEAFLOOR_OVER_HELD <- c(
+  "sio_cetacean-sightings" = 0L)
+d_over_held <- d_over |> filter(dataset_key %in% release_include)
+d_over      <- d_over |> filter(!dataset_key %in% release_include)
+if (nrow(d_over_held)) {
+  held_over <- d_over_held |> count(dataset_key, name = "n") |>
+    mutate(allowance = coalesce(DEPTH_SEAFLOOR_OVER_HELD[dataset_key], 0L))
+  print(as.data.frame(held_over))
+  stopifnot(
+    "a held dataset has more samples below the seafloor than its recorded baseline (DEPTH_SEAFLOOR_OVER_HELD) — fix at the ingest or record the measured count with its question" =
+      all(held_over$n <= held_over$allowance))
+}
 attr(d_over, "summary") |>
   datatable(caption = paste(
     "Root samples deeper than the seafloor (+10 m over the deepest GEBCO cell",
@@ -1172,10 +1223,15 @@ ORPHAN_CRUISES_MAX <- c(
   # Taken as served (Q11, high, asked 2026-09-04); the transects are real effort
   # and the Explorer keeps samples with no observation row out of every
   # denominator. Ben, 2026-09-04: allow by name. Drops to 0 when Q11 is answered.
-  "farallon_bird-mammal" =  2L,
+  # 3 since 2026-10-13: the third is 2021-07-33P4 (CAC2021_7, 466 transects), the
+  # other 2021 survey Q11 names. It was an orphan all along, uncounted while its
+  # cruise_key was NULL; workflows#74 keyed it. Not a new loss. Ben, 2026-10-14:
+  # keep 3 for now.
+  "farallon_bird-mammal" =  3L,
   # sio_cetacean-edna (un-held 2026-10-04): the 10 samples of cruise 2015-07-32OC are
   # all "not sequenced, PCR negative", which publish a sample and no edna_presence
   # (Q04, held by design, Ben 2026-10-01). Drops to 0 when Q04 is answered.
+  # Held out of the release since 2026-10-08 (in_release: false); kept for its return.
   "sio_cetacean-edna"    =  1L)
 
 # NOT `d_cov` — that name is live from the `dataset_coverage` chunk above and is
@@ -1541,7 +1597,9 @@ tryCatch(
 gate over `cruise_key` as it is actually used, not as it is assumed to behave: format,
 `date_ym`/NODC agreement, the FK from `sample`/`obs` into the (now-completed) `cruise`
 reference, `cruise_uuid` hygiene (unique for `'swfsc'` rows, NULL for `'derived'` ones),
-every event's date within its cruise's span, the ichthyo notebook's own
+every event's date within its cruise's span, no `'derived'` cruise sharing a station
+occupation with an SWFSC cruise (check 11, calcofi4db >= 4.31.0: the July 2009 bottle casts on
+`2009-07-31M4` beside SWFSC's `2009-07-33MH`), the ichthyo notebook's own
 `cruise_uuid`/`cruise_key` agreement (read from its manifest — the release's `sample` table
 carries no `cruise_uuid` column, so that check can only run inside the notebook that still
 has it) and three ratchets (span overlaps, derived-row count, NULL-`cruise_key` backlog per
@@ -1576,6 +1634,12 @@ ctd_span_exceptions <- c(
   "calcofi_ctd-cast:cast:9908_070d", "calcofi_ctd-cast:cast:9908_070u",
   "calcofi_ctd-cast:cast:1307_021u")
 
+# check 11 (derived_co_occupied) arrived in 4.31.0; an older calcofi4db would
+# pass the release without it
+stopifnot(
+  "check_cruise_key_integrity() check 11 needs calcofi4db >= 4.31.0; pull ../calcofi4db" =
+    packageVersion("calcofi4db") >= "4.31.0")
+
 d_cki <- check_cruise_key_integrity(
   con_wdl,
   tolerance_days     = 31L,
@@ -1588,8 +1652,10 @@ d_cki <- check_cruise_key_integrity(
       # measured by the WS-B spike on v2026.08.25 (dic: unmatched Niskins, Q07;
       # pic: pre-1951 tows; bottle: 49 casts)
       # dic: 3,255 until v2026.10.01; the samples matching no cast now resolve a cruise from
-      # their own date (2,920 keyed), leaving 335 on 8 EXPOCODEs with no reference cruise
-      calcofi_dic           = 335L,
+      # their own date (2,920 keyed), leaving 335 on 8 EXPOCODEs with no reference cruise;
+      # 54 at v2026.10.21 (SWFSC's 10-14 cruise table); 3 once EXPOCODE 31M420090714's 51
+      # samples resolve 2009-07-33MH (metadata/cruise_ship_corrections.csv, 2026-10-30)
+      calcofi_dic           = 3L,
       "sio_pic-zooplankton" = 5087L,
       calcofi_bottle        = 49L,
       # crab: was 1639 over the 2,011 sorting-log tows; the core now holds the
@@ -1607,17 +1673,25 @@ d_cki <- check_cruise_key_integrity(
       # region-pooled phytoplankton. Baselines, not targets.
       calcofi_phyllosoma              = 44L,
       calcofi_phytoplankton           = 168L,
-      # euphausiids: 420 until v2026.10.01; +40 for the tows of cruise 198202JD, which SWFSC moved
-      # back to its staging schema (its 2026-09-26 export has no Cruise row for it), so the
-      # reference holds no cruise for that ship and month and resolve_cruise_key() leaves them
-      # NULL. Back to 420 when the provider restores the cruise row (swfsc_ichthyo Q23).
-      "cce-lter_euphausiids"          = 460L,
+      # euphausiids: 420 until v2026.10.01; 460 for v2026.10.05 - v2026.10.19 (+40 for the tows
+      # of cruise 198202JD, which SWFSC moved back to its staging schema, so its 2026-09-26 export
+      # had no Cruise row for it and resolve_cruise_key() left them NULL). Back to 420 with the
+      # 2026-10-14 export, whose Cruise table is the union of SWFSC's dbo and stg schemas and
+      # holds the row again (swfsc_ichthyo Q23, answered 2026-10-14).
+      "cce-lter_euphausiids"          = 420L,
       "cce-lter_picoplankton-bacteria" = 7216L,
       "cce-lter_zoodb"                = 111L,
       "cce-lter_zooscan"              = 421L,
       "farallon_bird-mammal"          = 1228L,
       # cufes: 5,053 until v2026.10.01; the export links every sample to its cruise by CruiseId
-      swfsc_cufes                     = 0L)),
+      swfsc_cufes                     = 0L,
+      # sightings (held, in_release: false; reaches a release only through
+      # CALCOFI_RELEASE_INCLUDE in the private preview): 66 effort segments, measured at
+      # the 2026-11-02 preview run — the two cruise labels the ingest resolves to no
+      # reference cruise, CC2023-03 (29 segments, Mar-Apr 2023) and CC2024-07 (36,
+      # Jul-Aug 2024; sightings Q14), plus the one segment it holds as misdated
+      # (2022-11-05; Q07). Baseline, not a target.
+      "sio_cetacean-sightings"        = 66L)),
   halt = TRUE)
 
 d_cki |>
@@ -1645,7 +1719,8 @@ core_keep <- c(
   "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
   "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
   "spatial", "spatial_attribute",
-  "fish")                                   # swfsc_ichthyo's own table (SWFSC Fish, 2026-10)
+  "fish",                                   # swfsc_ichthyo's own table (SWFSC Fish, 2026-10)
+  "ichthyo_net")                            # swfsc_ichthyo's net side + tow number per net (2026-10-20, D2)
 supplemental_keep <- supp_tbls                   # hosted, hidden by default (from the ingests)
 # drop by the object's actual type (DROP VIEW on a TABLE — or vice versa — errors
 # even with IF EXISTS; some are parquet VIEWs, some are temp tables like cruise_ref)
@@ -1940,13 +2015,37 @@ ss     <- build_sample_spatial(con_wdl)
 # min_cruises = 5, not the function's default 3: Rasmus Swalethorp (2026-09-09) — a three-cruise cell
 # is too thin a baseline for an anomaly a reader will act on; the consumers show n_cruises per cell.
 # Measured on v2026.09.06: 5 keeps 577,113 of 768,880 cells (75 %; 87 % of CTD temperature cells).
-n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L)
+#
+# Since calcofi4db 4.24.0 (Rasmus Swalethorp, 2026-10-06 and 2026-10-07) two more things ride on the same rows:
+# - the per-cast derived products (calcofi_ctd-derived, sample_measurement: no depth, so depth_bin is NULL) get a
+#   baseline by the same rules. chl_integrated_depth is left out: it is the depth the sum reached (200 m unless the
+#   cast is shallower), bookkeeping for chl_integrated, not something with a normal; the retired
+#   mld_sigma_theta_003 is no longer emitted.
+# - a seasonal baseline (quarter of the cruise's month, Q1 Jan-Mar ... Q4 Oct-Dec, the Explorer's season filter)
+#   in `quarter` + `season_*` on every month of a passing quarter; a month that passes only as a season has a
+#   NULL clim_mean, which every consumer reads as "no monthly baseline".
+stopifnot("build_climatology(cast_types =, season =) needs calcofi4db >= 4.24.0; pull and install ../calcofi4db" =
+  packageVersion("calcofi4db") >= "4.24.0")
+clim_cast_types <- c(
+  "mld_sigma_theta_002", "mld_sigma_theta_0125", "mld_temperature_02",
+  "chl_max_depth", "chl_max", "chl_integrated")
+n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L,
+                            cast_types = clim_cast_types, season = TRUE)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))
 datatable(dbGetQuery(con_wdl, "
-  SELECT dataset_key, count(*) AS n_cells, count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
+  SELECT dataset_key,
+         count(*) FILTER (WHERE clim_mean IS NOT NULL) AS n_cells_month,
+         count(*) FILTER (WHERE season_mean IS NOT NULL) AS n_cells_season,
+         count(*) FILTER (WHERE depth_bin IS NULL) AS n_cells_per_cast,
+         count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
          min(n_cruises) AS min_cruises, round(avg(n_cruises), 1) AS mean_cruises, any_value(clim_yr_min) AS yr_min, any_value(clim_yr_max) AS yr_max
-  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — cells per dataset (each ≥ 5 cruises; the window is on every row)")
+  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — rows per dataset: monthly cells (≥ 5 cruises in the month), seasonal cells (≥ 5 in the quarter, on each of its months) and per-cast cells (depth_bin NULL); the window is on every row")
 stopifnot(n_clim > 0, nrow(dbGetQuery(con_wdl, "SELECT DISTINCT clim_yr_min, clim_yr_max FROM climatology")) == 1)
+# every per-cast type the release asked for has a baseline somewhere (a typo or a renamed key would be silent)
+clim_cast_missing <- setdiff(clim_cast_types, dbGetQuery(con_wdl,
+  "SELECT DISTINCT measurement_type FROM climatology WHERE depth_bin IS NULL AND clim_mean IS NOT NULL")$measurement_type)
+if (length(clim_cast_missing))
+  stop("per-cast climatology has no monthly cell for: ", paste(clim_cast_missing, collapse = ", "))
 datatable(ss, caption = "sample_spatial — exact per-root-sample membership, one layer at a time (n_polys = 0: a line or point layer, skipped)")
 
 # what the picker shows for the default taxon (Pacific sardine): dataset × stage × effort class
@@ -1979,13 +2078,23 @@ unlink(c(grid_geojson_path, spatial_geojson_path, spatial_layers_path))
 dbExecute(con_wdl, glue("COPY (SELECT grid_key, station, line, shore, pattern, zone, ST_X(geom_ctr) AS lon_ctr, ST_Y(geom_ctr) AS lat_ctr,
                                 ST_GeomFromWKB(ST_AsWKB(geom)) AS geom FROM grid)
                          TO '{grid_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
+# the gazetteer layers (registry rows with their own source_url; in `spatial` since v2026.10.14) draw from the
+# gazetteer's PMTiles, and some are national (OCS planning areas, 3,307 rescinded wind blocks): only their regions
+# that hold samples ride in this sidecar, which the Regions lens and the Area outline need; the rest stays out
+gaz_layers <- readr::read_csv(here("metadata/spatial_layers.csv"), show_col_types = FALSE) |>
+  dplyr::filter(!is.na(source_url), source_url != "", role != "reference" | is.na(role)) |> dplyr::pull(layer)
+gaz_sql <- if (length(gaz_layers)) glue("AND (layer NOT IN ({paste(DBI::dbQuoteString(con_wdl, gaz_layers), collapse = ', ')})
+                                          OR spatial_key IN (SELECT DISTINCT spatial_key FROM sample_spatial))") else ""
 dbExecute(con_wdl, glue("COPY (SELECT spatial_key, layer, name, ST_SimplifyPreserveTopology(ST_GeomFromWKB(ST_AsWKB(geom)), 0.002) AS geom
-                                FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON'))
+                                FROM spatial WHERE ST_GeometryType(geom) IN ('POLYGON', 'MULTIPOLYGON') {gaz_sql})
                          TO '{spatial_geojson_path}' WITH (FORMAT GDAL, DRIVER 'GeoJSON')"))
 # the boundary-layer registry + what only the release knows about each layer (counts, bbox, names,
 # sample_spatial memberships) — the explorer's Layers card reads this, never the CSV (D23, calcofi4db >= 3.28.0).
 # `built` = the ingest_spatial manifest's mtime: the PMTiles archives are rebuilt outside releases, and the skew
 # must at least be visible (plan 2026-08-31, Risks).
+# region_status + the gazetteer rows' layer status (calcofi4db >= 4.25.0): "OCS-P 0564 (settlement pending 2026-04-27)"
+stopifnot("build_spatial_layers() region_status needs calcofi4db >= 4.25.0; pull and install ../calcofi4db" =
+  packageVersion("calcofi4db") >= "4.25.0")
 jsonlite::write_json(
   build_spatial_layers(
     con_wdl, here("metadata/spatial_layers.csv"), release_version,
@@ -2059,6 +2168,8 @@ released_tbls <- setdiff(DBI::dbListTables(con_wdl),
   c("_meta", "_sp_update", "casts_derived", "ctd_cast_derived", "_measurement_taxon"))
 rels_merged <- jsonlite::fromJSON(rels_merged_path, simplifyVector = FALSE)
 rel_pks <- core_relationships(released_tbls)$primary_keys
+# key columns where NULL is a value (climatology.depth_bin for a per-cast cell; calcofi4db 4.24.0)
+rels_merged$nullable_key_columns <- core_relationships(released_tbls)$nullable_key_columns
 for (tb in names(rel_pks))
   if (is.null(rels_merged$primary_keys[[tb]])) rels_merged$primary_keys[[tb]] <- rel_pks[[tb]]
 rels_merged$primary_keys <- rels_merged$primary_keys[
@@ -2379,7 +2490,7 @@ cat(release_notes)
 ```{r}
 #| label: upload_frozen
 
-gcs_bucket  <- "calcofi-db"
+gcs_bucket  <- release_bucket
 gcs_release <- glue("{release_prefix}/{release_version}")
 gcloud      <- find_gcloud()
 
@@ -2651,12 +2762,20 @@ if (length(meta_paths) > 0) {
 if (file.exists(meta_json_path)) {
   cat_registries <- read_catalog_registries(here("metadata"))
   net_ok     <- !nzchar(Sys.getenv("CALCOFI_SKIP_LINK_CHECK"))
+  # a PREVIEW run (CALCOFI_RELEASE_BUCKET other than calcofi-db) probes no URL: the record's object
+  # URLs are built on the public bucket (calcofi4db CC_STORAGE_HTTPS) and a private bucket answers
+  # no anonymous request, so every probe would be `url_dead` by construction (measured 2026-11-03:
+  # 24 dead URLs, every one a preview object or the held notebook's public page). The structural
+  # checks and the live-service fetches below still run; the upload itself verified each object,
+  # and the preview site rewrites the URLs to its sign-in route (scripts/build_preview.sh).
+  probe_ok   <- net_ok && release_bucket == "calcofi-db"
   erddap_now <- if (net_ok) fetch_erddap_datasets() else NULL
   netcdf_now <- if (net_ok) fetch_netcdf_manifests(c(names(ingest_yaml), paste0(names(ingest_yaml), "_full"))) else list()
   # since_version is a fact about the PROMOTED history, so it is always derived from the
   # production prefix — a staging run's own versions.json holds three throwaway versions and
   # would date every dataset to the oldest of them (measured 2026-09-05: ichthyo "since v2026.08.25")
-  prod_https <- glue("https://storage.googleapis.com/{gcs_bucket}/ducklake/releases")
+  # (the promoted history lives in the public bucket whatever bucket this run writes to)
+  prod_https <- "https://storage.googleapis.com/calcofi-db/ducklake/releases"
   prod_versions <- tryCatch(jsonlite::fromJSON(glue("{prod_https}/versions.json"), simplifyVector = FALSE),
                             error = function(e) NULL)
   since <- if (!is.null(prod_versions) && net_ok) dataset_since_versions(prod_versions, base = prod_https) else character()
@@ -2674,7 +2793,7 @@ if (file.exists(meta_json_path)) {
   # this release's own STAC tree is uploaded in §3d, AFTER this check: a dataset in its first
   # release has no collection there yet, so a dead URL under that root is `url_pending` here and
   # is re-probed right after the upload (calcofi4db >= 4.17.1; calcofi_ctd-derived, 2026-09-24)
-  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = net_ok,
+  d_catalog_chk <- check_dataset_catalog(datasets_rec, cat_registries, network = probe_ok,
                                          pending_base = release_stac_base(release_prefix))
   assert_dataset_catalog(d_catalog_chk)
   d_catalog_chk |>
@@ -2761,6 +2880,24 @@ if (file.exists(meta_json_path)) {
   # this becomes `registries = list(chem = read_measurement_chem(here("metadata/measurement_chem.csv")),
   # method = …, scale = …, why = …, face = …)` — the validators then run at read time rather than
   # the builder taking the files on trust.
+  # short_label (issue #30 D13) comes from measurement_face.csv; an older calcofi4db would read the
+  # file and silently drop the column, so the page heads would fall back to the cut label
+  stopifnot("measurement_face.csv short_label needs calcofi4db >= 4.26.0; pull and install ../calcofi4db" =
+    packageVersion("calcofi4db") >= "4.26.0")
+  # the five face registries are validated here, not first at deploy: v2026.10.20 shipped
+  # sigma_theta_teos10 as a stand-in with its own P01, and calcofi.io's face check refused it only
+  # at deploy_consumers step 7 (standsin_own_p01 needs calcofi4db >= 4.28.1)
+  stopifnot("standsin_own_p01 needs calcofi4db >= 4.28.1; pull and install ../calcofi4db" =
+    packageVersion("calcofi4db") >= "4.28.1")
+  d_face_chk <- validate_measurement_faces(
+    here("metadata/measurement_chem.csv"), here("metadata/measurement_method.csv"),
+    here("metadata/measurement_scale.csv"), here("metadata/measurement_why.csv"),
+    here("metadata/measurement_face.csv"),
+    measurement_type_path = here("metadata/measurement_type.csv"))
+  if (nrow(d_face_chk)) {
+    print(as.data.frame(d_face_chk))
+    stop(nrow(d_face_chk), " measurement face registry finding(s); resolve them in metadata/")
+  }
   meas_rec  <- build_measurements_catalog(
     con_wdl, datasets_rec,
     measurement_type = cat_registries$measurement_type,
@@ -2837,7 +2974,7 @@ stac_paths <- build_stac(
   dir            = dir_stac,
   base_url       = stac_base,
   metadata       = meta_json_path)
-stac_chk <- check_stac(dir_stac, network = net_ok)
+stac_chk <- check_stac(dir_stac, network = probe_ok)
 assert_stac(stac_chk)
 stac_chk |>
   filter(finding != "ok") |>
@@ -2854,7 +2991,7 @@ cat(glue("STAC: {length(stac_paths)} documents -> gs://{gcs_bucket}/{stac_prefix
          "({sum(stac_chk$finding == 'ok')} ok, {sum(stac_chk$level == 'warn')} warn)\n"))
 # the catalog URLs the check left pending on this upload must answer now, before anything is
 # promoted: a new dataset's collection that the upload did not write is a dead link (a gate)
-if (exists("d_catalog_chk") && net_ok) {
+if (exists("d_catalog_chk") && probe_ok) {
   d_pending <- recheck_pending_urls(d_catalog_chk)
   assert_dataset_catalog(d_pending)
   cat(glue("catalog URLs pending on this upload: {nrow(d_pending)} re-probed, ",

@@ -121,6 +121,8 @@ librarian::shelf(
   zip,
   quiet = T
 )
+# draw mapview/leaflet CARTO basemaps from vector tiles: CARTO's raster tiles need a key
+calcofi4r::cc_vector_basemap_page()
 
 # common ingest settings (overwrite, dir_data)
 source(here("libs/ingest.R"))
@@ -183,8 +185,11 @@ if (length(dirs_in_dl) > 0)
 # the inputs — deleting the wrangling DB before knowing whether the heavy path
 # will run would throw away the one table the Gantt appendix reads.
 
-# source archival handled by sync_gd_to_gcs.qmd (rclone): ~18 GB of archives is
-# still too large to push through the GD FUSE mount with sync_to_gcs()
+# source archival: every archive this notebook reads is kept by content on GCS by
+# archive_sources() in [archive_sources] below, and named in metadata.json sources[].
+# sync_gd_to_gcs.qmd (rclone) mirrors the Shared Drive to _sync/, but on the Mac mini
+# dir_data is a plain folder nothing syncs back, so a zip fetched from calcofi.org
+# existed only there until 2026-10-21
 
 # load metadata
 # read_measurement_type(), NOT read_csv(): the registry stores empty cells that a
@@ -331,7 +336,8 @@ add_zip_meta <- function(d) {
       zip_type = case_when(
         str_detect(file_zip, "CTDFinal")         ~ "final",
         str_detect(file_zip, "CTDPrelim")        ~ "preliminary",
-        str_detect(file_zip, "CTDCast|CTD_Cast") ~ "raw",
+        # calcofi.org spells it `CTDcast` too (20-2208BH_CTDcast.zip, 2026-10)
+        str_detect(file_zip, regex("CTD_?Cast", ignore_case = TRUE)) ~ "raw",
         str_detect(file_zip, "CTDTest")          ~ "test",
         TRUE                                     ~ "unknown"))
 }
@@ -700,14 +706,19 @@ download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
   } else if (is.na(url)) {
     # primed source vanished between the prime and here — do not silently proceed
     # with a missing archive
-    warning(glue("Expected primed zip is missing: {file_zip}"))
+    d_dl_fail <<- bind_rows(d_dl_fail, tibble(
+      file_zip = file_zip, zip_type = zip_type, url = url, reason = "primed zip missing"))
     return(invisible(NULL))
   } else {
     say(glue("Downloading: {file_zip}"))
     tryCatch(
       download.file(url, dest_file, mode = "wb"),
       error = function(e) {
-        warning(glue("Failed to download {file_zip}: {e$message}"))
+        # a warning() is invisible in the rendered page and a render with warnings
+        # still succeeds: the same nine calcofi.org zips failed this way at every
+        # release from August to 2026-10-20. Record it; [download_and_unzip] decides.
+        d_dl_fail <<- bind_rows(d_dl_fail, tibble(
+          file_zip = file_zip, zip_type = zip_type, url = url, reason = conditionMessage(e)))
         if (file_exists(dest_file)) {
           file_delete(dest_file)
         }
@@ -764,6 +775,8 @@ download_and_unzip <- function(url, file_zip, dest_dir, ext_dir, zip_type,
   write_lines(stamp_now, stamp_file)
 }
 
+d_dl_fail <- tibble(file_zip = character(), zip_type = character(),
+                    url = character(), reason = character())
 d_zips_read |>
   pwalk(function(url, file_zip, zip_type, ...) {
     download_and_unzip(url, file_zip, dir_dl, dir_ext, zip_type, unzip = TRUE)
@@ -771,6 +784,49 @@ d_zips_read |>
 
 say(glue("Download and extraction complete: archives in {dir_dl}, ",
          "extracted files in {dir_ext}"))
+
+# a GCS final is skipped above only because calcofi.org publishes a final for the
+# same cruise. If that web final then fails to download (calcofi.org lists some
+# archives that 404), the cruise has neither copy and vanishes from the release
+# without a word: 9501JD, 9712SP and 9803SP-9812SP were missing from every release
+# through v2026.10.19 this way. Stop instead.
+web_missing <- d_zips_read |>
+  filter(source == "web", zip_type %in% c("final", "preliminary"),
+         !file_exists(file.path(dir_dl, file_zip)))
+lost <- d_zips_skip |> filter(cruise_key %in% web_missing$cruise_key)
+if (nrow(lost) > 0)
+  stop(glue(
+    "calcofi.org final(s) failed to download for {paste(lost$cruise_key, collapse = ', ')}, ",
+    "whose Shared Drive final was skipped as their duplicate: read the Shared Drive copy ",
+    "(drop the cruise from cruises_web_final) or restore the web archive."))
+
+# every failed archive is shown, and one that leaves its cruise with no final or
+# preliminary archive on disk stops the render, unless it is known and has a question
+# for the provider: CTD_DL_FAIL_KNOWN maps file_zip to that question's label
+CTD_DL_FAIL_KNOWN <- character()
+cruises_on_disk <- d_zips_read |>
+  filter(zip_type %in% c("final", "preliminary"),
+         file_exists(file.path(dir_dl, file_zip))) |>
+  pull(cruise_key) |>
+  unique()
+d_dl_fail <- d_dl_fail |>
+  left_join(d_zips_read |> select(file_zip, cruise_key), by = "file_zip") |>
+  mutate(cruise_covered = cruise_key %in% cruises_on_disk,
+         question       = unname(CTD_DL_FAIL_KNOWN[file_zip]))
+if (nrow(d_dl_fail) > 0) {
+  dt(d_dl_fail, caption = paste(
+    "Archives that failed to download or went missing; a cruise left with no final or",
+    "preliminary archive stops the render unless the archive has a provider question"),
+    fname = "ctd_zips_failed")
+} else say("every archive to read is on disk")
+uncovered <- d_dl_fail |>
+  filter(zip_type %in% c("final", "preliminary"), !cruise_covered, is.na(question))
+if (nrow(uncovered) > 0)
+  stop(glue(
+    "{nrow(uncovered)} archive(s) failed and left their cruise with no CTD data: ",
+    "{paste(uncovered$file_zip, collapse = ', ')}. Restore the file to dir_dl from ",
+    "gs://calcofi-files-public/archive/sources/{provider}/{dataset}/, or file a ",
+    "provider question and add the file to CTD_DL_FAIL_KNOWN."))
 
 # A provider may re-publish a corrected archive under the same name — the 2607
 # preliminary file was, on 2026-09-14, after station numbers >= 100 had shipped cut
@@ -2250,7 +2306,8 @@ CTD_DUP_SCAN_CRUISES <- c(
   "1501NH",  # db_csv/dualTCO/ re-processes casts 001-064 beside the 001-100 file
   "9510NH",  # db_csvs/GoerickeExtraCasts/ reuses cast numbers 005-061 for other casts
   "9504NH",  # db_csvs/RalfCasts/ reuses cast numbers 010-032 for other casts
-  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH")
+  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH",
+  "9712SP")  # 19-9712SP_CTDFinalDB cast 005d writes 521 m twice, 9 s apart (Q46)
 d_dup_scan <- dbGetQuery(con, "
   SELECT cruise_key, COUNT(*) AS n_dup_scans, COUNT(DISTINCT cast_key) AS n_casts
   FROM (SELECT cruise_key, cast_key, depth_m FROM ctd_raw GROUP BY ALL HAVING COUNT(*) > 1)
@@ -3020,13 +3077,20 @@ provider flags at source. It is applied **after** the provider's flags and the a
 **before** any average, so an overridden sensor can never enter `temperature_ave` or anything built
 on it: the climatology, the transect shards, `measurements.json`, the derived dataset.
 
-The first entry (2026-09-24, questions.csv Q37) is cruise 2026-07-3322 casts 1–6. The provider's
-notes say the secondary temperature sensor was faulty there, and the data agree: sensor 2 sits a
-median 11 °C from sensor 1, up to 42 °C, against 0.002 °C on casts 7–72. Every series the provider
-builds from that temperature is flagged with it: conductivity-derived salinity, sigma-theta,
-potential temperature, and the sensor-2 oxygens, since oxygen concentration and saturation use the
-sensor's own temperature and salinity. The corrected forms of those series are included so the rule
-still holds when a bottle-merged file for the cruise arrives.
+The file is **header-only since 2026-10-20**, and the chunk below is the standing machinery for the
+next entry, not a leftover. Its one entry (2026-09-24, questions.csv Q37) flagged cruise 2026-07-3322
+casts 1-6 (both directions): the provider's cruise notes then said the secondary temperature sensor
+was faulty on all six, and sensor 2 sat a median 11 °C from sensor 1, up to 42 °C, against 0.002 °C on
+casts 7-72. It was provisional by design ("until the provider flags at source"), and the provider did:
+the provider's corrected file (12 October) carries its own codes, with the secondary temperature, and
+everything derived from it, flagged 9 where it was bad (casts 1U, 5U, 6D, 6U and part of 5D), and Ben
+Gire wrote (2026-10-13, 2026-10-14) that the processed files are accurate and that where one sensor is
+good and one bad the average takes the good one. Ben decided on 2026-10-20 (plan D6) that the provider's codes in the
+processed files are the record, so all 24 rows were dropped, including the downcast of cast 1 and casts
+2-4, which the provider leaves unflagged although sensor 2 reads about 0.15 °C from sensor 1 there. Those
+bins now enter the sensor-pair averages on the provider's word alone. A header-only file is valid: the
+asserts below hold on zero rows, and a new row (same columns, a reason, a source and a question that keeps
+it provisional) takes effect again with no code change.
 
 ```{r}
 #| label: apply_flag_overrides
@@ -3081,6 +3145,34 @@ datatable(d_override_report |> select(cruise_key, cast_min, cast_max, cast_dir, 
                                       qual_code, n_casts, n_flagged, reason, question),
           rownames = FALSE, options = list(pageLength = 12, scrollX = TRUE),
           caption = "Flag overrides (metadata/calcofi/ctd-cast/flag_overrides.csv) and what each flagged")
+```
+
+## Inherit Flags Into Sigma-Theta
+
+`SigThetaTS1Q` / `SigThetaTS2Q` are blank far more often than the `Temp` and `Salt` flags the sigma is
+computed from: on cruise 2026-07-3322 casts 1U, 5D and 6U the provider flags `Temp2Q` 9 and leaves
+`SigThetaTS2Q` empty, and across v2026.10.19 4,947 `sigma_theta_2` bins on 22 cruises were unflagged
+while their `Temp2Q` or `Salt2Q` was 8 or 9 (questions.csv Q45; Ben, 2026-10-20: the provider's flag
+outranks everything we derive). `calcofi_ctd-derived` averages sigma-theta from the two sigma flags
+alone, so a sigma computed from a bad sensor-2 temperature entered `sigma_theta_ave` and the
+mixed-layer depths. Each sigma series therefore takes the 8 or 9 of its own sensor's temperature or
+salinity (9 over 8; the provider's own 8/9 on the sigma is kept) after the provider's flags, the
+accepted ledger and the overrides, and before anything is averaged. The rule is
+`inherit_sensor_flags()` in `libs/ctd_flags.R`, tested in `tests/testthat/test-ctd_flags.R`.
+
+```{r}
+#| label: inherit_sigma_flags
+source(here("libs/ctd_flags.R"))
+sigma_inherit <- tibble::tribble(
+  ~derived,        ~from,
+  "sigma_theta_1", c("temperature_1", "salinity_1"),
+  "sigma_theta_2", c("temperature_2", "salinity_2"))
+n_sigma_inherited <- purrr::pmap_int(sigma_inherit, \(derived, from)
+  inherit_sensor_flags(con, derived, from))
+say(glue("sigma-theta flags inherited from the sensor: ",
+         "{paste0(sigma_inherit$derived, ' ', format(n_sigma_inherited, big.mark = ','), collapse = ', ')} value(s)"))
+stopifnot("a sigma-theta value computed from a sensor flagged 8/9 is not flagged" =
+  all(purrr::pmap_int(sigma_inherit, \(derived, from) count_uninherited_flags(con, derived, from)) == 0L))
 ```
 
 ## Withhold Series That Do Not Vary With Depth {#depth-constant}
@@ -4772,7 +4864,10 @@ if (build_obs_ctd_full) {
     "2015-01-32NM" = 43253, "1995-10-32NM" = 2189, "1995-04-32NM" = 807,
     "2020-07-33P4" =   177, "2003-02-31JD" =   11, "2002-04-31JD" =   4,
     "1995-07-31JD" =     2, "2023-07-33P4" =    1, "2005-01-32NM" =   1,
-    "2006-04-32NM" =     1)
+    "2006-04-32NM" =     1,
+    # new coverage 2026-10-20, not a raised count: the cruise had no CTD in any
+    # earlier release (Q46)
+    "1997-12-32QU" =     1)
   d_dup_full <- dbGetQuery(con, "
     SELECT cruise_key, COUNT(*) AS n_dup_scans
     FROM (SELECT cruise_key, sample_key, depth_min_m FROM obs_ctd_full GROUP BY ALL
@@ -4872,6 +4967,34 @@ parquet_stats |>
   dt(fname = "ctd_parquet_stats")
 ```
 
+## Archive the Sources {#archive-sources}
+
+Every archive read above is kept on GCS by its content, at
+`gs://calcofi-files-public/archive/sources/calcofi/ctd-cast/{md5}/{file}`, by
+`calcofi4db::archive_sources()`: an object already there costs a listing, one the
+Shared Drive mirror (`_sync/`) holds is copied server side, and anything else is
+uploaded. A provider re-publishing a corrected archive under the same name gets a
+second object beside the first. `metadata.json` `sources[]` then names each archive
+with its `md5`, its calcofi.org `url` and its `archive` copy, so the sidecars say
+which bytes a release read.
+
+```{r}
+#| label: archive_sources
+
+d_src <- d_zips_read |>
+  filter(file_exists(file.path(dir_dl, file_zip)))
+src_stamp <- archive_sources(
+  files         = file.path(dir_dl, d_src$file_zip),
+  provider      = provider,
+  dataset       = dataset,
+  urls          = d_src$url,
+  mirror_prefix = glue("_sync/{provider}/{dataset}/download"))
+src_stamp |>
+  count(action) |>
+  dt(caption = "Source archives by what archiving them took this render",
+     fname = "ctd_sources_archived")
+```
+
 ## Write Metadata JSON
 
 ```{r}
@@ -4888,7 +5011,8 @@ metadata_path <- build_metadata_json(
   provider             = provider,
   dataset              = dataset,
   workflow_url         = cc$workflow_url,
-  tables_owned         = tables_owned
+  tables_owned         = tables_owned,
+  sources              = src_stamp |> select(-action)
 )
 
 # write relationships.json sidecar with PKs/FKs
@@ -5019,13 +5143,19 @@ if (!parquet_complete) {
 # over an unchanged directory is a listing and no bytes. Paying that on every
 # render is far cheaper than a silently stale mirror, and it makes the upload
 # idempotent — safe to re-run after any failure.
-sync_to_gcs(
-  local_dir    = dir_stage,
-  sidecar_dir  = dir_parquet,
-  gcs_prefix   = glue("ingest/{dir_label}"),
-  bucket       = "calcofi-db",
-  delete_stale = TRUE
-)
+#
+# CALCOFI_SKIP_GCS (as in ingest_calcofi_ctd-derived): a dry run into a private
+# CALCOFI_STAGE_DIR, diffed against the release before it is staged for real, must
+# not reach the world-readable mirror first
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(
+    local_dir    = dir_stage,
+    sidecar_dir  = dir_parquet,
+    gcs_prefix   = glue("ingest/{dir_label}"),
+    bucket       = "calcofi-db",
+    delete_stale = TRUE
+  )
+} else cat("CALCOFI_SKIP_GCS set — skipping the upload (local verification run)\n")
 ```
 
 ## Findings {#findings}

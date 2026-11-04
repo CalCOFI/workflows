@@ -1,0 +1,407 @@
+---
+title: "Match SIO PIC Net Events to SWFSC Ichthyoplankton Nets"
+execute:
+  echo: true
+  warning: false
+  message: true
+editor_options:
+  chunk_output_type: console
+format:
+  html:
+    code-fold: true
+    toc: true
+---
+
+## Overview {.unnumbered}
+
+The Scripps Pelagic Invertebrate Collection (PIC) holds the invertebrate
+portion of the CalCOFI net samples; SWFSC sorts the same nets for fish eggs and
+larvae. This notebook gives each PIC **Parent Net Event** (PNE) the SWFSC
+**NetId** of the net (cod end) it came from, so PIC records can link to the
+ichthyoplankton counts and the other net-level data.
+
+It is part 2 of the matching begun in February
+([first pass](https://calcofi.io/workflows/explore_scripps.ucsd.edu_pelagic-invertebrate-collection.html)),
+which matched by tow. As Ed Weber pointed out, a bongo tow fills two nets, often
+starboard to formaldehyde and port to ethanol, so a tow-level match cannot say
+which NetId a PIC record belongs to. Here the match is **per net**:
+
+- **Inputs.** Linsey Sala's PNE table of 2026-10-19 (CalCOFI expeditions only)
+  and the SWFSC nets **as released** in the CalCOFI integrated database, so
+  cruises, ships, NODC codes and stations are in the database's cleaned
+  vocabulary, not the raw SWFSC export.
+- **Scope.** CalCOFI proper, 1951 onward (Ed Weber: the 1949–50 nets are not
+  part of the standard SWFSC data). Net types SWFSC does not sort for
+  ichthyoplankton (PRPOOS, HSN, ring nets, …) stay in the crosswalk, marked
+  `not_sorted`, so they still join the wider interoperability work.
+- **Rules** (`libs/pic_net_match.R`, asserted by
+  `tests/testthat/test-pic_net_match.R`):
+  1. the PIC net type maps to an SWFSC tow type, which must agree;
+  2. a candidate tow is at the same station (line + station) within 36 h, or
+     within 5 km and 12 h;
+  3. the station match ranks first, then the nearest time, then distance;
+  4. the preservative picks the net: formaldehyde is the starboard net, ethanol
+     the port net; a tow with a single net gives that net;
+  5. each SWFSC net goes to one PIC record and each record to one net: pairs
+     are taken in rank order while both are free, so a record whose nearest
+     net went to a closer record falls back to its next candidate; one left
+     with none is a `conflict`;
+  6. a PNE record identical to an earlier one (expedition, station, date,
+     time, net type, preservative) is a `duplicate`, pointing to that record
+     in `duplicate_of`, and is not matched.
+- **Checks.** The time difference of station matches must sit at zero
+  (it would show a time-zone slip). The 139 PNE records that already carry
+  SWFSC's NetId must be reproduced wherever their nets are in the release.
+
+## Setup
+
+```{r}
+#| label: setup
+
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, leaflet, lubridate, readr, readxl, stringr,
+  tidyr,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE, pageLength = 10))
+
+source(here("libs/ingest.R"))          # dir_data
+source(here("libs/pic_net_match.R"))
+
+# the release to match against: latest, or a candidate via the release env vars
+version <- Sys.getenv("CALCOFI_RELEASE_VERSION", "latest")
+
+dir_pic  <- path_expand(glue("{dir_data}/scripps/pelagic-invertebrate-collection"))
+pne_xlsx <- path(dir_pic, "SIOPIC_DB_PNEtable_CalCOFI_19Oct2026.xlsx")
+fld_xlsx <- path(dir_pic, "SIOPIC_DB_PNEtable_fieldDetails_9Feb2026_update19Oct2026.xlsx")
+stopifnot(file_exists(pne_xlsx), file_exists(fld_xlsx))
+
+dir_out <- calcofi4db::cc_stage_path("crosswalk", "sio_pic-zooplankton", create = TRUE)
+```
+
+## PIC Parent Net Events
+
+### Field details
+
+```{r}
+#| label: pne-fields
+
+read_excel(fld_xlsx) |>
+  datatable(caption = "PNE fields (Linsey Sala, updated 2026-10-19)")
+```
+
+### Read and clean
+
+Dates are local and times are `HHMM` Pacific Standard Time (field details);
+they are converted to UTC to compare with the release.
+
+```{r}
+#| label: read-pne
+
+pne_raw <- read_excel(pne_xlsx, guess_max = 1e5, col_types = "text") |>
+  rename_with(~ str_replace_all(.x, " ", "_"))
+
+pne <- pne_raw |>
+  transmute(
+    pic_id          = as.integer(ParentNetEventID_pk),
+    occurrence_uuid = occurenceID_UUID_pne,
+    netid_swfsc     = tolower(NetID_SWFSC),
+    expedition      = EXPEDITION_pne,
+    expedition_code = EXPED_CODE_pne,
+    ship_name       = SHIP_pne,
+    line            = suppressWarnings(as.numeric(STATION_LINE_pne)),
+    station         = suppressWarnings(as.numeric(STATION_NUMBER_pne)),
+    latitude        = suppressWarnings(as.numeric(LAT_DECIMAL_pne)),
+    longitude       = suppressWarnings(as.numeric(LONG_DECIMAL_pne)),
+    date            = as.Date(as.numeric(SAMPLE_DATE_pne), origin = "1899-12-30"),
+    start_hhmm      = START_TIME_pne,
+    depth_max_m     = suppressWarnings(as.numeric(DEPTH_MAX_pne)),
+    net_type        = NET_TYPE_pne,
+    tow_type_pic    = TOW_TYPE_pne,
+    preservative    = str_to_lower(PRESERVATIVE_pne)) |>
+  mutate(
+    site_key = if_else(
+      is.na(line) | is.na(station), NA_character_,
+      sprintf("%05.1f %05.1f", line, station)),
+    year     = year(date),
+    tow_type = pic_tow_type(net_type),
+    net_side = pic_net_side(preservative))
+pne <- bind_cols(pne, pic_local_to_utc(pne$date, pne$start_hhmm))
+
+stopifnot(
+  "ParentNetEventID_pk is unique"   = !anyDuplicated(pne$pic_id),
+  "every record has a sample date" = !anyNA(pne$date))
+
+cat(glue(
+  "{format(nrow(pne), big.mark = ',')} PNE records, ",
+  "{min(pne$year)}–{max(pne$year)}; ",
+  "{sum(!pne$time_known)} without a usable start time; ",
+  "{sum(!is.na(pne$netid_swfsc))} already carry an SWFSC NetId"), "\n")
+```
+
+### Net types and preservatives
+
+```{r}
+#| label: pne-net-types
+
+pne |>
+  count(net_type, tow_type, preservative, net_side, name = "records") |>
+  arrange(desc(records)) |>
+  datatable(caption = "PIC net type → SWFSC tow type, preservative → net side")
+```
+
+## SWFSC nets in the release
+
+Each released SWFSC net is a `sample` row of type `net` whose `source_uuid` is
+SWFSC's NetId. Its side (port / starboard) comes from the `ichthyo_net` table.
+
+```{r}
+#| label: release-nets
+
+con <- cc_get_db(version = version)
+v   <- cc_latest_version()
+if (version != "latest") v <- version
+cat(glue("Release {v}"), "\n")
+
+# net side arrives with `ichthyo_net` (from the SWFSC 2026-10-14 export on);
+# without it every bongo record stops at its tow (`side_unknown`)
+has_side <- "ichthyo_net" %in% dbListTables(con)
+if (!has_side)
+  cat("WARNING: this release has no ichthyo_net table, so no net side: bongo records match to the tow only\n")
+side_sql <- if (has_side)
+  "n.net_side, n.tow_number FROM sample s LEFT JOIN ichthyo_net n USING (sample_key)" else
+  "NULL::VARCHAR AS net_side, NULL::INTEGER AS tow_number FROM sample s"
+
+nets <- dbGetQuery(con, glue("
+  SELECT
+    s.sample_key         AS net_key,
+    s.parent_sample_key  AS tow_key,
+    lower(s.source_uuid::VARCHAR) AS net_uuid,
+    s.cruise_key, s.site_key, s.tow_type,
+    s.datetime           AS datetime_utc,
+    s.latitude, s.longitude,
+    c.ship_name, c.ship_nodc,
+    {side_sql}
+  LEFT JOIN cruise c USING (cruise_key)
+  WHERE s.dataset_key = 'swfsc_ichthyo' AND s.sample_type = 'net'")) |>
+  mutate(datetime_utc = force_tz(datetime_utc, "UTC"))
+
+cat(glue(
+  "{format(nrow(nets), big.mark = ',')} SWFSC nets on ",
+  "{format(n_distinct(nets$tow_key), big.mark = ',')} tows, ",
+  "{min(year(nets$datetime_utc), na.rm = TRUE)}–{max(year(nets$datetime_utc), na.rm = TRUE)}"), "\n")
+
+nets |>
+  count(tow_type, net_side, name = "nets") |>
+  datatable(caption = "SWFSC nets by tow type and side")
+```
+
+## Match
+
+```{r}
+#| label: match
+
+# identical PNE records describe one net event: match the first only
+pne$duplicate_of <- pic_duplicate_of(
+  pne, c("expedition_code", "site_key", "date", "start_hhmm", "net_type", "preservative"))
+
+m <- pic_match_nets(
+  pic  = pne |> filter(year >= 1951, is.na(duplicate_of)) |>
+    select(pic_id, site_key, datetime_utc, latitude, longitude, tow_type, net_side),
+  nets = nets |> filter(!is.na(datetime_utc)) |>
+    select(net_key, tow_key, site_key, datetime_utc, latitude, longitude, tow_type, net_side))
+
+xwalk <- pne |>
+  left_join(m, by = "pic_id") |>
+  mutate(status = case_when(
+    year < 1951           ~ "pre_1951",
+    !is.na(duplicate_of)  ~ "duplicate",
+    TRUE                  ~ status)) |>
+  left_join(
+    nets |> select(net_key, net_uuid, cruise_key, swfsc_site_key = site_key,
+                   swfsc_tow_type = tow_type, swfsc_net_side = net_side,
+                   swfsc_datetime_utc = datetime_utc, ship_name_swfsc = ship_name,
+                   ship_nodc),
+    by = "net_key")
+
+stopifnot(
+  "one row per PIC record" = nrow(xwalk) == nrow(pne),
+  "each SWFSC net is used once" = !anyDuplicated(na.omit(xwalk$net_uuid)))
+
+xwalk |>
+  count(status, name = "records") |>
+  mutate(pct = round(100 * records / sum(records), 1)) |>
+  datatable(caption = "Match status, all PIC records")
+```
+
+### Of the nets SWFSC sorts
+
+The rate that matters is over records whose net SWFSC sorts for
+ichthyoplankton, from 1951.
+
+```{r}
+#| label: match-sorted
+
+xwalk |>
+  filter(!status %in% c("pre_1951", "not_sorted", "duplicate")) |>
+  count(net_type, status, name = "records") |>
+  pivot_wider(names_from = status, values_from = records, values_fill = 0) |>
+  mutate(total = rowSums(across(where(is.numeric))),
+         pct_matched = round(100 * matched / total, 1)) |>
+  arrange(desc(total)) |>
+  datatable(caption = "Match status by PIC net type (sorted nets, 1951+)")
+
+xwalk |>
+  filter(status == "matched") |>
+  count(match_method, net_rule, name = "records") |>
+  datatable(caption = "How matched records matched")
+```
+
+### By decade
+
+```{r}
+#| label: match-decade
+
+xwalk |>
+  filter(!status %in% c("pre_1951", "not_sorted", "duplicate")) |>
+  mutate(decade = 10 * (year %/% 10)) |>
+  count(decade, status, name = "records") |>
+  pivot_wider(names_from = status, values_from = records, values_fill = 0) |>
+  mutate(pct_matched = round(100 * matched / rowSums(across(-decade)), 1)) |>
+  datatable(caption = "Match status by decade (sorted nets)")
+```
+
+### Time check
+
+PIC times are local Pacific Standard Time and the release keeps UTC. If the
+conversion is right, a station match's released tow time minus its PIC start
+time is near zero; an hour or eight-hour offset would show a time-zone slip.
+
+```{r}
+#| label: time-check
+
+tc <- xwalk |>
+  filter(status == "matched", match_method == "station", time_known) |>
+  mutate(
+    decade = 10 * (year %/% 10),
+    dt_signed_hr = as.numeric(difftime(swfsc_datetime_utc, datetime_utc, units = "hours")))
+
+tc |>
+  group_by(decade) |>
+  summarize(
+    records          = n(),
+    median_hr        = median(dt_signed_hr),
+    pct_within_1h    = round(100 * mean(abs(dt_signed_hr) <= 1), 1),
+    pct_off_by_7_9h  = round(100 * mean(abs(dt_signed_hr) >= 7 & abs(dt_signed_hr) <= 9), 1)) |>
+  datatable(caption = "Released tow time − PIC start time (PST → UTC), station matches")
+```
+
+## Check against the known NetIds
+
+```{r}
+#| label: check-known
+
+n_known    <- sum(!is.na(pne$netid_swfsc))
+n_in_rel   <- sum(pne$netid_swfsc %in% nets$net_uuid)
+cat(glue(
+  "{n_in_rel} of {n_known} NetIds already given by PIC are in release {v} ",
+  "(cruises {paste(sort(unique(pne$expedition_code[!is.na(pne$netid_swfsc)])), collapse = ', ')}); ",
+  "SWFSC nets in the release run through {max(year(nets$datetime_utc), na.rm = TRUE)}"), "\n")
+
+chk <- xwalk |>
+  filter(!is.na(netid_swfsc)) |>
+  mutate(agree = case_when(
+    is.na(net_uuid)              ~ "not matched",
+    net_uuid == netid_swfsc      ~ "same NetId",
+    TRUE                         ~ "different NetId"))
+
+chk |> count(agree, name = "records") |> datatable(caption = "Known NetIds reproduced?")
+
+chk |>
+  filter(agree != "same NetId") |>
+  select(pic_id, expedition_code, site_key, date, start_hhmm, net_type, preservative,
+         netid_swfsc, net_uuid, status, match_method, net_rule, dt_hr, dist_km) |>
+  datatable(caption = "Known NetIds the match does not reproduce")
+```
+
+## What did not match
+
+`no_candidate`: no SWFSC tow of that type at that station within 36 h, nor
+within 5 km and 12 h. `no_net`: the tow was found but its net could not be
+picked (a two-net bongo with no preservative, or no net on that side).
+`conflict`: every net the record could take went to a closer PIC record.
+`duplicate`: the record repeats an earlier one (`duplicate_of`) field for
+field, so only the earlier one is matched.
+
+```{r}
+#| label: unmatched-cruises
+
+cruise_ym <- nets |>
+  distinct(cruise_key) |>
+  mutate(ym = substr(cruise_key, 1, 7))
+
+xwalk |>
+  filter(status %in% c("no_candidate", "no_net", "conflict")) |>
+  mutate(ym = format(date, "%Y-%m"),
+         swfsc_has_month = ym %in% cruise_ym$ym) |>
+  count(expedition_code, ym, swfsc_has_month, status, name = "records") |>
+  arrange(desc(records)) |>
+  datatable(caption = "Unmatched sorted records by expedition (swfsc_has_month: the release has an SWFSC cruise that month)")
+```
+
+```{r}
+#| label: unmatched-map
+
+um <- xwalk |>
+  filter(status == "no_candidate", !is.na(latitude)) |>
+  count(site_key, latitude, longitude, name = "records")
+
+leaflet(um) |>
+  addProviderTiles(providers$CartoDB.Positron) |>
+  addCircleMarkers(
+    ~longitude, ~latitude, radius = ~ pmin(12, 2 + sqrt(records)),
+    stroke = FALSE, fillOpacity = 0.5,
+    label = ~ glue("{site_key}: {records} unmatched"),
+    clusterOptions = markerClusterOptions())
+```
+
+## Crosswalk
+
+One row per PIC record, written as CSV for Linsey Sala and Ed Weber to review.
+`net_uuid` is SWFSC's NetId; `net_key` is the same net in the CalCOFI
+database.
+
+```{r}
+#| label: write-crosswalk
+
+out <- xwalk |>
+  transmute(
+    ParentNetEventID_pk = pic_id, occurrence_uuid, expedition_code, date,
+    start_hhmm, site_key, latitude, longitude, net_type, preservative,
+    status, net_uuid, net_key, cruise_key, swfsc_site_key, swfsc_tow_type,
+    swfsc_net_side, swfsc_datetime_utc, match_method, net_rule,
+    dt_hr = round(dt_hr, 2), dist_km = round(dist_km, 2), netid_swfsc_given = netid_swfsc,
+    duplicate_of)
+
+csv <- path(dir_out, glue("sio_pic-zooplankton_pne_to_swfsc_ichthyo_net_{v}.csv"))
+write_csv(out, csv, na = "")
+cat(glue("Wrote {format(nrow(out), big.mark = ',')} rows to {csv}"), "\n")
+
+out |> filter(status == "matched") |> head(500) |>
+  datatable(caption = "First 500 matched rows")
+```
+
+## Next steps
+
+- Linsey Sala and Ed Weber review the `no_candidate`, `no_net`, `conflict`
+  and `duplicate` rows; Ed can screen them against the SWFSC database.
+- Once agreed, the NetIds can go into the PIC database (`NetID_SWFSC`) and the
+  `sio_pic-zooplankton` ingest can read the PNE table and carry the NetId, so
+  the release links PIC and SWFSC nets directly.
+
+```{r}
+#| label: cleanup
+
+dbDisconnect(con, shutdown = TRUE)
+```

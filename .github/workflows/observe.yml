@@ -40,6 +40,13 @@ jobs:
           r-version: release
           use-public-rspm: true
 
+      # setup-r puts the Posit binary repo (RSPM) in ~/.Rprofile, which R skips because this repo has its
+      # own .Rprofile, so pak compiled every package from CRAN source (duckdb ~50 min) whenever the
+      # package cache missed; Rprofile.site is always read
+      - name: Use Posit binary R packages
+        run: |
+          test -n "$RSPM"
+          echo "options(repos = c(CRAN = '$RSPM'))" | sudo tee -a "$(R RHOME)/etc/Rprofile.site"
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           packages: |
