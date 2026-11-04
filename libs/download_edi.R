@@ -9,8 +9,9 @@
 # entity name fully determines the bytes. That makes it the preferred route for
 # any CCE-LTER dataset that is mirrored on EDI.
 #
-# Sourced by libs/download_euphausiids.R and
-# libs/download_picoplankton_bacteria.R; not called directly from a notebook.
+# Sourced by libs/download_euphausiids.R, libs/download_iron.R,
+# libs/download_picoplankton_bacteria.R, libs/download_poc_pon.R and
+# libs/download_toc.R; not called directly from a notebook.
 
 #' Resolve the latest revision of an EDI package
 #'
@@ -18,9 +19,23 @@
 #' @param id    package id, e.g. 313
 #' @return integer revision (the highest published)
 edi_latest_rev <- function(scope, id) {
-  revs <- readLines(
-    glue::glue("https://pasta.lternet.edu/package/eml/{scope}/{id}"),
-    warn = FALSE)
+  revs <- tryCatch(
+    suppressWarnings(readLines(
+      glue::glue("https://pasta.lternet.edu/package/eml/{scope}/{id}"),
+      warn = FALSE)),
+    error = function(e) NULL)
+  if (is.null(revs)) {
+    # PASTA refused (see download_edi_entity()): the revisions the DataONE
+    # coordinating node has indexed for this package (checked 2026-11-04:
+    # knb-lter-cce.253 -> 3)
+    stopifnot(requireNamespace("jsonlite", quietly = TRUE))
+    q <- utils::URLencode(glue::glue(
+      "formatType:METADATA AND id:*package/metadata/eml/{scope}/{id}/*"), reserved = TRUE)
+    docs <- jsonlite::fromJSON(glue::glue(
+      "https://cn.dataone.org/cn/v2/query/solr/?q={q}&fl=id&rows=1000&wt=json"))$response$docs
+    revs <- sub(".*/", "", docs$id[grepl(glue::glue("/eml/{scope}/{id}/[0-9]+$"), docs$id)])
+    if (!length(revs)) stop(glue::glue("no revision of {scope}.{id} on PASTA or DataONE"))
+  }
   max(as.integer(revs[nzchar(revs)]))
 }
 

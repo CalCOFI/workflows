@@ -1071,7 +1071,11 @@ d_over_nominal <- attr(d_over, "nominal")
 # a question for the provider (named per entry) until the dataset is un-held, when its
 # samples join the public count and the ingest must have fixed or held them out
 DEPTH_SEAFLOOR_OVER_HELD <- c(
-  "sio_cetacean-sightings" = 0L)
+  "sio_cetacean-sightings" = 0L,
+  # measured 2026-11-04 on the first staged shard (workflows #153): bottles 1 and 2 of
+  # 2017-01-06-C-33RL cast 37 at 725 and 720 m over a 657 m (701 m max 3x3) GEBCO floor,
+  # up to 24 m over; position or depth is the provider's call (cce-lter/toc Q06)
+  "cce-lter_toc"           = 2L)
 d_over_held <- d_over |> filter(dataset_key %in% release_include)
 d_over      <- d_over |> filter(!dataset_key %in% release_include)
 if (nrow(d_over_held)) {
