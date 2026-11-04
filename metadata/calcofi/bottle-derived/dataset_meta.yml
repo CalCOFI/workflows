@@ -5,7 +5,9 @@
     measured: spice (spiciness at 0 dbar) and the TEOS-10 sigma-theta at every
     bottle with a temperature and a salinity, from the start of the record in
     1949, computed from each bottle's own temperature and salinity after the
-    provider's quality flags are applied. The bottle database's own sigma-theta,
+    provider's quality flags are applied; and, per bottle cast, the nitracline
+    depth (where nitrate reaches 1 umol/L, interpolated between the bracketing
+    bottles, the CTD team's rule). The bottle database's own sigma-theta,
     computed by the legacy DECODR software, stays in the CalCOFI Bottle Database
     beside it.
   abstract: >
@@ -60,6 +62,16 @@
     cruise 2021-05-3322, whose published salinity equals its own sigma-theta
     (calcofi_bottle Q13, answered 2026-11-01; this dataset's Q03), and four
     2020-07-33P4 bottle salinities (calcofi_bottle Q13 and Q17).
+
+    **Nitracline depth** (m, per bottle cast, `nitracline_depth` in
+    `sample_measurement` on the cast's sample): the depth at which nitrate reaches
+    1 umol/L, interpolated linearly between the bottle above and the bottle below
+    (Rasmus Swalethorp, 2026-09-24, the CTD team's bottle-era rule, D_NClineDepth.m);
+    a cast whose shallowest bottle is already at 1 umol/L counts only when that
+    bottle is within 20 m of the surface and the cast has three or more bottles; a
+    cast whose nitrate never reaches 1 umol/L has none. A nitrate flagged 8 or 9 is
+    dropped first. The CTD-derived dataset publishes the same key from the CTD's
+    fitted nitrate estimate; filter by dataset_key.
 
     Every rule is a function in calcofi4db (`bottle_spice_sigma0()`, which calls
     `ctd_spice()`) with unit tests that compare it to the Gibbs SeaWater toolbox
