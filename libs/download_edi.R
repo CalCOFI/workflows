@@ -63,29 +63,44 @@ download_edi_entity <- function(
     rev <- edi_latest_rev(scope, id)
 
   pkg  <- glue::glue("{scope}.{id}.{rev}")
-  ents <- readLines(
-    glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}"),
-    warn = FALSE)
-  ents <- ents[nzchar(ents)]
-
-  names(ents) <- vapply(ents, function(e) {
-    paste(readLines(
-      glue::glue("https://pasta.lternet.edu/package/name/eml/{scope}/{id}/{rev}/{e}"),
-      warn = FALSE), collapse = "")
-  }, character(1))
-
-  if (!entity_name %in% names(ents))
-    stop(glue::glue(
-      "EDI package {pkg} has no entity named '{entity_name}'. Available: ",
-      "{paste(names(ents), collapse = '; ')}"))
-
-  entity_id <- ents[[entity_name]]
-  url <- glue::glue(
-    "https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}/{entity_id}")
-
   dir.create(dirname(dest), showWarnings = FALSE, recursive = TRUE)
-  if (verbose) cat(glue::glue("EDI: downloading {pkg} '{entity_name}'\n\n"))
-  utils::download.file(url, dest, mode = "wb", quiet = !verbose)
+
+  # PASTA refuses every anonymous call now and then (2026-11-04: HTTP 403
+  # "Public Access is not authorized" on every endpoint, from two networks),
+  # so the entity listing is tried and, if it fails, the same bytes are read
+  # from EDI's DataONE member node, where the package is replicated under the
+  # PASTA identifiers (see edi_dataone_entity()).
+  ents <- tryCatch(
+    suppressWarnings(readLines(
+      glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}"),
+      warn = FALSE)),
+    error = function(e) NULL)
+
+  if (is.null(ents)) {
+    if (verbose) cat(glue::glue(
+      "EDI: PASTA refused the entity listing for {pkg}; ",
+      "reading it from the DataONE replica (gmn.lternet.edu)\n\n"))
+    edi_dataone_entity(scope, id, rev, entity_name, dest, verbose = verbose)
+  } else {
+    ents <- ents[nzchar(ents)]
+    names(ents) <- vapply(ents, function(e) {
+      paste(readLines(
+        glue::glue("https://pasta.lternet.edu/package/name/eml/{scope}/{id}/{rev}/{e}"),
+        warn = FALSE), collapse = "")
+    }, character(1))
+
+    if (!entity_name %in% names(ents))
+      stop(glue::glue(
+        "EDI package {pkg} has no entity named '{entity_name}'. Available: ",
+        "{paste(names(ents), collapse = '; ')}"))
+
+    entity_id <- ents[[entity_name]]
+    url <- glue::glue(
+      "https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}/{entity_id}")
+
+    if (verbose) cat(glue::glue("EDI: downloading {pkg} '{entity_name}'\n\n"))
+    utils::download.file(url, dest, mode = "wb", quiet = !verbose)
+  }
 
   if (!is.null(md5)) {
     got <- tools::md5sum(dest)[[1]]
@@ -97,5 +112,39 @@ download_edi_entity <- function(
     if (verbose) cat("EDI: md5 verified", md5, "\n")
   }
 
+  invisible(dest)
+}
+
+#' Download one EDI data entity through DataONE
+#'
+#' EDI replicates every package to its DataONE member node
+#' (`urn:node:LTER`, https://gmn.lternet.edu/mn) under the PASTA identifiers,
+#' and the coordinating node serves the package's EML. The entity is found by
+#' `entity_name` in that EML (`entityName` + its `url function="download"`),
+#' then read from the member node. Used by [download_edi_entity()] when PASTA
+#' refuses anonymous access; `rev` must be known (pin it).
+#'
+#' @inheritParams download_edi_entity
+#' @return `dest`, invisibly
+edi_dataone_entity <- function(scope, id, rev, entity_name, dest, verbose = TRUE) {
+  stopifnot(requireNamespace("xml2", quietly = TRUE), !is.null(rev))
+  pkg      <- glue::glue("{scope}.{id}.{rev}")
+  meta_pid <- glue::glue("https://pasta.lternet.edu/package/metadata/eml/{scope}/{id}/{rev}")
+  eml      <- xml2::read_xml(paste0(
+    "https://cn.dataone.org/cn/v2/object/", utils::URLencode(meta_pid, reserved = TRUE)))
+  names_x  <- xml2::xml_find_all(eml, "//*[local-name()='entityName']")
+  ents     <- vapply(names_x, function(n) {
+    ent <- xml2::xml_parent(n)
+    xml2::xml_text(xml2::xml_find_first(ent, ".//*[local-name()='url']"))
+  }, character(1))
+  names(ents) <- xml2::xml_text(names_x)
+  if (!entity_name %in% names(ents))
+    stop(glue::glue(
+      "EDI package {pkg} (DataONE EML) has no entity named '{entity_name}'. Available: ",
+      "{paste(names(ents), collapse = '; ')}"))
+  data_pid <- unname(ents[[entity_name]])
+  url <- paste0("https://gmn.lternet.edu/mn/v2/object/", utils::URLencode(data_pid, reserved = TRUE))
+  if (verbose) cat(glue::glue("EDI: downloading {pkg} '{entity_name}' via DataONE\n\n"))
+  utils::download.file(url, dest, mode = "wb", quiet = !verbose)
   invisible(dest)
 }
