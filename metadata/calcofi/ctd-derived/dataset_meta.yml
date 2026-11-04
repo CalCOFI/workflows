@@ -5,8 +5,12 @@
     measured: spice (spiciness at 0 dbar, TEOS-10) and the sensor-pair averaged
     sigma-theta at every published CTD depth; and, per cast, the mixed-layer
     depth (the CalCOFI legacy definition, with two alternative criteria beside
-    it), the depth and value of the chlorophyll-a maximum and the chlorophyll-a
-    integrated over the top 200 m, by the definitions of the CalCOFI CTD team.
+    it), the depth and value of the chlorophyll-a maximum, the chlorophyll-a
+    integrated over the top 200 m, the hypoxic boundary depths (where oxygen
+    falls to 2.4, 1.4 and 0.5 mL/L), the nitracline depth (where nitrate reaches
+    1 umol/L), the pycnocline depth (the maximum of the TEOS-10 buoyancy
+    frequency N2, also published per depth), by the definitions of the CalCOFI
+    CTD team.
     Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files
     after the provider's quality flags are applied.
   abstract: >
@@ -76,6 +80,31 @@
     2026-09-23). A bin missing inside the profile is interpolated, and the
     shallowest bin is carried to the surface only when it is no deeper than 5 m.
 
+    **Hypoxic boundary depths** (m, per cast): the shallowest depth at which the
+    station-corrected oxygen pair average falls to 2.4 mL/L (mild hypoxic
+    boundary, `hypoxic_depth_24`), 1.4 mL/L (hypoxic boundary, `hypoxic_depth_14`)
+    and 0.5 mL/L (severe, the core of the oxygen minimum zone, `hypoxic_depth_05`),
+    each interpolated linearly between the 1 m bins that bracket it (Rasmus
+    Swalethorp, 2026-09-24: the oxygen minimum can sit mid-profile, so the
+    boundary reported is the shallowest). A cast that never reaches a threshold
+    has no value for it.
+
+    **Nitracline depth** (m, per cast): the shallowest depth at which the
+    bottle-fitted nitrate estimate (`est_nitrate_sta_corr`) reaches 1 umol/L,
+    interpolated between the bracketing bins (Rasmus Swalethorp, 2026-09-24, the
+    rule of the CTD team's bottle-era script); the same quantity computed from the
+    bottle database's nitrate is published by the bottle-derived dataset under the
+    same key.
+
+    **Buoyancy frequency and pycnocline** (per depth and per cast): N2 is TEOS-10
+    `gsw_Nsquared` on absolute salinity and conservative temperature of the 1 m
+    bins, aligned to the bins and smoothed with a centred 10 m running mean
+    (`buoyancy_n2`, 1/s2, at every published CTD depth); the pycnocline depth is
+    where that N2 is greatest between 10 and 200 m (`pycnocline_depth`), with the
+    value there (`buoyancy_n2_max`), for a cast that starts within 15 m of the
+    surface and reaches 50 m, after the CTD team's bottle-era script (Fiedler et
+    al. 2013) modernised with TEOS-10 (Rasmus Swalethorp, 2026-09-24).
+
     **Relative geostrophic velocity** between adjacent stations of each CalCOFI
     line, referenced to 500 dbar, is computed by the same ingest (`ctd_geostrophic()`)
     but is not in the release while the treatment of shelf pairs and closely spaced
@@ -83,9 +112,11 @@
     CalCOFI/workflows#103).
 
     Every rule is a function in calcofi4db (`ctd_spice()`, `ctd_sigma_theta_ave()`,
-    `ctd_mld()`, `ctd_chl_max()`, `ctd_integrate()`, `ctd_geostrophic()`) with unit
-    tests. The mixed-layer and chlorophyll definitions are the CTD team's
-    (questions.csv Q01, Q02).
+    `ctd_mld()`, `ctd_chl_max()`, `ctd_integrate()`, `ctd_geostrophic()`,
+    `ctd_hypoxic_depth()`, `profile_threshold_depth()`, `ctd_n2()`,
+    `ctd_pycnocline()`) with unit tests. The mixed-layer, chlorophyll, hypoxic,
+    nitracline and pycnocline definitions are the CTD team's (questions.csv Q01,
+    Q02, Q10, Q11).
 
     **References.** de Boyer Montegut, C., G. Madec, A. S. Fischer, A. Lazar and
     D. Iudicone (2004), Mixed layer depth over the global ocean: an examination of
@@ -97,9 +128,18 @@
     (TEOS-10), IOC Manuals and Guides 56. McDougall, T. J. and P. M. Barker (2011),
     Getting started with TEOS-10 and the Gibbs Seawater (GSW) Oceanographic Toolbox,
     SCOR/IAPSO WG127. Kelley, D., C. Richards and WG127 (2023), gsw: Gibbs Sea Water
-    Functions, R package.
+    Functions, R package. Fiedler, P. C., M. F. Mendelssohn, D. M. Palacios and
+    S. J. Bograd (2013), Pycnocline variations in the eastern tropical and North
+    Pacific, 1958-2008, J. Climate 26, 583-599, doi:10.1175/JCLI-D-11-00728.1.
+    Bograd, S. J., C. G. Castro, E. Di Lorenzo, D. M. Palacios, H. Bailey, W. Gilly
+    and F. P. Chavez (2008), Oxygen declines and the shoaling of the hypoxic
+    boundary in the California Current, Geophys. Res. Lett. 35, L12607,
+    doi:10.1029/2008GL034185.
   # GCMD Science Keywords; source: https://gcmd.earthdata.nasa.gov/KeywordViewer/, checked 2026-09-23
   keywords_gcmd:
     - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY"
     - "EARTH SCIENCE > OCEANS > OCEAN CIRCULATION > OCEAN MIXED LAYER"
     - "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > CHLOROPHYLL"
+    - "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > OXYGEN"
+    - "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > NITRATE"
+    - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > PYCNOCLINE"

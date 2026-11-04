@@ -571,6 +571,15 @@ contract <- tibble::tribble(
     "SELECT count(*) n FROM {rp('climatology')}
      WHERE measurement_type = 'mld_sigma_theta_002' AND depth_bin IS NULL AND month = 7
        AND clim_mean IS NOT NULL AND n_cruises >= 5"),
+  # the threshold depths (calcofi4db 4.32.0): the hypoxic boundary and the nitracline are per-cast
+  # products with a baseline like the MLD; the bottle nitracline is calcofi_bottle-derived's own row
+  "consumer: per-cast climatology cell (hypoxic_depth_14, July, depth_bin NULL)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE measurement_type = 'hypoxic_depth_14' AND depth_bin IS NULL AND month = 7
+       AND clim_mean IS NOT NULL AND n_cruises >= 5"),
+  "consumer: nitracline_depth is published per cast by the CTD-derived dataset", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('sample_measurement')}
+     WHERE measurement_type = 'nitracline_depth' AND dataset_key = 'calcofi_ctd-derived'"),
   "integrity: a NULL depth_bin is a per-cast cell, never a per-bin type", "zero", glue(
     "SELECT count(*) n FROM {rp('climatology')} c
      WHERE c.depth_bin IS NULL

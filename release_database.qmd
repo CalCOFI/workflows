@@ -2065,7 +2065,11 @@ stopifnot("build_climatology(cast_types =, season =) needs calcofi4db >= 4.24.0;
   packageVersion("calcofi4db") >= "4.24.0")
 clim_cast_types <- c(
   "mld_sigma_theta_002", "mld_sigma_theta_0125", "mld_temperature_02",
-  "chl_max_depth", "chl_max", "chl_integrated")
+  "chl_max_depth", "chl_max", "chl_integrated",
+  # the threshold depths and the pycnocline (calcofi4db 4.32.0; Rasmus Swalethorp 2026-09-24):
+  # hypoxic_depth_05 is left out because few 1993-2013 casts reach the 0.5 mL/L core on a
+  # station-month floor of 5 cruises; a type listed here must have at least one monthly cell
+  "hypoxic_depth_24", "hypoxic_depth_14", "nitracline_depth", "pycnocline_depth", "buoyancy_n2_max")
 n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L,
                             cast_types = clim_cast_types, season = TRUE)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))
