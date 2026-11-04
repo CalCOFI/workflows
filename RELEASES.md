@@ -15,8 +15,10 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 3,216 samples (3,159 Niskin bottles and 57 underway surface samples) with 6,432 `obs` of `poc` and
 `pon`, the types `cce-lter_poc-pon` registers. Process cruises follow water parcels rather than the
 CalCOFI grid, so these samples carry no `cruise_key` and no `site_key`; each still gets a `grid_key`
-from its position. It is **held out of the release** (`in_release: false`) until the provider
-answers the questions on the 76 held-out rows (Q02–Q04).
+from its position. The `cruise_key` integrity ratchet records that as the dataset's baseline (all
+3,216 root samples, reached only in a private preview). It is **held out of the release**
+(`in_release: false`) until the provider answers the questions on the 76 held-out rows (Q02–Q04) and
+agrees to publication (consent Q06).
 
 What ships is registry content only: the `_source_datasets` of `poc` and `pon` also name
 `cce-lter_poc-pon-cce-region`. The holding's catalog abstract, which had described a nitrate

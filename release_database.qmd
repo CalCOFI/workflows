@@ -1691,7 +1691,15 @@ d_cki <- check_cruise_key_integrity(
       # reference cruise, CC2023-03 (29 segments, Mar-Apr 2023) and CC2024-07 (36,
       # Jul-Aug 2024; sightings Q14), plus the one segment it holds as misdated
       # (2022-11-05; Q07). Baseline, not a target.
-      "sio_cetacean-sightings"        = 66L)),
+      "sio_cetacean-sightings"        = 66L,
+      # poc-pon-cce-region (held, in_release: false; reaches a release only through
+      # CALCOFI_RELEASE_INCLUDE in the private preview): every one of its 3,216 root
+      # samples (3,159 Niskin bottles + 57 underway), measured at the 2026-11-04 Mac mini
+      # render (PR #156) — CCE-LTER Process cruises are not CalCOFI cruises and do not
+      # visit CalCOFI stations, so the ingest declares cruise_key and site_key empty
+      # (ingest_cce-lter_poc-pon-cce-region.qmd § Emit Core Tables); grid_key is still
+      # assigned from position. Baseline, not a target.
+      "cce-lter_poc-pon-cce-region"   = 3216L)),
   halt = TRUE)
 
 d_cki |>
