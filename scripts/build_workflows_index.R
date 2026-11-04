@@ -332,6 +332,20 @@ message("citation check: ", length(unique(cit$dataset_key)), " dataset(s); ",
 # metadata/{provider}/{dataset}/dataset_meta.yml, its descriptive keys (citation,
 # licence, links, contact, keywords, …) live THERE and nowhere else — a copy left
 # in the notebook YAML would be a second truth the provider's Sheet never sees.
+# the provider's consent is a contract too (calcofi4db::check_dataset_consent(),
+# >= 4.32.0): the release stops on a dataset whose standing consent question
+# (related_field = consent in its questions.csv) is not answered yes; here it is a
+# REPORT only (halt = FALSE), so the index build does not fail on a held dataset
+# or on an ask that is still out with the PI.
+consent <- calcofi4db::check_dataset_consent(wd, halt = FALSE)
+message("consent check: ", nrow(consent), " dataset(s); ",
+        sum(consent$consent == "given"), " given, ",
+        sum(consent$consent == "pending"), " pending, ",
+        sum(consent$consent == "declined"), " declined, ",
+        sum(consent$consent == "none"), " none; ", sum(!consent$ok), " would stop a release")
+if (any(!consent$ok))
+  print(as.data.frame(consent[!consent$ok, c("dataset_key", "consent", "label", "status", "who", "why")]))
+
 split <- calcofi4db::check_dataset_meta_split(wd)
 message("dataset_meta split: ", sum(split$has_sidecar), " of ", nrow(split),
         " ingest(s) carry a descriptive sidecar; no descriptive key left in a notebook that has one")

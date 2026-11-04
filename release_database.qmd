@@ -268,6 +268,31 @@ if (length(release_include)) {
 if (length(ds_excluded))
   message(glue("Held out of this release (in_release: false): ",
                "{paste(ds_excluded, collapse = ', ')}"))
+```
+
+### Provider consent
+
+No dataset reaches the public database before its provider's final acceptance.
+`check_dataset_consent()` (calcofi4db >= 4.32.0) reads each released dataset's
+standing consent question — the `related_field = consent` row of
+`metadata/{provider}/{dataset}/questions.csv`, which `scripts/pull_preview_consent.R`
+fills from the private preview's decision form — and stops the release unless it
+is `answered` with a `yes` and a `who`.
+
+```{r check_consent}
+# a dataset the PREVIEW run includes (CALCOFI_RELEASE_INCLUDE, release_include
+# above) is exempt: the preview is where the consent is collected, so its row is
+# still open there by design. A public run has an empty release_include, so every
+# released dataset with a consent row must carry a given consent. A dataset
+# released before the gate existed (no in_release key in its notebook) is reported
+# while its ask is pending, and halts only on a provider's no.
+consent <- check_dataset_consent(here(), exempt = release_include, halt = TRUE)
+consent |>
+  select(dataset_key, consent, label, status, who, answered_date, ok, exempt, legacy, why) |>
+  datatable(caption = "consent gate: a released dataset's standing consent question (exempt = included by this preview run)")
+```
+
+```{r}
 
 # keep only the data/parquet/* dirs that belong in the release — used by the
 # relationships.json / metadata.json / manifest.json globs further down
