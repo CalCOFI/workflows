@@ -368,6 +368,17 @@ dbExecute(con, "
   UPDATE poc_sample SET ship_code = x.csv_code_new
   FROM _ship_code_xw x WHERE poc_sample.ship_code = x.csv_code")
 
+# the studyName carries the bottle database's cruise id, including its one wrong
+# ship: "2009-07-14-C-31M4" (MCARTHUR, out of service since 2003) for SWFSC's
+# 2009-07-33MH (MCARTHUR II); corrected for that cruise only (bottle Q19,
+# poc-pon Q07). Uncorrected, its 254 samples landed on a derived 2009-07-31M4 beside
+# 2009-07-33MH at the same stations and failed check 11 of
+# check_cruise_key_integrity() at the 2026-11-04 preview candidate.
+correct_cruise_ship(
+  con, "poc_sample", here("metadata/cruise_ship_corrections.csv"),
+  dataset_key = "cce-lter_poc-pon", cruise_ym_col = "cruise_ym") |>
+  datatable(caption = "Ship codes corrected on one source cruise (metadata/cruise_ship_corrections.csv)")
+
 cruise_key_result <- derive_cruise_key_on_casts(
   con, table_name = "poc_sample", datetime_col = "datetime_start_utc",
   cruise_ym_col = "cruise_ym")

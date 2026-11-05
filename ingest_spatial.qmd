@@ -253,6 +253,63 @@ download_maritime_zones(
   glue("{dir_spatial}/MarineRegions_maritime-zones/us-maritime-zones_pacific.geojson"))
 ```
 
+## Kahru's satellite areas 2–6: `Kahru_satellite-areas`
+
+Mati Kahru (SIO) averages satellite chlorophyll over six areas of the CalCOFI grid
+(Kahru et al. 2012, *Deep-Sea Research II*, "Trends in the surface chlorophyll of the
+California Current: merging data from multiple ocean color satellites"): north of line 80
+the coastal band 0–100 km from shore is area 3, 100–300 km area 2 and offshore area 1;
+south of it 6, 5 and 4. His nominal stations per area came through Rasmus Swalethorp on
+2026-10-27 and are `metadata/spatial/kahru_areas_stations.csv`; Rasmus asked for areas 2–6
+(area 1 holds two stations). Each area here is the union of the `calcofi4r::cc_grid` station
+cells of its stations (`libs/kahru_areas.R`), written as a GeoJSON the registry row reads
+like any other source, so the areas reach `spatial`, `sample_spatial` and the PMTiles.
+
+Version 1 keeps **whole cells**: a line-80 cell belongs to the one area Kahru listed it in,
+and the cells on the 100 km and 300 km borders are whole too. Rasmus would like those border
+cells halved in an average; that needs half-cells or a weight per cell, which is not built.
+A listed station with no station cell of its own (a position between two official stations)
+is reported below with the cell its position falls in.
+
+```{r}
+#| label: kahru-areas
+#| output: asis
+
+stopifnot("cc_grid with one cell per official station needs calcofi4r >= 1.25.0" =
+  requireNamespace("calcofi4r", quietly = TRUE) && packageVersion("calcofi4r") >= "1.25.0")
+source(here("libs/kahru_areas.R"))
+kahru_geo <- glue("{dir_spatial}/Kahru_satellite-areas/kahru_satellite_areas.geojson")
+
+if (!file_exists(kahru_geo) || overwrite) {
+  sf_kahru <- suppressMessages(build_kahru_areas(
+    here("metadata/spatial/kahru_areas_stations.csv"), calcofi4r::cc_grid, areas = 2:6))
+  dir_create(path_dir(kahru_geo))
+  st_write(sf_kahru, kahru_geo, delete_dsn = TRUE, quiet = TRUE)
+
+  # a listed station with no station cell: which cell its position falls in, and whether that cell is in the area
+  kahru_unmatched <- attr(sf_kahru, "unmatched")
+  if (nrow(kahru_unmatched) > 0) {
+    s2_was <- sf_use_s2(FALSE)
+    d_um <- kahru_unmatched |>
+      left_join(read_csv(here("metadata/spatial/kahru_areas_stations.csv"), show_col_types = FALSE),
+                by = c("area", "line", "station")) |>
+      st_as_sf(coords = c("longitude", "latitude"), crs = 4326) |>
+      (\(x) suppressMessages(st_join(x, calcofi4r::cc_grid |> select(grid_key))))() |>
+      st_drop_geometry() |>
+      rowwise() |>
+      mutate(cell_in_area = grid_key %in% strsplit(sf_kahru$grid_keys[sf_kahru$area == area], "|", fixed = TRUE)[[1]]) |>
+      ungroup() |>
+      select(area, line, station, grid_key, cell_in_area)
+    sf_use_s2(s2_was)
+    cat(knitr::kable(d_um, caption = "Kahru stations with no station cell of their own: the cell their position falls in"), sep = "\n")
+  }
+  cat(knitr::kable(
+    sf_kahru |> mutate(km2 = round(as.numeric(st_area(geometry)) / 1e6)) |> st_drop_geometry() |>
+      select(area, name, n_stations, km2),
+    caption = "Kahru satellite areas: stations matched to a cc_grid cell, and area"), sep = "\n")
+}
+```
+
 ## Helper functions
 
 ```{r}

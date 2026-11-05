@@ -23,6 +23,7 @@ calcofi:
   # across shards and a second copy would fail assemble_core())
   tables_owned:
     - {table: obs, shared: true, note: "per-bottle spiciness0 + sigma_theta_teos10 (TEOS-10), from each bottle's own temperature and salinity"}
+    - {table: sample_measurement, shared: true, note: "per bottle cast, the nitracline depth: where the bottle database's nitrate reaches 1 umol/L, interpolated between the bracketing bottles (the CTD team's bottle-era rule)"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#d3dcf2"
@@ -47,6 +48,14 @@ dataset once the DECODR source arrives.
   (`Salnty`) per bottle, with their quality codes (`T_qual`, `S_qual`), its depth and
   its cast's position — read from that ingest's staged output when it is current,
   otherwise from the release (see [Input](#input)).
+- **The nitracline depth** per bottle cast (`nitracline_depth`, `sample_measurement` on
+  the cast's `sample_key`): the depth at which nitrate reaches 1 µmol/L, interpolated
+  linearly between the bottle above and the bottle below, by the CTD team's bottle-era
+  rule (Rasmus Swalethorp, 2026-09-24; his `D_NClineDepth.m`:
+  `calcofi4db::profile_threshold_depth()`); a cast whose shallowest bottle is already at
+  1 µmol/L counts only when that bottle is within 20 m of the surface and the cast has
+  three or more bottles. The same key is published from the CTD's fitted nitrate
+  estimate by `calcofi_ctd-derived`; filter by `dataset_key`.
 - **The rule is one tested calcofi4db function**, `bottle_spice_sigma0()`: sea pressure
   from depth and latitude (`gsw_p_from_z`), absolute salinity, conservative temperature,
   then `gsw_spiciness0` (by `ctd_spice()`, the rule the CTD series uses) and
@@ -59,9 +68,12 @@ dataset once the DECODR source arrives.
   modern value beside it (Rasmus Swalethorp, 2026-10-16: "keep legacy, add modern,
   document"). Where the two disagree by more than 0.1 kg m⁻³ the bottle is listed for
   the provider ([Findings](#findings)).
-- **A known-wrong input is withheld by name.** Cruise 2021-05-3322's salinity column
-  holds sigma-theta (`calcofi_bottle` Q13), so its bottles get no derived value until
-  the provider answers (Ben Best, 2026-10-20); the notebook asserts none is emitted.
+- **A known-wrong input is flagged at its source, never withheld by name.** Cruise
+  2021-05-3322's salinity column holds sigma-theta (`calcofi_bottle` Q13); the provider
+  answered on 2026-11-01 ("for now exclude the salinity data"), so `calcofi_bottle` sets
+  its salinity to 8 (`metadata/calcofi/bottle/qual_overrides.csv`) and the flag rule
+  above keeps every one of its bottles out. The notebook reports how many bottles the
+  flags remove and asserts the cruise emits nothing.
 
 ```{mermaid}
 graph LR
@@ -105,20 +117,23 @@ db_path      <- here(glue("data/wrangling/{dir_label}.duckdb"))
 meas_type_csv <- here("metadata/measurement_type.csv")
 
 # the source series, by their calcofi_bottle measurement_type
-src_types <- c(temperature = "temperature", salinity = "salinity", legacy = "sigma_theta")
+src_types <- c(temperature = "temperature", salinity = "salinity", legacy = "sigma_theta",
+               nitrate = "nitrate")
+nc_threshold <- 1   # umol/L: the nitracline (Rasmus Swalethorp 2026-09-24; calcofi_ctd-derived Q10)
+nc_surface_max <- 20
 # a legacy-vs-TEOS-10 difference larger than this is listed for the provider; the
 # release v2026.10.14 comparison over 199,918 bottles had a median of 0.0037 kg/m3
 # and a p95 of 0.0087, so 0.1 is about ten times the p95 and is not a rounding effect
 diff_list_kg_m3 <- 0.1
 
-# WITHHELD, by name: cruises whose source T or S is known to be wrong, so nothing is
-# derived from them until the provider answers. Ben Best, 2026-10-20: "a value we know is
-# wrong never enters a derived product".
-# - 2021-05-3322: on every bottle the published Salnty equals the bottle's own sigma_theta
-#   (24.19-27.06), so the salinity column holds sigma-theta; calcofi_bottle Q13 (proposed,
-#   high) asks the provider. Remove the entry when Q13 is answered and calcofi_bottle
-#   re-staged; this dataset's Q03 tracks it.
-withheld_cruises <- c("2021-05-3322" = "calcofi_bottle Q13: Salnty holds sigma-theta")
+# cruises whose source salinity the provider has told us to exclude. Nothing here
+# withholds them: calcofi_bottle flags their salinity 8 (its qual_overrides.csv) and the
+# flag rule drops them. The list is an assertion that the flags did it, checked in
+# Compute (every bottle of the cruise is flagged) and in Emit Core Tables (nothing emitted).
+# - 2021-05-3322: the published Salnty equals the bottle's own sigma_theta (24.19-27.06);
+#   calcofi_bottle Q13, answered 2026-11-01 (Rasmus Swalethorp): "for now exclude the
+#   salinity data"; this dataset's Q03.
+flagged_out_cruises <- c("2021-05-3322" = "calcofi_bottle Q13: Salnty holds sigma-theta, flagged 8")
 
 if (overwrite) {
   for (f in c(db_path, paste0(db_path, ".wal"))) if (file_exists(f)) file_delete(f)
@@ -173,7 +188,7 @@ if (stage_current) {
     WHERE dataset_key = '{src_key}' AND measurement_type IN ({types_in})"))
   dbExecute(con, glue("
     CREATE OR REPLACE VIEW src_sample AS
-    SELECT sample_key, sample_type, site_key FROM read_parquet('{dir_src}/sample.parquet')
+    SELECT sample_key, sample_type, site_key, root_sample_key FROM read_parquet('{dir_src}/sample.parquet')
     WHERE dataset_key = '{src_key}'"))
 } else {
   cat_ <- calcofi4r::cc_catalog("latest")
@@ -192,7 +207,7 @@ if (stage_current) {
     WHERE dataset_key = '", src_key, "'"))
   dbExecute(con, paste0("
     CREATE OR REPLACE TABLE src_sample AS
-    SELECT sample_key, sample_type, site_key FROM ",
+    SELECT sample_key, sample_type, site_key, root_sample_key FROM ",
     calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(cat_, "sample")), "
     WHERE dataset_key = '", src_key, "'"))
 }
@@ -251,10 +266,11 @@ dbGetQuery(con, "
 
 ## Compute the Products
 
-The bottles of a **withheld** cruise (`withheld_cruises` in Setup) are set aside before
-anything is computed: their source salinity is known to be wrong (`calcofi_bottle` Q13),
-and a value we know is wrong never enters a derived product (Ben Best, 2026-10-20). They
-are listed below and in question Q03, and return when Q13 is answered.
+Every bottle with a temperature and a salinity goes to `bottle_spice_sigma0()`, which
+returns no value where either is flagged 8 or 9. A value its provider has told us to
+exclude reaches it flagged: cruise 2021-05-3322's salinity carries 8 from `calcofi_bottle`
+(Q13, answered 2026-11-01), as do the four 2020-07-33P4 salinities of its Q13 and Q17.
+The table below counts the bottles the flags remove, by cruise.
 
 ```{r}
 #| label: compute
@@ -262,18 +278,26 @@ d_all <- dbGetQuery(con, "
   SELECT sample_key, cruise_key, temperature, q_temperature, salinity, q_salinity, legacy, q_legacy,
          depth_m, latitude, longitude
   FROM btl WHERE temperature IS NOT NULL AND salinity IS NOT NULL")
-is_withheld <- d_all$cruise_key %in% names(withheld_cruises)
-d_withheld  <- d_all[is_withheld, ]
-d           <- d_all[!is_withheld, ]
-d_withheld |>
-  count(cruise_key, name = "bottles") |>
-  mutate(reason = withheld_cruises[cruise_key],
-         salinity_equals_legacy_sigma = vapply(cruise_key, function(ck) with(
-           d_withheld[d_withheld$cruise_key == ck, ], sum(abs(salinity - legacy) < 0.01, na.rm = TRUE)),
-           numeric(1))) |>
-  datatable(caption = "Bottles withheld from the derivation (question Q03)", rownames = FALSE)
-stopifnot("every withheld cruise is still in the source (else drop it from the list)" =
-            all(names(withheld_cruises) %in% d_all$cruise_key))
+d <- d_all
+is_flagged <- function(q) sub("\\.0+$", "", as.character(q)) %in% c("8", "9")
+d_flag_cruise <- d |>
+  mutate(flagged = is_flagged(q_temperature) | is_flagged(q_salinity)) |>
+  group_by(cruise_key) |>
+  summarize(bottles = n(), flagged = sum(flagged),
+            s_flagged = sum(is_flagged(q_salinity)), t_flagged = sum(is_flagged(q_temperature)),
+            .groups = "drop") |>
+  filter(flagged > 0) |>
+  mutate(note = unname(flagged_out_cruises[cruise_key])) |>
+  arrange(desc(flagged))
+d_flag_cruise |>
+  datatable(caption = glue(
+    "Bottles the 8/9 flags remove from the derivation, by cruise: {sum(d_flag_cruise$flagged)} ",
+    "of {format(nrow(d), big.mark = ',')} (question Q03)"), rownames = FALSE)
+stopifnot(
+  "every flagged-out cruise is still in the source (else drop it from the list)" =
+    all(names(flagged_out_cruises) %in% d$cruise_key),
+  "every bottle of a flagged-out cruise carries a flagged salinity (calcofi_bottle qual_overrides.csv)" =
+    all(is_flagged(d$q_salinity[d$cruise_key %in% names(flagged_out_cruises)])))
 t0 <- Sys.time()
 r <- bottle_spice_sigma0(d$temperature, d$salinity, d$depth_m, d$longitude, d$latitude,
                          q_temperature = d$q_temperature, q_salinity = d$q_salinity)
@@ -281,6 +305,25 @@ d <- bind_cols(d, r)
 cat(glue("computed {format(nrow(d), big.mark = ',')} bottles in {format(round(Sys.time() - t0, 1))}"), "\n")
 dbWriteTable(con, "derived", as.data.frame(
   select(d, sample_key, pressure_dbar, spiciness0, sigma_theta_teos10)), overwrite = TRUE)
+
+# the nitracline, per bottle cast (the bottle's root sample): the bottles of a cast ordered
+# by depth, a nitrate flagged 8/9 dropped by the rule itself ----
+d_no3 <- dbGetQuery(con, "
+  SELECT s.root_sample_key AS cast_key, b.sample_key, b.depth_m, b.nitrate, b.q_nitrate
+  FROM btl b JOIN src_sample s USING (sample_key)
+  WHERE b.nitrate IS NOT NULL AND s.root_sample_key IS NOT NULL
+  ORDER BY 1, 3")
+t0 <- Sys.time()
+d_nc <- d_no3 |>
+  group_by(cast_key) |>
+  group_modify(~ profile_threshold_depth(.x$depth_m, .x$nitrate, .x$q_nitrate,
+                                         threshold = nc_threshold, direction = "above",
+                                         surface_max_m = nc_surface_max)) |>
+  ungroup()
+cat(glue("nitracline: {format(nrow(d_nc), big.mark = ',')} casts with a nitrate in {format(round(Sys.time() - t0, 1))}"), "\n")
+dbWriteTable(con, "nitracline", as.data.frame(d_nc), overwrite = TRUE)
+d_nc |> count(status, name = "casts") |>
+  datatable(caption = "Nitracline per bottle cast: ok = interpolated between two bottles; at_surface = the shallowest bottle (within 20 m) is already at 1 umol/L; no_bracket / not_reached / no_data = no value", rownames = FALSE)
 ```
 
 ## Assert the Flag Rule
@@ -290,11 +333,9 @@ good temperature and salinity at a known depth and position gets both values.
 
 ```{r}
 #| label: flag-audit
-is_flagged <- function(q) sub("\\.0+$", "", as.character(q)) %in% c("8", "9")
 flagged <- is_flagged(d$q_temperature) | is_flagged(d$q_salinity)
 placed  <- is.finite(d$depth_m) & is.finite(d$latitude) & is.finite(d$longitude)
 fa <- tibble(
-  withheld_cruise_bottles  = nrow(d_withheld),
   bottles_t_and_s          = nrow(d),
   t_or_s_flagged_8_9       = sum(flagged),
   t_flagged                = sum(is_flagged(d$q_temperature)),
@@ -370,6 +411,11 @@ d_meas_type <- declare_measurement_fields(
   meas_type_csv, categories = read_csv(here("metadata/category.csv"))$category,
   overwrite = TRUE, quiet = TRUE)
 d_meas_type <- add_measurement_source_dataset("spiciness0", ds_key, meas_type_csv)
+# nitracline_depth is defined by calcofi_ctd-derived (its Q10) and reused here by the same rule
+# on the bottle database's nitrate; this ingest only adds itself to the row
+stopifnot("nitracline_depth is defined by calcofi_ctd-derived and must exist" =
+            nrow(src_mt("nitracline_depth")) == 1)
+d_meas_type <- add_measurement_source_dataset("nitracline_depth", ds_key, meas_type_csv)
 
 ts_grid <- expand.grid(t = seq(t_b$valid_min, t_b$valid_max, 1),
                        s = seq(s_b$valid_min, s_b$valid_max, 1))
@@ -386,11 +432,14 @@ bounds <- tribble(
 d_meas_type <- declare_measurement_bounds(select(bounds, -why), meas_type_csv, overwrite = TRUE)
 bounds |>
   bind_rows(tibble(measurement_type = "spiciness0", valid_min = sp0$valid_min, valid_max = sp0$valid_max,
-                   why = "reused: declared by calcofi_ctd-derived (its Q07); covers the bottle T x S grid")) |>
+                   why = "reused: declared by calcofi_ctd-derived (its Q07); covers the bottle T x S grid"),
+            tibble(measurement_type = "nitracline_depth",
+                   valid_min = src_mt("nitracline_depth")$valid_min, valid_max = src_mt("nitracline_depth")$valid_max,
+                   why = "reused: a depth, declared by calcofi_ctd-derived (0 to CC_DEPTH_MAX_M)")) |>
   datatable(caption = "Declared bounds and where each comes from", rownames = FALSE)
 stopifnot(
-  "this dataset is listed on both of its types" = all(vapply(
-    c("spiciness0", "sigma_theta_teos10"), function(tp) ds_key %in% strsplit(
+  "this dataset is listed on each of its types" = all(vapply(
+    c("spiciness0", "sigma_theta_teos10", "nitracline_depth"), function(tp) ds_key %in% strsplit(
       filter(d_meas_type, measurement_type == tp)$`_source_datasets`, ";")[[1]], logical(1))),
   "spiciness0 keeps calcofi_ctd-derived" = grepl("calcofi_ctd-derived",
     filter(d_meas_type, measurement_type == "spiciness0")$`_source_datasets`, fixed = TRUE))
@@ -427,16 +476,26 @@ for (tp in c("spiciness0", "sigma_theta_teos10"))
     FROM btl b JOIN derived x USING (sample_key)
     WHERE x.{tp} IS NOT NULL"))
 
+# the nitracline on the cast's own sample row (calcofi_bottle's cast sample)
+append_sample_measurement(con, glue("
+  SELECT cast_key, '{ds_key}', 'nitracline_depth', depth_m, NULL::VARCHAR
+  FROM nitracline WHERE depth_m IS NOT NULL"))
+n_sm <- dbGetQuery(con, "SELECT COUNT(*) AS n FROM sample_measurement")$n
+cat(glue("sample_measurement: {n_sm} nitracline depths on bottle casts"), "\n")
+
 n_obs <- dbGetQuery(con, "SELECT measurement_type, COUNT(*) AS n FROM obs GROUP BY 1 ORDER BY 1")
 n_obs |> datatable(caption = "core projection: obs rows per type", rownames = FALSE)
 stopifnot(
   "one obs row per derived bottle and type" = all(n_obs$n == fa$derived),
   "both types emitted" = nrow(n_obs) == 2,
-  "no row of a withheld cruise is emitted (calcofi_bottle Q13)" = dbGetQuery(con, glue("
+  "one nitracline per cast, every cast with a value" =
+    n_sm == sum(!is.na(d_nc$depth_m)) &&
+    dbGetQuery(con, "SELECT COUNT(*) AS n FROM (SELECT sample_key FROM sample_measurement GROUP BY 1 HAVING COUNT(*) > 1)")$n == 0,
+  "no row of a flagged-out cruise is emitted (calcofi_bottle Q13)" = dbGetQuery(con, glue("
     SELECT COUNT(*) AS n FROM obs
-    WHERE cruise_key IN ({paste0(\"'\", names(withheld_cruises), \"'\", collapse = ', ')})
+    WHERE cruise_key IN ({paste0(\"'\", names(flagged_out_cruises), \"'\", collapse = ', ')})
        OR sample_key IN (SELECT sample_key FROM btl
-                         WHERE cruise_key IN ({paste0(\"'\", names(withheld_cruises), \"'\", collapse = ', ')}))"))$n == 0)
+                         WHERE cruise_key IN ({paste0(\"'\", names(flagged_out_cruises), \"'\", collapse = ', ')}))"))$n == 0)
 ```
 
 ## Check Measurement Bounds
@@ -444,10 +503,11 @@ stopifnot(
 ```{r}
 #| label: bounds
 b_obs <- check_measurement_bounds(con, "obs", mt = d_meas_type, dataset_key = ds_key)
-bounds_datatable(b_obs)
+b_sm  <- check_measurement_bounds(con, "sample_measurement", mt = d_meas_type, dataset_key = ds_key)
+bounds_datatable(bind_rows(b_obs, b_sm))
 stopifnot(
-  "every derived type is bounded" = all(b_obs$status != "undeclared"),
-  "no derived value breaks its bound" = all(b_obs$status != "out_of_range"))
+  "every derived type is bounded" = all(c(b_obs$status, b_sm$status) != "undeclared"),
+  "no derived value breaks its bound" = all(c(b_obs$status, b_sm$status) != "out_of_range"))
 ```
 
 ## Findings for the Provider {#findings}
@@ -460,12 +520,14 @@ inputs (a temperature or salinity the legacy value was not computed from) — an
 below −3 kg m⁻³, which needs a practical salinity near 20, the same class of fault the
 CTD derived products list (`calcofi_ctd-derived` Q08).
 
-Cruise 2021-05-3322 is not in these lists because it is **withheld** (see Compute the
-Products): at the first render (2026-10-20) it was 918 of the 928 bottles past 0.1 kg m⁻³
-and every bottle with spice below −3, because on every bottle the published salinity
-equals the bottle's own sigma-theta (`calcofi_bottle` Q13). Its source code is blank
-(good, by `calcofi_bottle` Q01) and the values sit inside the generous bounds, so no flag
-or bound would have caught it; the withholding is by name, until Q13 is answered.
+Cruise 2021-05-3322 is not in these lists because its salinity is **flagged 8** (see
+Compute the Products): at the first render (2026-10-20) it was 918 of the 928 bottles past
+0.1 kg m⁻³ and every bottle with spice below −3, because on every bottle the published
+salinity equals the bottle's own sigma-theta (`calcofi_bottle` Q13). Its source code is
+blank (good, by `calcofi_bottle` Q01) and the values sit inside the generous bounds, so
+neither caught it; it was withheld by name from 2026-10-20 until the provider answered
+Q13 on 2026-11-01, and is now flagged at the source. The two 2020-07-33P4 surface bottles
+of `calcofi_bottle` Q17 left these lists the same way.
 
 ```{r}
 #| label: findings
@@ -510,8 +572,12 @@ stopifnot(
   "every obs.sample_key is a calcofi_bottle bottle" =
     dbGetQuery(con, "SELECT COUNT(*) AS n FROM obs o LEFT JOIN src_sample s USING (sample_key)
                      WHERE s.sample_type IS DISTINCT FROM 'bottle'")$n == 0,
+  "every sample_measurement.sample_key is a calcofi_bottle cast" =
+    dbGetQuery(con, "SELECT COUNT(*) AS n FROM sample_measurement m LEFT JOIN src_sample s USING (sample_key)
+                     WHERE s.sample_type IS DISTINCT FROM 'cast'")$n == 0,
   "every measurement_type is registered" =
-    dbGetQuery(con, "SELECT COUNT(*) AS n FROM obs
+    dbGetQuery(con, "SELECT COUNT(*) AS n FROM (SELECT measurement_type FROM obs UNION
+                     SELECT measurement_type FROM sample_measurement)
                      WHERE measurement_type NOT IN (SELECT measurement_type FROM measurement_type)")$n == 0,
   "one obs row per bottle and type" =
     dbGetQuery(con, "SELECT COUNT(*) AS n FROM (SELECT sample_key, measurement_type FROM obs
@@ -519,14 +585,15 @@ stopifnot(
 
 tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
 rels <- core_relationships(tbls_out)
-cc_erd(con, tables = c("obs", "measurement_type"), rels = rels,
-       colors = list(lightblue = "obs", lightyellow = "measurement_type"))
+cc_erd(con, tables = c("obs", "sample_measurement", "measurement_type"), rels = rels,
+       colors = list(lightblue = c("obs", "sample_measurement"), lightyellow = "measurement_type"))
 ```
 
 | source (calcofi_bottle `obs`) | core | transform |
 |---|---|---|
 | `temperature`, `salinity` + `T_qual`, `S_qual`, the bottle's depth and its cast's position | `obs.measurement_type = spiciness0` | `bottle_spice_sigma0()` → `ctd_spice()` at `gsw_p_from_z(-depth, latitude)` |
 | the same | `obs.measurement_type = sigma_theta_teos10` | `bottle_spice_sigma0()`: `gsw_sigma0` |
+| `nitrate` + its quality code, the bottles of a cast by depth | `sample_measurement.measurement_type = nitracline_depth` on the cast's `sample_key` | `profile_threshold_depth(threshold = 1, direction = "above")`: linear interpolation between the bracketing bottles |
 | `sigma_theta` (legacy, DECODR) | **not published here**; compared in [Findings](#findings) | |
 
 : Source → core mapping {#tbl-mapping}
@@ -569,7 +636,7 @@ n_exp <- dbGetQuery(con, "
 # the wrangling tables are not outputs; drop them so the validator sees what ships. The
 # src_* inputs are views (stage) or tables (release), and DuckDB refuses DROP VIEW on a
 # table, so each is dropped as what it is
-for (tb in c("btl", "derived", "src_obs", "src_sample")) {
+for (tb in c("btl", "derived", "nitracline", "src_obs", "src_sample")) {
   kind <- dbGetQuery(con, glue(
     "SELECT table_type FROM information_schema.tables WHERE table_name = '{tb}'"))$table_type
   if (length(kind))
@@ -639,9 +706,11 @@ if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
 
 ## Questions for Data Providers
 
-Open: the licence and PI, inherited from the bottle database (Q01); the derived
-sigma-theta bound (Q02); the bottles where the TEOS-10 and legacy sigma-theta disagree
-and the spice outliers (Q03); the temperature scale of the early record (Q04).
+Answered: the licence, CC-BY-4.0 inherited from the bottle database (Q01); the
+2021-05-3322 salinity, now flagged at the source (Q03 (a)). Open: the PI (Q01, follows
+`calcofi_bottle` Q11); the derived sigma-theta bound (Q02); the other bottles where the
+TEOS-10 and legacy sigma-theta disagree (Q03 (b)); the temperature scale of the early
+record (Q04).
 
 ```{r}
 #| label: provider-questions

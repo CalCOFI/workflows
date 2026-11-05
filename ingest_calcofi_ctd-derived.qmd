@@ -27,8 +27,8 @@ calcofi:
   # shelf-pair speeds are under review (questions Q03, Q04; CalCOFI/workflows#103),
   # so it is not listed: a listed table is a promise to a reader
   tables_owned:
-    - {table: obs, shared: true, note: "per-bin spiciness0 + sigma_theta_ave at the depths calcofi_ctd-cast publishes in obs"}
-    - {table: sample_measurement, shared: true, note: "per-cast mixed-layer depth (the provider's sigma-theta 0.02 kg/m3 from 10 m, plus the 0.125 and temperature 0.2 alternatives), depth of the chlorophyll-a maximum (3 m running mean), integrated chlorophyll-a (sum of the 1 m bins, 0-200 m)"}
+    - {table: obs, shared: true, note: "per-bin spiciness0, sigma_theta_ave and buoyancy_n2 (TEOS-10 N2, 10 m running mean) at the depths calcofi_ctd-cast publishes in obs"}
+    - {table: sample_measurement, shared: true, note: "per-cast mixed-layer depth (the provider's sigma-theta 0.02 kg/m3 from 10 m, plus the 0.125 and temperature 0.2 alternatives), depth of the chlorophyll-a maximum (3 m running mean), integrated chlorophyll-a (sum of the 1 m bins, 0-200 m), the hypoxic boundary depths (shallowest crossing of 2.4, 1.4 and 0.5 mL/L oxygen), the nitracline depth (1 umol/L estimated nitrate), the pycnocline depth (maximum N2 in 10-200 m) and that maximum"}
     - {table: measurement_type, shared: true, note: "shared registry across datasets"}
   erd:
     color: "#cfe8dc"
@@ -51,9 +51,25 @@ product (#99–#103); the prototype on one cruise was
   (`obs_ctd_full`), read from its staged output when that is current, otherwise
   from the release — see [Input](#input).
 - **Every rule is a tested calcofi4db function** (the first version after 4.17.2,
-  which carries the provider's definitions): `ctd_spice()`,
-  `ctd_sigma_theta_ave()`, `ctd_mld()`, `ctd_chl_max()`, `ctd_integrate()`,
-  `ctd_geostrophic()`. This notebook only applies them.
+  which carries the provider's definitions; 4.32.0 for the threshold depths and
+  N²): `ctd_spice()`, `ctd_sigma_theta_ave()`, `ctd_mld()`, `ctd_chl_max()`,
+  `ctd_integrate()`, `ctd_geostrophic()`, `ctd_hypoxic_depth()`,
+  `profile_threshold_depth()`, `ctd_n2()`, `ctd_pycnocline()`. This notebook
+  only applies them.
+- **The threshold depths are the provider's definitions** (Rasmus Swalethorp,
+  email 2026-09-24, "Next Two Weeks Tasks"; his D_NClineDepth.m and
+  F_PycnoclineDepth.m; [Questions](#questions-for-data-providers) Q10, Q11): the
+  **nitracline** is the depth at which nitrate reaches 1 µmol/L, interpolated
+  linearly between the bracketing bins (`nitracline_depth`, from the bottle-fitted
+  sensor estimate `est_nitrate_sta_corr`; the bottle database's own nitracline is
+  `calcofi_bottle-derived`'s); the **hypoxic boundary depths** are the same rule
+  on the station-corrected oxygen at 2.4 mL/L (mild hypoxic boundary,
+  `hypoxic_depth_24`), 1.4 (hypoxic boundary, `hypoxic_depth_14`) and 0.5
+  (severe, the OMZ core, `hypoxic_depth_05`), always the **shallowest** crossing;
+  the **pycnocline** is the depth of the maximum buoyancy frequency squared N²
+  (TEOS-10 `gsw_Nsquared`, a 10 m running mean) between 10 and 200 m
+  (`pycnocline_depth`, with `buoyancy_n2_max`), and N² itself is published per bin
+  (`buoyancy_n2`) for the transect plotter.
 - **The headline definitions are the provider's** (Rasmus Swalethorp, 2026-09-23;
   adopted 2026-10-01, [Questions](#questions-for-data-providers) Q01, Q02): the
   mixed-layer depth is where sigma-theta is 0.02 kg m⁻³ greater than at 10 m
@@ -67,8 +83,8 @@ product (#99–#103); the prototype on one cruise was
 ```{mermaid}
 graph LR
   A[calcofi_ctd-cast<br/>obs_ctd_full, 1 m bins] --> B[drop 8/9 flags<br/>tier rule]
-  B --> C[per bin: spiciness0,<br/>sigma_theta_ave]
-  B --> D[per cast: MLD x3,<br/>chl max, integrated chl]
+  B --> C[per bin: spiciness0,<br/>sigma_theta_ave, buoyancy_n2]
+  B --> D[per cast: MLD x3, chl max,<br/>integrated chl, hypoxic depths x3,<br/>nitracline, pycnocline + N2 max]
   B --> E[per station pair:<br/>geostrophic velocity]
   C --> F[(obs, at the depths<br/>ctd-cast publishes)]
   D --> G[(sample_measurement<br/>on the ctd-cast cast)]
@@ -76,9 +92,10 @@ graph LR
 ```
 
 **The tier rule.** `final` and `preliminary_with_bottle` casts get every product.
-`preliminary_without_bottle` casts have no bottle-corrected salinity and no
-chlorophyll estimate, so they get **only the temperature-criterion MLD** — nothing
-salinity-based (Rasmus, 2026-09-09: uncorrected sensors are not shown).
+`preliminary_without_bottle` casts have no bottle-corrected salinity, oxygen or
+nitrate and no chlorophyll estimate, so they get **only the temperature-criterion
+MLD** — nothing salinity-, oxygen- or nitrate-based (Rasmus, 2026-09-09:
+uncorrected sensors are not shown).
 
 ## Setup
 
@@ -97,7 +114,10 @@ stopifnot(
   "calcofi4db >= 4.27.0 carries merge_source_datasets() (spiciness0 is shared with calcofi_bottle-derived)" =
     exists("merge_source_datasets", mode = "function"),
   "calcofi4db with the provider's definitions (ctd_integrate(method =), the 3 m mean) is needed" =
-    "method" %in% names(formals(ctd_integrate)) && formals(ctd_chl_max)$window_m == 3)
+    "method" %in% names(formals(ctd_integrate)) && formals(ctd_chl_max)$window_m == 3,
+  "calcofi4db >= 4.32.0 carries the threshold depths and N2 (profile_threshold_depth, ctd_hypoxic_depth, ctd_n2, ctd_pycnocline)" =
+    all(vapply(c("profile_threshold_depth", "ctd_hypoxic_depth", "ctd_n2", "ctd_pycnocline"),
+               exists, logical(1), mode = "function")))
 
 source(here("libs/ingest.R"))
 cc <- read_calcofi_meta(here("ingest_calcofi_ctd-derived.qmd"))
@@ -127,7 +147,16 @@ p <- list(
   chl_method   = "sum",   # Q02: "sum up all the 1m bins" (trapezoid is for bottles)
   geo_p_ref    = 500,     # Q03
   geo_min_dx   = 10,      # Q04
-  geo_bin      = 10)
+  geo_bin      = 10,
+  # Rasmus Swalethorp, 2026-09-24 (questions Q10, Q11)
+  hyp_thresholds = c(hypoxic_depth_24 = 2.4, hypoxic_depth_14 = 1.4, hypoxic_depth_05 = 0.5),  # mL/L: mild, hypoxic, severe (OMZ core)
+  nc_threshold = 1,       # umol/L: "depth at which nitrate is equal to or just above 1uM"
+  surface_max  = 20,      # m: a profile already past the threshold at its first bin counts only when that bin is this shallow (D_NClineDepth.m)
+  n2_smooth_m  = 10,      # m: running mean on N2 (the Matlab's 10 m centred difference; Q11)
+  pyc_p_min    = 10,      # m: the search window for the N2 maximum (F_PycnoclineDepth.m, Fiedler et al. 2013)
+  pyc_p_max    = 200,
+  pyc_surface_max = 15,   # m: the cast must start this shallow ...
+  pyc_depth_min   = 50)   # m: ... and reach this deep
 tier_full <- c("final", "preliminary_with_bottle")
 
 # a DuckDB memory ceiling sized to the machine (40 % of RAM, at most 8 GB) unless
@@ -254,7 +283,9 @@ already rebuilt by the provider's flags in the ctd-cast ingest.
 types <- c(
   "pressure", "temperature_ave", "salinity_ave_corr", "sigma_theta_1", "sigma_theta_2",
   "temperature_1", "temperature_2", "salinity_1", "salinity_2",   # the sensors sigma-theta is computed from (flag audit)
-  "est_chlorophyll_a_sta_corr")
+  "est_chlorophyll_a_sta_corr",
+  "oxygen_ml_l_ave_sta_corr",   # the hypoxic boundary depths (mL/L, the provider's thresholds)
+  "est_nitrate_sta_corr")       # the nitracline
 pivot_sql <- function(ck) {
   # a 1 m bin can hold two scans (the file repeats a depth); the value is their mean
   # and the flag is 8/9 if EITHER scan is flagged, else whatever code the scans carry
@@ -307,6 +338,15 @@ for (ck in cruises) {
       d$temperature_ave[full], d$salinity_ave_corr[full], pr[full],
       d$longitude[full], d$latitude[full],
       d$q_temperature_ave[full], d$q_salinity_ave_corr[full])
+  # N2 is a property of the profile, not of a bin: one call per cast (d is sorted by
+  # sample_key, depth_m), on the full tier only
+  d$buoyancy_n2 <- NA_real_
+  for (sk in unique(d$sample_key[full])) {
+    i <- which(d$sample_key == sk)
+    d$buoyancy_n2[i] <- ctd_n2(
+      d$temperature_ave[i], d$salinity_ave_corr[i], pr[i], d$longitude[i], d$latitude[i],
+      d$q_temperature_ave[i], d$q_salinity_ave_corr[i], smooth_m = p$n2_smooth_m)
+  }
   flag_audit[[ck]] <- tibble(
     cruise_key = ck,
     bins = nrow(d),
@@ -319,6 +359,8 @@ for (ck in cruises) {
                                      !is.na(d$sigma_theta_ave)),
     ts_flagged_spice_present = sum(full & (is_flagged(d$q_temperature_ave) | is_flagged(d$q_salinity_ave_corr)) &
                                      !is.na(d$spiciness0)),
+    ts_flagged_n2_present = sum(full & (is_flagged(d$q_temperature_ave) | is_flagged(d$q_salinity_ave_corr)) &
+                                  !is.na(d$buoyancy_n2)),
     # a sigma-theta sensor is bad when its own flag OR the temperature/salinity it is computed from is
     # flagged 8/9 (ctd-cast inherits the latter onto the sigma flag; asserted here on what is averaged)
     sigma_avg_has_flagged_sensor = {
@@ -330,8 +372,8 @@ for (ck in cruises) {
         (bad1 & !bad2 & (is.na(d$sigma_theta_2) | abs(a - d$sigma_theta_2) > 1e-9)) |
         (bad2 & !bad1 & (is.na(d$sigma_theta_1) | abs(a - d$sigma_theta_1) > 1e-9))), na.rm = TRUE)
     })
-  b <- d[full & (!is.na(d$sigma_theta_ave) | !is.na(d$spiciness0)),
-         c("sample_key", "depth_m", "sigma_theta_ave", "spiciness0")]
+  b <- d[full & (!is.na(d$sigma_theta_ave) | !is.na(d$spiciness0) | !is.na(d$buoyancy_n2)),
+         c("sample_key", "depth_m", "sigma_theta_ave", "spiciness0", "buoyancy_n2")]
   if (nrow(b)) dbWriteTable(con, "bin_full", as.data.frame(b), append = TRUE)
 
   # per cast ----
@@ -363,6 +405,28 @@ for (ck in cruises) {
           out <- c(out, list(tibble(
             measurement_type = c("chl_max_depth", "chl_max", "chl_integrated", "chl_integrated_depth"),
             value = c(cm$chl_max_depth_m, cm$chl_max_value, ci$integrated, ci$depth_reached_m))))
+        }
+        # the hypoxic boundary depths: the shallowest crossing of each threshold on the
+        # station-corrected oxygen pair average (Rasmus 2026-09-24; Q10)
+        if (any(!is.na(x$oxygen_ml_l_ave_sta_corr)))
+          out <- c(out, list(
+            ctd_hypoxic_depth(x$depth_m, x$oxygen_ml_l_ave_sta_corr, x$q_oxygen_ml_l_ave_sta_corr,
+                              thresholds = p$hyp_thresholds, surface_max_m = p$surface_max) |>
+              transmute(measurement_type, value = depth_m)))
+        # the nitracline: where the bottle-fitted nitrate estimate reaches 1 umol/L (Q10)
+        if (any(!is.na(x$est_nitrate_sta_corr)))
+          out <- c(out, list(
+            profile_threshold_depth(x$depth_m, x$est_nitrate_sta_corr, x$q_est_nitrate_sta_corr,
+                                    threshold = p$nc_threshold, direction = "above",
+                                    surface_max_m = p$surface_max) |>
+              transmute(measurement_type = "nitracline_depth", value = depth_m)))
+        # the pycnocline: the maximum of the smoothed N2 in the 10-200 m window (Q11)
+        if (any(!is.na(x$buoyancy_n2))) {
+          pc <- ctd_pycnocline(x$depth_m, x$buoyancy_n2, p_min = p$pyc_p_min, p_max = p$pyc_p_max,
+                               surface_max_m = p$pyc_surface_max, depth_min_m = p$pyc_depth_min)
+          out <- c(out, list(tibble(
+            measurement_type = c("pycnocline_depth", "buoyancy_n2_max"),
+            value = c(pc$pycnocline_depth_m, pc$n2_max))))
         }
       }
       bind_rows(out)
@@ -422,13 +486,14 @@ stopifnot(
     fa$s1_flagged_s2_good == fa$avg_equals_s2,
   "both sigma-theta sensors flagged: no average may exist" = fa$both_flagged_avg_present == 0,
   "a flagged temperature/salinity average must yield no spice" = fa$ts_flagged_spice_present == 0,
+  "a flagged temperature/salinity average must yield no N2" = fa$ts_flagged_n2_present == 0,
   "sigma_theta_ave includes a sensor whose sigma, temperature or salinity is flagged 8/9" =
     fa$sigma_avg_has_flagged_sensor == 0)
 ```
 
 ## Register Measurement Types
 
-Nine published types plus one retired, written with `upsert_measurement_types()` (this
+Sixteen published types plus one retired, written with `upsert_measurement_types()` (this
 ingest owns these rows: a re-render rewrites their description, units and
 `_source_datasets` from the literal below, and carries every bound and vocabulary id
 forward), then `declare_measurement_fields()` for the registry-owned `derivation` /
@@ -455,7 +520,8 @@ d_mt0 <- read_measurement_type(meas_type_csv)
 src_mt <- function(tp) filter(d_mt0, measurement_type == tp)
 st1 <- src_mt("sigma_theta_1"); chl <- src_mt("est_chlorophyll_a_sta_corr")
 t_ave <- src_mt("temperature_ave"); s_ave <- src_mt("salinity_ave_corr")
-stopifnot(nrow(st1) == 1, nrow(chl) == 1, nrow(t_ave) == 1, nrow(s_ave) == 1)
+ox  <- src_mt("oxygen_ml_l_ave_sta_corr"); no3 <- src_mt("est_nitrate_sta_corr")
+stopifnot(nrow(st1) == 1, nrow(chl) == 1, nrow(t_ave) == 1, nrow(s_ave) == 1, nrow(ox) == 1, nrow(no3) == 1)
 p06 <- function(tp) src_mt(tp)$units_nerc_p06
 
 new_types <- tribble(
@@ -489,7 +555,28 @@ new_types <- tribble(
     "calcofi4db::ctd_integrate(z_max = 200, z_top_max = 5, method = 'sum'): the sum of the 1 m bins of est_chlorophyll_a_sta_corr (ug/L = mg/m3) from the surface to 200 m or the deepest good bin; the provider's CTD rule (Rasmus Swalethorp 2026-09-23, questions Q02); a bin missing inside the profile is interpolated, the shallowest bin is carried to the surface when it is no deeper than 5 m, else absent; chl_integrated_depth says how deep it reached",
   "chl_integrated_depth", "Depth reached by chl_integrated (200 m unless the cast is shallower)", "m", "sample",
     "Productivity & Pigments", p06("bottom_depth"), "est_chlorophyll_a_sta_corr", TRUE,
-    "calcofi4db::ctd_integrate(): min(200, deepest good bin) (questions Q02)") |>
+    "calcofi4db::ctd_integrate(): min(200, deepest good bin) (questions Q02)",
+  "hypoxic_depth_24", "Mild hypoxic boundary depth: the shallowest depth where oxygen falls to 2.4 mL/L", "m", "sample",
+    "Physical Oceanography", p06("bottom_depth"), "oxygen_ml_l_ave_sta_corr", TRUE,
+    "calcofi4db::ctd_hypoxic_depth(threshold 2.4 mL/L) = profile_threshold_depth(direction = 'below') on the station-corrected oxygen pair average of the 1 m bins: the shallowest bin at or below 2.4 mL/L, interpolated linearly with the bin above; a profile already below it at its first bin counts only when that bin is within 20 m of the surface; absent where the cast never reaches 2.4 mL/L. The provider's definition (Rasmus Swalethorp 2026-09-24, questions Q10): the OMZ can sit mid-profile, so the boundary is the shallowest one. Final and preliminary_with_bottle casts only",
+  "hypoxic_depth_14", "Hypoxic boundary depth: the shallowest depth where oxygen falls to 1.4 mL/L", "m", "sample",
+    "Physical Oceanography", p06("bottom_depth"), "oxygen_ml_l_ave_sta_corr", TRUE,
+    "calcofi4db::ctd_hypoxic_depth(threshold 1.4 mL/L), the same rule as hypoxic_depth_24 at the hypoxic boundary (about 60 umol/kg; Rasmus Swalethorp 2026-09-24, questions Q10)",
+  "hypoxic_depth_05", "Severe hypoxic boundary depth (core of the oxygen minimum zone): the shallowest depth where oxygen falls to 0.5 mL/L", "m", "sample",
+    "Physical Oceanography", p06("bottom_depth"), "oxygen_ml_l_ave_sta_corr", TRUE,
+    "calcofi4db::ctd_hypoxic_depth(threshold 0.5 mL/L), the same rule as hypoxic_depth_24 at the severe boundary, the OMZ core (Rasmus Swalethorp 2026-09-24, questions Q10); most casts stop above it, so it is sparser than the other two",
+  "nitracline_depth", "Nitracline depth: where nitrate reaches 1 umol/L, interpolated between the bracketing samples", "m", "sample",
+    "Nutrients & Chemistry", p06("bottom_depth"), "est_nitrate_sta_corr", TRUE,
+    "calcofi4db::profile_threshold_depth(threshold = 1, direction = 'above'): the shallowest sample at or above 1 umol/L, the depth interpolated linearly from the sample above it; a profile already at 1 umol/L in its first sample counts only when that sample is within 20 m of the surface; absent where nitrate never reaches 1 umol/L. The provider's rule (Rasmus Swalethorp 2026-09-24 and his D_NClineDepth.m, questions Q10). calcofi_ctd-derived: on the 1 m bins of the bottle-fitted sensor estimate est_nitrate_sta_corr, final and preliminary_with_bottle casts. calcofi_bottle-derived: on the bottle database's nitrate at the bottle depths of each cast",
+  "pycnocline_depth", "Pycnocline depth: where the buoyancy frequency squared N2 (TEOS-10, 10 m running mean) is greatest between 10 and 200 m", "m", "sample",
+    "Physical Oceanography", p06("bottom_depth"), "temperature_ave; salinity_ave_corr; pressure", TRUE,
+    "calcofi4db::ctd_pycnocline(p_min = 10, p_max = 200) on buoyancy_n2: the depth of the largest smoothed N2 in the window (ties to the shallowest), for a cast that starts within 15 m of the surface and reaches 50 m with at least 5 bins in the window (the conditions of the CTD team's F_PycnoclineDepth.m, after Fiedler et al. 2013); the 10 m running mean replaces that script's 10 m centred difference and the draft R script's smoothing spline (questions Q11)",
+  "buoyancy_n2_max", "Maximum buoyancy frequency squared N2 (TEOS-10, 10 m running mean) between 10 and 200 m, at pycnocline_depth", "1/s2", "sample",
+    "Physical Oceanography", NA_character_, "temperature_ave; salinity_ave_corr; pressure", TRUE,
+    "calcofi4db::ctd_pycnocline(): the value of buoyancy_n2 at pycnocline_depth (questions Q11)",
+  "buoyancy_n2", "Buoyancy (Brunt-Vaisala) frequency squared N2 (TEOS-10), 10 m running mean", "1/s2", "obs",
+    "Physical Oceanography", NA_character_, "temperature_ave; salinity_ave_corr; pressure", TRUE,
+    "calcofi4db::ctd_n2(smooth_m = 10): gsw_SA_from_SP, gsw_CT_from_t, gsw_Nsquared at the mid-points of the 1 m bins, aligned to the bins by linear interpolation, then a centred 10 m running mean (the CTD team's draft R script, with the running mean in place of its smoothing spline; questions Q11); on the sensor-pair averaged corrected temperature and salinity, final and preliminary_with_bottle casts only; emitted at the depths calcofi_ctd-cast publishes") |>
   mutate(`_source_table` = "obs_ctd_full",
          # this dataset, plus any other that publishes the same type (spiciness0 is also
          # calcofi_bottle-derived's, D8 2026-10-20): a re-render must not narrow the row
@@ -517,6 +604,9 @@ tsg <- expand.grid(t = seq(t_ave$valid_min, t_ave$valid_max, 1),
                    s = seq(s_ave$valid_min, s_ave$valid_max, 1))
 sa_g <- gsw::gsw_SA_from_SP(tsg$s, rep(0, nrow(tsg)), -120, 33)
 sp_g <- gsw::gsw_spiciness0(sa_g, gsw::gsw_CT_from_t(sa_g, tsg$t, rep(0, nrow(tsg))))
+# N2 = (g / rho0) d(sigma-theta)/dz: the whole registered sigma_theta_1 range across one 1 m
+# bin is the steepest step the registry calls possible; rounded outward to 2 decimals
+n2_lim <- ceiling(9.81 / 1025 * (st1$valid_max - st1$valid_min) * 100) / 100
 
 bounds <- tribble(
   ~measurement_type,       ~valid_min,                   ~valid_max,                              ~why,
@@ -529,7 +619,14 @@ bounds <- tribble(
   "chl_max_depth",         chl$valid_depth_min_m,        chl$valid_depth_max_m,                   "est_chlorophyll_a_sta_corr is defined over this depth window only",
   "chl_max",               chl$valid_min,                chl$valid_max,                           "the bounds est_chlorophyll_a_sta_corr declares (a mean of in-bound values stays in them)",
   "chl_integrated",        0,                            chl$valid_max * p$chl_z_max,             "the chl ceiling times the 200 one-metre bins summed",
-  "chl_integrated_depth",  0,                            p$chl_z_max,                             "the integration floor")
+  "chl_integrated_depth",  0,                            p$chl_z_max,                             "the integration floor",
+  "hypoxic_depth_24",      0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M",
+  "hypoxic_depth_14",      0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M",
+  "hypoxic_depth_05",      0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M",
+  "nitracline_depth",      0,                            CC_DEPTH_MAX_M,                          "a depth: 0 to CC_DEPTH_MAX_M",
+  "pycnocline_depth",      p$pyc_p_min,                  p$pyc_p_max,                             "the search window (10-200 m)",
+  "buoyancy_n2_max",       -n2_lim,                      n2_lim,                                  "g/rho0 times the registered sigma_theta_1 range over one 1 m bin, rounded outward (the largest step the registry calls possible)",
+  "buoyancy_n2",           -n2_lim,                      n2_lim,                                  "the same: N2 = (g/rho0) d(sigma-theta)/dz over a 1 m bin at the registered range")
 d_meas_type <- declare_measurement_bounds(select(bounds, -why), meas_type_csv)
 bounds |> datatable(caption = "Declared bounds and where each comes from", rownames = FALSE)
 dbWriteTable(con, "measurement_type", as.data.frame(d_meas_type), overwrite = TRUE)
@@ -575,7 +672,7 @@ dbExecute(con, "
   SELECT sample_key, grid_key, cruise_key, latitude, longitude, datetime, depth_min_m, depth_max_m
   FROM src_obs WHERE measurement_type = 'temperature_ave'
   QUALIFY ROW_NUMBER() OVER (PARTITION BY sample_key, depth_min_m ORDER BY datetime, latitude) = 1")
-for (tp in c("sigma_theta_ave", "spiciness0"))
+for (tp in c("sigma_theta_ave", "spiciness0", "buoyancy_n2"))
   append_obs(con, glue("
     SELECT 'env', '{ds_key}', o.sample_key, o.grid_key, o.cruise_key,
            o.latitude, o.longitude, o.datetime, o.depth_min_m, o.depth_max_m,
@@ -749,8 +846,11 @@ cc_erd(con, tables = c("obs", "sample_measurement", "ctd_geostrophic", "measurem
 | `sigma_theta_ave` (1 m) | `sample_measurement`: `mld_sigma_theta_002` (headline), `mld_sigma_theta_0125` | `ctd_mld()` (0.02 is the default) |
 | `temperature_ave` (1 m) | `sample_measurement`: `mld_temperature_02` | `ctd_mld(criterion = "temperature")` |
 | `est_chlorophyll_a_sta_corr` (1 m) | `sample_measurement`: `chl_max_depth`, `chl_max`, `chl_integrated`, `chl_integrated_depth` | `ctd_chl_max()` (3 m running mean), `ctd_integrate()` (sum of the 1 m bins) |
+| `oxygen_ml_l_ave_sta_corr` (1 m) | `sample_measurement`: `hypoxic_depth_24`, `hypoxic_depth_14`, `hypoxic_depth_05` | `ctd_hypoxic_depth()`: the shallowest crossing of 2.4 / 1.4 / 0.5 mL/L, interpolated |
+| `est_nitrate_sta_corr` (1 m) | `sample_measurement`: `nitracline_depth` | `profile_threshold_depth(threshold = 1, direction = "above")` |
+| `temperature_ave`, `salinity_ave_corr`, `pressure` (1 m) | `obs.measurement_type = buoyancy_n2` (thinned depths); `sample_measurement`: `pycnocline_depth`, `buoyancy_n2_max` | `ctd_n2()` (TEOS-10 N², 10 m running mean), `ctd_pycnocline()` (its maximum in 10–200 m) |
 | `temperature_ave`, `salinity_ave_corr`, `pressure` per station | `ctd_geostrophic` (staged, not released) | `ctd_geostrophic()`, 10 dbar bin means |
-| **not published** | the full 1 m derived per-bin series; the up cast where a down cast exists; per-cast statuses (`mixed_to_bottom`, `no_reference`) — an absent row; `ctd_geostrophic`; the retired `mld_sigma_theta_003` | |
+| **not published** | the full 1 m derived per-bin series; the up cast where a down cast exists; per-cast statuses (`mixed_to_bottom`, `no_reference`, `not_reached`, `no_bracket`, `too_shallow`) — an absent row; `ctd_geostrophic`; the retired `mld_sigma_theta_003` | |
 
 : Source → core mapping {#tbl-mapping}
 
@@ -870,10 +970,13 @@ if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
 ## Questions for Data Providers
 
 Rasmus Swalethorp's answers to Q01 (mixed-layer depth), Q02 (chlorophyll maximum
-and integral) and Q05 (down cast) are applied above. Still open: the geostrophic
-reference and spacing (Q03, Q04; the table is not released until they are settled),
-the inherited licence/PI gap (Q06), the derived spice bound (Q07) and the
-implausible values for the CTD team to flag (Q08).
+and integral) and Q05 (down cast) are applied above, and his 2026-09-24
+definitions of the nitracline, the hypoxic boundary depths and the pycnocline are
+applied as proposed in Q10 and Q11 (the one choice that is ours, the 10 m running
+mean on N², is Q11). Still open: the geostrophic reference and spacing (Q03, Q04;
+the table is not released until they are settled), the inherited licence/PI gap
+(Q06), the derived spice bound (Q07) and the implausible values for the CTD team to
+flag (Q08).
 
 ```{r}
 #| label: provider-questions

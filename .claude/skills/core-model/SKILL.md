@@ -206,7 +206,7 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
 
 - **Month-matched, always — and the month is the cruise's.** A cast's anomaly is its value
   minus the cell of *its own* station and cruise month, never `month(datetime)` (calcofi4db
-  4.22.0: 2607's 30 June casts looked up a June baseline no cruise samples). Since 4.33.0
+  4.22.0: 2607's 30 June casts looked up a June baseline no cruise samples). Since 4.34.0
   the cruise's month is its **median cast month**, `cruise.month_median`, written at release
   by `add_cruise_median_date()` from the median datetime of the cruise's root samples
   (Rasmus Swalethorp 2026-10-16, Ben Best 2026-10-20: a cruise ID names sometimes the month
@@ -236,7 +236,7 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
 - **The seasonal baseline is columns, not rows** (4.24.0, `season = TRUE`, which the
   release sets): `quarter`, `season_mean`, `season_sd`, `season_n`, `season_n_cruises`,
   by the season of the *cruise's month* — **1 = DJF, 2 = MAM, 3 = JJA, 4 = SON since
-  4.33.0** (`cruise_quarter_sql()`; Q1 Jan–Mar … Q4 Oct–Dec through v2026.10.30), December
+  4.34.0** (`cruise_quarter_sql()`; Q1 Jan–Mar … Q4 Oct–Dec through v2026.10.30), December
   counting toward the following year's winter (`season_year`), the Explorer's season
   filter — on every month of a season that passes the cruise floor. Rows, not columns,
   would double-count in anything that sums the table. A month below the monthly floor
@@ -247,7 +247,7 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
   `build_measurements_catalog()` ignores rows whose monthly `clim_mean` is NULL.
   Requested by Rasmus Swalethorp, 2026-10-06/07.
 - **`obs_env` / `obs_bio` `year` and `quarter` are the cruise's** (`build_obs_slim()`,
-  4.24.0), from `cruise.month_median` / `date_median` since 4.33.0 (the key where the table
+  4.24.0), from `cruise.month_median` / `date_median` since 4.34.0 (the key where the table
   lacks it; the calendar date only where the key does not parse), with `cruise_month` and
   `season_year` appended after `hex7`. The Explorer's season filter and the seasonal
   baseline therefore agree on 2607's 30 June casts: JJA (`quarter` 3). `test_release.qmd`

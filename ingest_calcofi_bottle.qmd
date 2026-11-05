@@ -61,7 +61,9 @@ parquet files. The workflow:
 4. Consolidates temporal columns into `datetime_start_utc`, drops derivable columns, creates `casts_derived` VIEW
 5. Pivots bottle measurements into long-format `bottle_measurement` table
 6. Pivots cast environmental conditions into `cast_condition` table
-7. Declares the series' physical bounds in the registry and deletes the values outside them
+7. Declares the series' physical bounds in the registry and deletes the values outside them;
+   after the cruise bridge, applies the provider's answers in `metadata/calcofi/bottle/`
+   (quality codes from `qual_overrides.csv`, casts removed by `sample_exclusions.csv`)
 8. Loads `measurement_type` reference table
 9. Validates primary keys and foreign key integrity
 10. Adds spatial geometry and grid assignments
@@ -171,7 +173,8 @@ d <- read_csv_files(
   dataset = dataset,
   subdir = subdir,
   dir_data = dir_data,
-  sync_archive = TRUE,
+  # a local verification run (CALCOFI_SKIP_GCS set) touches no bucket
+  sync_archive = Sys.getenv("CALCOFI_SKIP_GCS") == "",
   metadata_dir = here("metadata"),
   field_descriptions = list(
     "194903-202105_Cast" = glue(
@@ -685,7 +688,9 @@ of zero rather than a sentinel, and an oceanographer wants to see that the water
 measured anoxic. Salinity declares nothing yet: cruise 2021-05-3322 carries 918 values
 of 24.19–27.06 PSU to 568 m across 39 stations with `S_qual` 254–344 — a whole cruise,
 not a sentinel, and a floor that caught it would delete provider-flagged data while one
-that spared it would miss the 9.50 (question Q13).
+that spared it would miss the 9.50 (question Q13). Q13 was answered on 2026-11-01: the
+cruise's salinity is flagged 8 in § Apply Provider Answers, kept but excluded by `qual_ok`,
+and still no salinity bound is declared.
 
 So the 9.50 and the 21.06 go with their bottles instead (2026-09-11, found again by the
 measurement faces' familiar scale): **a bottle whose temperature is impossible loses its
@@ -738,6 +743,27 @@ bounds_datatable(bounds_pre)
 # bottles BEFORE the bounds delete their temperature, then remove the salinity
 t_lo <- d_meas_type$valid_min[d_meas_type$measurement_type == "temperature"]
 t_hi <- d_meas_type$valid_max[d_meas_type$measurement_type == "temperature"]
+
+# record every row the next two deletes remove, so a provider answer about a value
+# already gone (Q13's two 2020-07 50 m salinities, beside temperatures of 99 and 56.9
+# degC) is counted as removed upstream in § Apply Provider Answers, not as a stale row
+dbWriteTable(con, "bounds_declared", d_meas_type |>
+  filter(!is.na(valid_min) | !is.na(valid_max)) |>
+  select(measurement_type, valid_min, valid_max) |> as.data.frame(), overwrite = TRUE)
+dbExecute(con, glue("
+  CREATE OR REPLACE TABLE bottle_measurement_removed AS
+  SELECT bottle_id, measurement_type, 'salinity beside an impossible temperature' AS why
+  FROM bottle_measurement
+  WHERE measurement_type = 'salinity'
+    AND bottle_id IN (
+      SELECT bottle_id FROM bottle_measurement
+      WHERE measurement_type = 'temperature'
+        AND measurement_value NOT BETWEEN {t_lo} AND {t_hi})
+  UNION ALL
+  SELECT m.bottle_id, m.measurement_type, 'outside a declared bound'
+  FROM bottle_measurement m JOIN bounds_declared b USING (measurement_type)
+  WHERE m.measurement_value < b.valid_min OR m.measurement_value > b.valid_max"))
+invisible(dbExecute(con, "DROP TABLE bounds_declared"))
 n_sal_corrupt <- dbExecute(con, glue("
   DELETE FROM bottle_measurement
   WHERE measurement_type = 'salinity'
@@ -1539,6 +1565,69 @@ say("Cross-dataset validation complete")
 > patch `ship_key`/`cruise_key` into a `casts.parquet` already written — parquet
 > is now written once, after every column is known.
 
+## Apply Provider Answers
+
+The provider's answers that change data are rows of two registries in
+`metadata/calcofi/bottle/`, each citing its question (Rasmus Swalethorp, sheet comments of
+1 and 3 November 2026), so every decision is reviewable in a diff and restored by deleting
+its row:
+
+- **`qual_overrides.csv`** sets `measurement_qual` to 8 ("suspect" in the bottle
+  vocabulary, `metadata/measurement_qual.csv`) on every value of a type within a cruise,
+  cast or bottle. The value stays in `obs`; `cc_qual_ok_sql()` / `qual_ok` exclude it, and
+  `calcofi_bottle-derived` derives nothing from it. Salinity of cruise 2021-05-3322 (Q13:
+  the column holds sigma-theta), the four 2020-07-33P4 salinities of Q13 and Q17, and the
+  nitrate of 1976-02-31AX (Q14).
+- **`sample_exclusions.csv`** removes a cast with its bottles, their values and the cast's
+  conditions: cast 24415 (Q15, placed on land near Paso Robles).
+
+It runs here, after the cruise bridge, because a cruise is named by its `cruise_key`.
+A row that touches nothing stops the render; a qual override whose values the bounds
+already removed is counted as removed upstream.
+
+```{r}
+#| label: provider_answers
+
+source(here("libs/bottle_answers.R"))
+dir_meta <- here(glue("metadata/{provider}/{dataset}"))
+
+# quality codes ----
+qual_ov <- read_qual_overrides(path(dir_meta, "qual_overrides.csv"))
+qual_ov <- apply_qual_overrides(
+  con, qual_ov, tbl = "bottle_measurement", bottle_tbl = "bottle", cast_tbl = "casts",
+  removed_tbl = "bottle_measurement_removed")
+qual_ov |>
+  select(question_label, scope, scope_value, measurement_type, qual,
+         n_matched, n_changed, n_removed_upstream, reason) |>
+  datatable(caption = "Quality codes set from qual_overrides.csv (values kept; code 8 is excluded by qual_ok)",
+            rownames = FALSE)
+stopifnot(
+  "every qual_overrides.csv row must touch a value (else the answer is stale or the id wrong)" =
+    all(qual_ov$n_matched + qual_ov$n_removed_upstream > 0))
+say(glue("qual overrides: {sum(qual_ov$n_matched)} value(s) in scope, ",
+         "{sum(qual_ov$n_changed)} code(s) changed, ",
+         "{sum(qual_ov$n_removed_upstream)} already removed by the bounds"))
+
+# excluded casts ----
+smp_ex <- read_sample_exclusions(path(dir_meta, "sample_exclusions.csv"))
+smp_ex <- apply_sample_exclusions(
+  con, smp_ex, meas_tbl = "bottle_measurement", bottle_tbl = "bottle",
+  cond_tbl = "cast_condition", cast_tbl = "casts")
+smp_ex |>
+  select(question_label, scope, scope_value, n_casts, n_bottles, n_measurements, n_conditions, reason) |>
+  datatable(caption = "Casts and bottles removed by sample_exclusions.csv", rownames = FALSE)
+stopifnot(
+  "every sample_exclusions.csv row must remove a cast or bottle" =
+    all(smp_ex$n_casts + smp_ex$n_bottles > 0),
+  "an excluded cast leaves nothing behind" = dbGetQuery(con, glue("
+    SELECT COUNT(*) AS n FROM bottle
+    WHERE cast_id IN ({paste(as.numeric(smp_ex$scope_value[smp_ex$scope == 'cast_id']), collapse = ', ')})"))$n == 0)
+say(glue("sample exclusions: {sum(smp_ex$n_casts)} cast(s), {sum(smp_ex$n_bottles)} bottle(s), ",
+         "{sum(smp_ex$n_measurements)} measurement(s), {sum(smp_ex$n_conditions)} condition(s) removed"))
+
+invisible(dbExecute(con, "DROP TABLE IF EXISTS bottle_measurement_removed"))
+```
+
 ## Emit Core Tables
 
 Project this dataset into the shared consolidated core model
@@ -1813,11 +1902,13 @@ Upload parquet files, manifest, and metadata sidecar to
 ```{r}
 #| label: upload_gcs
 
-sync_to_gcs(
-  local_dir   = dir_stage,
-  sidecar_dir = dir_parquet,
-  gcs_prefix = glue("ingest/{dir_label}"),
-  bucket     = "calcofi-db")
+if (Sys.getenv("CALCOFI_SKIP_GCS") == "") {
+  sync_to_gcs(
+    local_dir   = dir_stage,
+    sidecar_dir = dir_parquet,
+    gcs_prefix = glue("ingest/{dir_label}"),
+    bucket     = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set — skipping the upload (local verification run)\n")
 ```
 
 ## Cleanup

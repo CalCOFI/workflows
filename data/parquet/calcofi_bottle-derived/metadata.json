@@ -8,6 +8,10 @@
       "name_long": "Observation",
       "description_md": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
     },
+    "sample_measurement": {
+      "name_long": "Sample Measurement",
+      "description_md": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
+    },
     "measurement_type": {
       "name_long": "Measurement Type",
       "description_md": ""
@@ -298,16 +302,45 @@
     "obs.hex_id": {
       "name_long": "Hex ID",
       "description_md": "H3 cell at resolution 10, stored as UBIGINT. Aggregate coarser at query time with `h3_cell_to_parent(hex_id, res)` — there is no per-resolution column ladder."
+    },
+    "sample_measurement.sample_measurement_id": {
+      "name_long": "Sample Measurement ID",
+      "description_md": "Surrogate key."
+    },
+    "sample_measurement.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The sampling event this effort measurement describes; joins `sample`."
+    },
+    "sample_measurement.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "sample_measurement.measurement_type": {
+      "name_long": "Measurement Type",
+      "description_md": "Measured quantity; joins the `measurement_type` vocabulary."
+    },
+    "sample_measurement.measurement_value": {
+      "name_long": "Measurement Value",
+      "description_md": "The measured value, in the units `measurement_type` declares."
+    },
+    "sample_measurement.measurement_qual": {
+      "name_long": "Measurement Qualifier",
+      "description_md": "Source quality flag, verbatim."
     }
   },
   "contributions": {
     "obs": {
-      "rows": 1683346,
+      "rows": 1683308,
+      "owned": true,
+      "shared": true
+    },
+    "sample_measurement": {
+      "rows": 13357,
       "owned": true,
       "shared": true
     },
     "measurement_type": {
-      "rows": 234,
+      "rows": 292,
       "owned": true,
       "shared": true
     }
