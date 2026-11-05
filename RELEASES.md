@@ -8,6 +8,39 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## The fall 2026 cruise reaches the database from the ship: CalCOFI 2611, lines 93.3 and 90, as posted
+
+Rasmus Swalethorp posted `20-2611_CTDCast.zip` to the Shared Drive on 2026-11-04 from the fall
+cruise (R/V Sally Ride, `2026-11-33P4`): the bottle-merged 1 m-binned files of the first 11
+casts, line 93.3 from station 26.7 to 50 and line 90 from 60 to 80, occupied 31 October to
+2 November, so the CTD team can show the new data at its media webinar on 11 November. The file is
+a preliminary, bottle-merged drop (`data_stage = preliminary_with_bottle`: temperature, the
+corrected salinity and oxygen pair averages, fluorescence-based chlorophyll, the bottle salinity
+and oxygen; no nutrients and no corrected nitrate yet), and its name is the one calcofi.org uses
+for raw-cast archives, which the ingest never unzips. `ingest_calcofi_ctd-cast.qmd` now classifies
+a Shared-Drive-only archive by its contents (an archive whose members are `_CTD_` / `_CTDBTL_`
+`NNN-NNN[DU].csv` files is a preliminary drop whatever its name; workflows#247) and reads a cruise
+code without its ship suffix from the CSV's `Study` column (`2611SR`). The weekend update (lines
+90 and 87) and the later processing stages replace or extend it the same way (ctd-cast Q51 asks
+how they will be posted). The CTD-derived products that need only what the file carries (the
+mixed-layer depths, the chlorophyll maximum and integral, sigma-theta and spiciness, the hypoxic
+boundary depths, the pycnocline and N²) are computed for these casts; the nitracline waits on the
+nutrients. 11 casts to 517 m, 24,986 observations of 35 measurement types in `obs_env`, 257 of
+them carrying the provider's flag 9; `calcofi_ctd-cast` now holds 9,872 casts with observations
+on 143 cruises, the latest at 2026-11-02 09:19 UTC.
+
+## The all-zero cruise-corrected nitrate of 2301, 2304, 2307 and 2411 is flagged questionable
+
+Rasmus Swalethorp decided ctd-cast Q48 (email 2026-11-04): where every value of a cruise's
+cruise-corrected nitrate is 0, the deep ones included, the correction is clearly an error, so
+`est_nitrate_cruise_corr` on `2023-01-33UD`, `2023-04-3322`, `2023-07-33P4` and `2024-11-33P4`
+carries quality code 8 (questionable) from `metadata/calcofi/ctd-cast/flag_overrides.csv`, applied
+at the ingest: kept, excluded by default (`qual_ok = FALSE`), and restored when those cruises are
+reprocessed with Kraken. 246 rows on 26 casts in `obs_env` (15 / 147 / 55 / 29 by cruise), the
+same rows that were released unflagged through v2026.11.04.
+The partly-zero cruises 2105, 2111 and 2504 stay as published, and the 2000-10 / 2001-07
+cruise-corrected chlorophyll stays in, unflagged (Q49). The station-corrected nitrate is unaffected.
+
 ## A new dataset, staged not released: `swfsc_ctd-noaa`, NOAA's additional CTD casts on CalCOFI cruises, 2002–2014
 
 `ingest_swfsc_ctd-noaa.qmd` ingests the NOAA SWFSC ERDDAP table `erdCalCOFINOAAhydros`
