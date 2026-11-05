@@ -16,7 +16,9 @@
 #
 # Sourced + invoked from ingest_swfsc_ctd-noaa.qmd.
 
-CTD_NOAA_URL <- "https://coastwatch.pfeg.noaa.gov/erddap/tabledap/erdCalCOFINOAAhydros.csv"
+# 2026-11-05: CoastWatch answers this dataset with a 302 to OceanView and its front proxy
+# throttles the whole-table request (HTTP 429 for two days); OceanView serves it directly.
+CTD_NOAA_URL <- "https://oceanview.pfeg.noaa.gov/erddap/tabledap/erdCalCOFINOAAhydros.csv"
 
 #' Download the NOAA additional-CTD table from ERDDAP
 #'
@@ -44,7 +46,7 @@ download_ctd_noaa <- function(out_dir, overwrite = FALSE, tries = 5, pause_s = 1
   tmp <- paste0(dest, ".part")
   for (i in seq_len(tries)) {
     res <- tryCatch(
-      curl::curl_fetch_disk(CTD_NOAA_URL, tmp, handle = curl::new_handle(timeout = 600)),
+      curl::curl_fetch_disk(CTD_NOAA_URL, tmp, handle = curl::new_handle(timeout = 600, followlocation = TRUE)),
       error = function(e) list(status_code = NA_integer_, headers = raw(0), error = conditionMessage(e)))
     status <- res$status_code
     ok <- isTRUE(status == 200L) && file.exists(tmp) && file.size(tmp) > 0 &&
