@@ -466,10 +466,11 @@ observers ride, with an independent observer team. A whale or dolphin group can
 then be logged by both teams, and summing the two datasets counts it twice. Ben
 decided on 2026-11-06 (after the 2026-11-05 meeting with the lab) to cut
 **Farallon's marine-mammal observations on the cruises the SIO survey covers**
-(the distinct `cruise_key` of its effort segments, from the date its survey
-begins), and only those: Farallon's birds, fish and turtles are untouched, and
-its mammals before the SIO survey begins or on a cruise the survey did not sail
-stay. The transects (`sample`) stay too, so effort is unchanged.
+(the distinct `cruise_key` of its effort segments), whole cruises and only
+those: Farallon's birds, fish and turtles are untouched, and its mammals on a
+cruise the survey did not sail (every cruise before the survey begins, and the
+few it missed after) stay. The transects (`sample`) stay too, so effort is
+unchanged.
 
 The cut is gated on the replacement being public: it applies when
 `sio_cetacean-sightings` is `in_release: true` in its notebook's `calcofi:`
@@ -519,10 +520,10 @@ d_mam_0 <- dbGetQuery(con, q_mam) |>
   mutate(
     covered  = !is.na(cruise_key) & cruise_key %in% covered,
     post     = !is.na(datetime) & datetime >= first_survey,
-    # a mammal on a covered cruise before the survey's first segment was seen
-    # by Farallon alone, so the cut is covered AND on/after first_survey
-    to_cut   = cut_covered & covered & post)
-n_pre_0 <- sum(!d_mam_0$post)
+    # the cut is by whole cruise (Ben, 2026-11-06): a covered cruise's mammal
+    # rows go, the day or two before its first SIO segment included
+    to_cut   = cut_covered & covered)
+n_uncov_0 <- sum(!d_mam_0$covered)
 
 # the cut: the mammal rows on the cut transects; transects and every other
 # species stay
@@ -550,25 +551,25 @@ d_mam_1 <- dbGetQuery(con, q_mam) |>
 n_cut <- sum(d_mam_0$to_cut)
 
 stopifnot(
-  "when cutting, no mammal observation remains on a covered cruise after the survey begins" =
-    !cut_covered || !any(d_mam_1$covered & d_mam_1$post),
+  "when cutting, no mammal observation remains on a covered cruise" =
+    !cut_covered || !any(d_mam_1$covered),
   "when not cutting, the observation row count is unchanged" =
     cut_covered || n_obs_1 == n_obs_0,
   "the rows removed are exactly the mammal rows marked to cut" =
     n_obs_0 - n_obs_1 == n_cut,
   "the cut never removes a non-mammal row" =
     n_nonmam_1 == n_nonmam_0,
-  "no mammal observation before the SIO survey begins is removed" =
-    sum(!d_mam_1$post) == n_pre_0,
+  "no mammal observation on an uncovered cruise is removed" =
+    sum(!d_mam_1$covered) == n_uncov_0,
   "every covered cruise key is a YYYY-MM-NODC key" =
     all(grepl("^\\d{4}-(0[1-9]|1[0-2])-[A-Za-z0-9]{4}$", covered)))
 
-# every Farallon cruise with mammals since the SIO survey began ----
+# every Farallon cruise with mammals that is covered or sailed since the SIO survey began ----
 d_span <- dbGetQuery(con, "
   SELECT cruise_label, MIN(date) AS date_start, MAX(date) AS date_end
   FROM bird_mammal_transect GROUP BY cruise_label")
 d_mam_cruise <- d_mam_0 |>
-  filter(post) |>
+  filter(covered | post) |>
   group_by(cruise_key, cruise_label) |>
   summarize(
     n_mammal_obs = n(), covered = any(covered), cut = any(to_cut),
@@ -582,7 +583,7 @@ d_mam_cruise |>
     caption  = glue(
       "Farallon cruises with marine-mammal observations since the SIO cetacean ",
       "survey began ({format(first_survey, '%Y-%m-%d')}): covered = the SIO survey ",
-      "has effort on the cruise; cut = its Farallon mammals are dropped"),
+      "has effort on the cruise; cut = every Farallon mammal on it is dropped"),
     rownames = FALSE, filter = "top")
 
 n_cruise_cut <- sum(d_mam_cruise$cut)
@@ -593,9 +594,9 @@ cat(glue(
   "{if (cut_covered) 'CUT' else 'NOT cut (sio_cetacean-sightings is held)'}: ",
   "{format(n_cut, big.mark = ',')} mammal obs dropped on {n_cruise_cut} cruises; ",
   "{format(nrow(d_mam_1), big.mark = ',')} mammal obs remain ",
-  "({format(sum(!d_mam_1$post), big.mark = ',')} before the survey, ",
-  "{format(n_uncov, big.mark = ',')} on {sum(!d_mam_cruise$covered)} uncovered cruises",
-  "{if (cut_covered) '' else glue(', ', format(sum(d_mam_1$post & d_mam_1$covered), big.mark = ','), ' on covered cruises')})"), "\n")
+  "({format(sum(!d_mam_1$post & !d_mam_1$covered), big.mark = ',')} on cruises before the survey, ",
+  "{format(n_uncov, big.mark = ',')} on {sum(!d_mam_cruise$covered)} uncovered cruises since",
+  "{if (cut_covered) '' else glue(', ', format(sum(d_mam_1$covered), big.mark = ','), ' on covered cruises')})"), "\n")
 ```
 
 ## Load Dataset Metadata + Schema

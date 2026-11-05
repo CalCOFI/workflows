@@ -155,21 +155,23 @@ same CalCOFI cruises with independent observer teams, so from the start of the S
 cetacean group can be logged by both and summing the two datasets counts it twice. Decided
 2026-11-06 after the 2026-11-05 meeting with the lab: `ingest_farallon_bird-mammal.qmd` drops
 Farallon's marine-mammal observations (species of ERDDAP `type` mammal) on the cruises where the
-SIO survey has effort segments, from the survey's first segment on (2004-07-13 in the staged
-shard). Farallon's birds, fish and turtles, its transects (`sample`), its mammals before the SIO
-survey began and its mammals on cruises the survey did not sail are kept. The rule is gated: it
-applies only when `sio_cetacean-sightings` is `in_release: true`, so while that dataset is held
-this release's Farallon rows are unchanged. `CALCOFI_FARALLON_CUT_COVERED=1` applies the cut for a
-review render or a private preview candidate, and the notebook now depends on the sightings
-ingest. A render with the flag (sightings shard staged 2026-10-04, effort on 64 cruises) cut 2,282
-source observation rows on 36 cruises, which is 2,059 `obs` headline rows (69,661 → 67,602) and
-2,282 `obs_attribute` rows (87,813 → 85,531). It kept 3,394 mammal rows: 3,240 before the survey
-and 154 on four cruises the survey did not sail (2005-04-31JD, 2010-04-31FN, the 2011 Fronts
-cruise with no `cruise_key`, and 2012-08-32I1, the 2012 Fronts cruise). The notebook's table lists
-every Farallon cruise with marine mammals since the survey began. Asserted at render time:
-non-mammal rows are never cut, no pre-survey mammal is cut, no mammal remains on a covered cruise
-when the cut applies, and the row count is unchanged when it does not. A render without the flag
-staged `sample` / `obs` / `obs_attribute` with the same content hashes as before.
+SIO survey has effort segments, **by whole cruise** (the distinct `cruise_key` of the survey's
+`sample_track` paths). Farallon's birds, fish and turtles, its transects (`sample`) and its mammals
+on every cruise the survey did not sail are kept. The rule is gated: it applies only when
+`sio_cetacean-sightings` is `in_release: true`, so while that dataset is held this release's
+Farallon rows are unchanged; `CALCOFI_FARALLON_CUT_COVERED=1` applies the cut for a review render
+or a private preview candidate (`scripts/preview_candidate.sh` takes the re-rendered shard through
+`CALCOFI_CAND_OVERRIDE`), and the notebook now depends on the sightings ingest. A render with the
+flag against the sightings shard of 2026-11-06 (effort on 73 cruises, 2004-07-13 to 2025) cut
+2,266 source observation rows on 35 cruises, which is 2,048 `obs` headline rows (69,661 → 67,613)
+and 2,266 `obs_attribute` rows (87,813 → 85,547). It kept 3,410 mammal rows: 3,240 on the cruises
+before the survey began and 170 on the five cruises since that the survey did not sail
+(2005-04-31JD, 2010-04-31FN, 2011-04-3322, the 2011 Fronts cruise with no `cruise_key`, and
+2012-08-32I1, the 2012 Fronts cruise). The notebook's table lists every Farallon cruise with marine
+mammals that is covered or sailed since the survey began. Asserted at render time: non-mammal rows
+are never cut, no mammal on an uncovered cruise is cut, no mammal remains on a covered cruise when
+the cut applies, and the row count is unchanged when it does not. A render without the flag staged
+`sample` / `obs` / `obs_attribute` with the same content hashes as before.
 
 # v2026.11.04
 
