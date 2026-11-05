@@ -1,0 +1,25 @@
+tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
+erdCalCOFINOAAhydros,ctd_cast,cruise,cruise_ym,VARCHAR,VARCHAR,Cruise designation (YYYYMM) -- passed to resolve_cruise_key() as the source's own designation.,,24 distinct; one designation can hold two ships (e.g. 200501 JD and NH)
+erdCalCOFINOAAhydros,ctd_cast,ship,ship_name,VARCHAR,VARCHAR,Ship name.,,asserted equal to the ship reference's ship_name for the same ship_key
+erdCalCOFINOAAhydros,ctd_cast,ship_code,ship_code,VARCHAR,VARCHAR,"Two-letter ship code; equals the ship reference's ship_key (NH, SP, JD, FR, OD, MF, SH, OS).",,asserted in Resolve Ship and Cruise Keys
+erdCalCOFINOAAhydros,ctd_cast,order_occupied,order_occupied,VARCHAR,INTEGER,Order in which the station was occupied on the cruise; part of the cast key.,,1-267
+erdCalCOFINOAAhydros,ctd_cast,latitude,latitude,VARCHAR,DOUBLE,Cast latitude in decimal degrees (WGS84).,decimal_degrees,29.85-51.09N
+erdCalCOFINOAAhydros,ctd_cast,longitude,longitude,VARCHAR,DOUBLE,Cast longitude in decimal degrees (WGS84; west negative).,decimal_degrees,-132.29 to -117.20
+erdCalCOFINOAAhydros,ctd_cast,line,line,VARCHAR,DOUBLE,CalCOFI line number (extended numbering north of the grid).,,"-14.0 to 95.3; negative north of the grid (35 casts get no site_key)"
+erdCalCOFINOAAhydros,ctd_cast,station,station,VARCHAR,DOUBLE,CalCOFI station number.,,-4.0 to 120.0
+erdCalCOFINOAAhydros,ctd_cast,time,datetime_start_utc,VARCHAR,TIMESTAMP,CTD start time (UTC).,,2002-02-08 to 2014-08-23; one time per cast
+erdCalCOFINOAAhydros,ctd_measurement,ctd_depth,depth_m,VARCHAR,DOUBLE,Standard depth of the value.,m,"0-1,000 m, mostly 0/1/10/20/30/40/50/75/100/125/150/200/250/300/400/500 m"
+erdCalCOFINOAAhydros,ctd_measurement,temperature,,VARCHAR,,CTD temperature.,degC,pivoted to measurement_type='temperature_1'; on every row; 0.15-20.6 degC
+erdCalCOFINOAAhydros,ctd_measurement,salinity,,VARCHAR,,"CTD salinity, mostly not calibrated against bottle samples.",PSU,pivoted to measurement_type='salinity_1'; on every row; 0.48-35.27 (Q02)
+erdCalCOFINOAAhydros,ctd_measurement,oxygen,,VARCHAR,,"CTD dissolved oxygen, mostly not calibrated against bottle samples.",ml/L,"pivoted to measurement_type='oxygen_ml_l_1'; NaN on 4,475 rows (not published); 0.05-14.87 ml/L (Q02)"
+erdCalCOFINOAAhydros,ctd_measurement,percent_saturation,percent_saturation,VARCHAR,DOUBLE,Oxygen saturation. Not published (Q05).,percent,"on 4,963 rows of 5 cruises only"
+erdCalCOFINOAAhydros,ctd_cast,,cast_id,,INTEGER,Integer pivot FK between ctd_cast and ctd_measurement (not the published key; see sample_key_id).,,derived: row_number() in time order
+erdCalCOFINOAAhydros,ctd_cast,,sample_key_id,,VARCHAR,"Natural cast key: cruise-ship_code-order_occupied (asserted unique); the id part of sample_key swfsc_ctd-noaa:cast:{id}.",,derived from the source's own columns
+erdCalCOFINOAAhydros,ctd_cast,,site_key,,VARCHAR,CalCOFI station key in 'LLL.L SSS.S' form; NULL for a negative line or station.,,derived from line + station via normalize_site_key()
+erdCalCOFINOAAhydros,ctd_cast,,depth_min_m,,DOUBLE,Shallowest standard depth of the cast.,m,derived
+erdCalCOFINOAAhydros,ctd_cast,,depth_max_m,,DOUBLE,Deepest standard depth of the cast.,m,derived
+erdCalCOFINOAAhydros,ctd_cast,,cruise_key,,VARCHAR,Natural cruise key YYYY-MM-NODC; resolved via resolve_cruise_key().,,see Resolve Ship and Cruise Keys
+erdCalCOFINOAAhydros,ctd_measurement,,measurement_id,,INTEGER,Sequential measurement identifier; primary key of ctd_measurement.,,derived (row_number)
+erdCalCOFINOAAhydros,ctd_measurement,,cast_id,,INTEGER,FK to ctd_cast.cast_id.,,
+erdCalCOFINOAAhydros,ctd_measurement,,measurement_type,,VARCHAR,"FK to measurement_type.measurement_type (temperature_1, salinity_1, oxygen_ml_l_1).",,units carried by measurement_type.csv
+erdCalCOFINOAAhydros,ctd_measurement,,measurement_value,,DOUBLE,Numeric value of the measurement; units carried by measurement_type.,,

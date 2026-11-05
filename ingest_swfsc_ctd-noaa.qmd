@@ -1,0 +1,580 @@
+---
+title: "Ingest NOAA SWFSC Additional CTD Casts"
+calcofi:
+  target_name: ingest_swfsc_ctd_noaa
+  workflow_type: ingest
+  dependency:
+    - ingest_swfsc_ichthyo
+    - ingest_calcofi_bottle
+    - ingest_calcofi_ctd_cast
+  output: data/parquet/swfsc_ctd-noaa/manifest.json
+  provider: swfsc
+  dataset: ctd-noaa
+  workflow_url: https://calcofi.io/workflows/ingest_swfsc_ctd-noaa.html
+  questions_file: metadata/swfsc/ctd-noaa/questions.csv
+  # staged, not released: first ingest of this holding (CalCOFI/workflows#84).
+  in_release: false
+  dataset_meta:
+    dataset_name: CalCOFI Additional CTD Hydrographic Cast Data-NOAA SWFSC
+    dataset_name_short: "NOAA additional CTD casts"
+    category: "Physical Oceanography"
+    color: "#2f6f8f"
+  tables_owned:
+    - {table: sample, shared: true, note: "core event dimension (one CTD cast per row; own sample grain)"}
+    - {table: obs, shared: true, note: "core observation headline (env realm; uncalibrated sensor temperature, salinity, oxygen at standard depths)"}
+    - {table: measurement_type, shared: true, note: "shared registry across datasets"}
+  erd:
+    color: "#c8dfea"
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+**Source**: NOAA CoastWatch ERDDAP `erdCalCOFINOAAhydros` ("CalCOFI NOAA
+Additional CTD", NOAA SWFSC, Ed Weber), the whole table: 15,151 rows, 14
+columns, 1,235 casts on 28 cruise x ship combinations, 2002-02 to 2014-08
+(checked 2026-10-06). Values are CTD readings at standard depths (0 to 1,000 m).
+ERDDAP's own summary: "oxygen and salinity mostly uncalibrated".
+
+- **Provider**: `swfsc` (NOAA SWFSC curates it; ERDDAP is only the portal).
+- **Grain**: `sample` = one CTD cast, keyed by the source's own
+  `(cruise, ship_code, order_occupied)`; `obs` = one value per cast x depth x
+  measurement.
+- **Measurements**: the uncorrected-sensor types the registry already holds for
+  CTD casts: `temperature_1` (degC), `salinity_1` (PSU), `oxygen_ml_l_1` (ml/L).
+  Not calibrated against bottle samples, which is exactly what those types
+  describe.
+- **Not published**: `percent_saturation` (present on 5 cruises only, and
+  derivable from oxygen, temperature and salinity, Q05).
+- **Overlap with CalCOFI's own casts (held out)**: on some cruises (e.g. 2004-01
+  David Starr Jordan, 2005-01 New Horizon) these casts are the same casts as
+  `calcofi_ctd-cast` / `calcofi_bottle`, at the same station within minutes. The
+  SIO versions are calibrated, so a NOAA cast that matches a CalCOFI cast (same
+  `site_key`, within 6 h) is **held out** and only the casts CalCOFI does not
+  already have are published (Q01).
+- **Cruise key**: `ship_code` is the ship reference's own `ship_key` (NH, JD, SH,
+  ..., asserted), and `cruise` is the YYYYMM designation, so
+  `resolve_cruise_key()` keys every cast (span, then designation).
+
+```{mermaid}
+graph LR
+  A[ERDDAP erdCalCOFINOAAhydros<br/>15,151 rows] --> B[ctd_cast<br/>one row per cast]
+  A --> C[ctd_measurement<br/>long: temperature_1, salinity_1, oxygen_ml_l_1]
+  B -.site_key + time.-> D[(calcofi_ctd-cast / calcofi_bottle casts<br/>match = held out)]
+  B -.ship_key + cruise.-> E[(cruise_key)]
+  B --> F[[core: sample, cast]]
+  C --> G[[core: obs, realm=env]]
+```
+
+## Setup
+
+```{r}
+#| label: setup
+devtools::load_all(here::here("../calcofi4db"))
+devtools::load_all(here::here("../calcofi4r"))
+librarian::shelf(
+  CalCOFI/calcofi4db, CalCOFI/calcofi4r,
+  DBI, dplyr, DT, fs, glue, here, htmltools, janitor, jsonlite, knitr,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr,
+  quiet = T)
+options(readr.show_col_types = F)
+options(DT.options = list(scrollX = TRUE))
+
+source(here("libs/ingest.R"))
+cc             <- read_calcofi_meta(here("ingest_swfsc_ctd-noaa.qmd"))
+provider       <- cc$provider
+dataset        <- cc$dataset
+tables_owned   <- cc$tables_owned
+ds_key         <- as.character(glue("{provider}_{dataset}"))
+dir_label      <- ds_key
+dir_parquet    <- here(glue("data/parquet/{dir_label}"))
+dir_stage      <- cc_stage_path("parquet", dir_label, create = TRUE)
+dir_src        <- cc_stage_path("source", dir_label, create = TRUE)
+db_path        <- here(glue("data/wrangling/{dir_label}.duckdb"))
+dir_meta       <- here(glue("metadata/{provider}/{dataset}"))
+publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
+
+# a prior ingest's shard: the local stage copy, else its public GCS copy
+shard_path <- function(ds, tbl) {
+  p <- cc_stage_path("parquet", ds, glue("{tbl}.parquet"))
+  if (file_exists(p)) return(p)
+  glue("https://storage.googleapis.com/calcofi-db/ingest/{ds}/{tbl}.parquet")
+}
+
+meas_map <- tribble(
+  ~measurement_type, ~value_col,
+  "temperature_1",   "temperature",
+  "salinity_1",      "salinity",
+  "oxygen_ml_l_1",   "oxygen")
+d_meas_type <- read_measurement_type(here("metadata/measurement_type.csv"))
+stopifnot("the three sensor types are registered" =
+            all(meas_map$measurement_type %in% d_meas_type$measurement_type))
+
+if (overwrite) {
+  if (file_exists(db_path)) file_delete(db_path)
+  if (file_exists(paste0(db_path, ".wal"))) file_delete(paste0(db_path, ".wal"))
+  if (dir_exists(paste0(db_path, ".tmp"))) dir_delete(paste0(db_path, ".tmp"))
+}
+dir_create(dirname(db_path))
+con <- get_duckdb_con(db_path)
+load_duckdb_extension(con, "spatial")
+load_duckdb_extension(con, "httpfs")
+dbWriteTable(con, "measurement_type", d_meas_type, overwrite = TRUE)
+```
+
+## Read Source Data
+
+```{r}
+#| label: read-source
+source(here("libs/download_ctd_noaa.R"))
+downloaded <- overwrite_all || !file_exists(file.path(dir_src, "data.csv"))
+src_csv <- download_ctd_noaa(dir_src, overwrite = overwrite_all)
+src_stamp <- stamp_source_access(files = src_csv) |>
+  mutate(source = CTD_NOAA_URL, method = if (downloaded) "download" else "file_mtime")
+
+if (publish_to_gcs) {
+  sync_to_gcs(
+    local_dir  = dir_src,
+    gcs_prefix = glue("archive/{provider}/{dataset}"),
+    bucket     = "calcofi-files-public",
+    exclude    = c(".DS_Store", "*.tmp", "*.part"))
+} else {
+  cat("CALCOFI_SKIP_GCS set -- source NOT archived to gs://calcofi-files-public\n")
+}
+
+hdr_expected <- c(
+  "cruise", "ship", "ship_code", "order_occupied", "latitude", "longitude",
+  "line", "station", "time", "ctd_depth", "temperature", "salinity", "oxygen",
+  "percent_saturation")
+units_expected <- c(
+  "", "", "", "", "degrees_north", "degrees_east", "", "", "UTC", "meters",
+  "degrees Celsius", "practical salinity units", "ml/l", "percent")
+hdr <- readLines(src_csv, n = 2)
+stopifnot(
+  "ERDDAP header changed: re-check flds_redefine.csv" =
+    identical(strsplit(hdr[1], ",")[[1]], hdr_expected),
+  "ERDDAP units line changed: re-check the measurement units" =
+    identical(c(strsplit(hdr[2], ",")[[1]], rep("", 14))[1:14], units_expected))
+
+d_raw <- read_csv(src_csv, skip = 2, col_names = hdr_expected,
+                  col_types = cols(.default = "c"), na = character())
+cat(glue("Read {format(nrow(d_raw), big.mark=',')} rows, {ncol(d_raw)} columns"), "\n")
+stopifnot("expected 15,151 rows (ERDDAP, checked 2026-10-06)" = nrow(d_raw) == 15151)
+```
+
+## Clean, Type-Cast
+
+ERDDAP writes a missing value as `NaN`; it becomes `NA` here (R's
+`as.numeric("NaN")` is `NaN`, which is not `NA` and would survive an
+`IS NOT NULL`).
+
+```{r}
+#| label: clean-cast
+num <- function(x) {
+  v <- suppressWarnings(as.numeric(if_else(x %in% c("", "NaN"), NA_character_, x)))
+  v[is.nan(v)] <- NA_real_
+  v
+}
+
+d_rows <- d_raw |>
+  transmute(
+    cruise_ym          = cruise,
+    ship_name          = ship,
+    ship_code,
+    order_occupied     = as.integer(order_occupied),
+    latitude           = num(latitude),
+    longitude          = num(longitude),
+    line               = num(line),
+    station            = num(station),
+    datetime_start_utc = ymd_hms(time, tz = "UTC"),
+    depth_m            = num(ctd_depth),
+    temperature        = num(temperature),
+    salinity           = num(salinity),
+    oxygen             = num(oxygen),
+    percent_saturation = num(percent_saturation)) |>
+  mutate(sample_key_id = paste(cruise_ym, ship_code, order_occupied, sep = "-"))
+
+stopifnot(
+  "every row parses a cast id, time, position, line/station and depth" =
+    !anyNA(select(d_rows, order_occupied, datetime_start_utc, latitude, longitude,
+                  line, station, depth_m)),
+  "cruise is a YYYYMM designation" = all(str_detect(d_rows$cruise_ym, "^\\d{4}(0[1-9]|1[0-2])$")),
+  "one row per cast x depth" = !anyDuplicated(d_rows[c("sample_key_id", "depth_m")]),
+  "temperature and salinity on every row" = !anyNA(d_rows$temperature) && !anyNA(d_rows$salinity))
+
+d_cast <- d_rows |>
+  group_by(sample_key_id, cruise_ym, ship_name, ship_code, order_occupied,
+           datetime_start_utc, latitude, longitude, line, station) |>
+  summarize(depth_min_m = min(depth_m), depth_max_m = max(depth_m),
+            n_depths = n(), .groups = "drop") |>
+  # a negative line or station (the extended numbering off Washington and British
+  # Columbia, e.g. line -10.7) is not a CalCOFI station: no site_key
+  mutate(site_key = if_else(line < 0 | station < 0, NA_character_,
+                            normalize_site_key(sprintf("%.1f %.1f", line, station)))) |>
+  arrange(datetime_start_utc, sample_key_id) |>
+  mutate(cast_id = row_number())
+stopifnot(
+  "a cast has one time, position and station (1,235 casts)" =
+    !anyDuplicated(d_cast$sample_key_id) && nrow(d_cast) == 1235)
+
+d_meas <- d_rows |>
+  inner_join(d_cast |> select(sample_key_id, cast_id), by = "sample_key_id") |>
+  pivot_longer(all_of(meas_map$value_col), names_to = "value_col",
+               values_to = "measurement_value", values_drop_na = TRUE) |>
+  inner_join(meas_map, by = "value_col") |>
+  arrange(cast_id, depth_m, measurement_type) |>
+  transmute(measurement_id = row_number(), cast_id, depth_m,
+            measurement_type, measurement_value)
+
+d_meas |> count(measurement_type) |>
+  datatable(caption = "Values per measurement_type (all casts)", rownames = FALSE)
+cat(glue("percent_saturation held out (not published): ",
+         "{sum(!is.na(d_rows$percent_saturation))} values on ",
+         "{n_distinct(d_rows$cruise_ym[!is.na(d_rows$percent_saturation)])} cruises (Q05)"), "\n")
+stopifnot("15,151 temperature + 15,151 salinity + 10,676 oxygen values" =
+            nrow(d_meas) == 15151 + 15151 + 10676)
+
+dbWriteTable(con, "ctd_cast", d_cast, overwrite = TRUE)
+dbWriteTable(con, "ctd_measurement", d_meas, overwrite = TRUE)
+```
+
+## Resolve Ship and Cruise Keys
+
+The source's `ship_code` (NH, JD, SH, ...) is the ship reference's own
+`ship_key`, and the ship names agree (asserted), so no ship matching is needed.
+`resolve_cruise_key()` then keys each cast by the cruise span, falling back to
+the source's `cruise` designation.
+
+```{r}
+#| label: resolve-keys
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",
+  tables = c("ship", "cruise"), as_view = TRUE)
+
+d_ship_chk <- dbGetQuery(con, "
+  SELECT DISTINCT c.ship_code, c.ship_name, s.ship_key, s.ship_name AS ref_name, s.ship_nodc
+  FROM ctd_cast c LEFT JOIN ship s ON s.ship_key = c.ship_code ORDER BY 1")
+d_ship_chk |> datatable(caption = "Source ship_code = ship reference ship_key", rownames = FALSE)
+stopifnot(
+  "every ship_code is a ship_key in the ship reference" = !anyNA(d_ship_chk$ship_key),
+  "and the ship names agree" = all(toupper(d_ship_chk$ship_name) == toupper(d_ship_chk$ref_name)))
+
+dbExecute(con, "ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS ship_key VARCHAR")
+dbExecute(con, "UPDATE ctd_cast SET ship_key = ship_code")
+
+key_stats <- resolve_cruise_key(
+  con, "ctd_cast", datetime_col = "datetime_start_utc",
+  ship_key_col = "ship_key", cruise_ym_col = "cruise_ym")
+key_stats |> datatable(caption = "cruise_key resolution: span > source designation > month")
+
+n_ck <- dbGetQuery(con, "SELECT COUNT(*) FROM ctd_cast WHERE cruise_key IS NOT NULL")[[1]]
+cat(glue("cruise_key: {n_ck}/{nrow(d_cast)} casts"), "\n")
+stopifnot("every cast resolves a cruise_key" = n_ck == nrow(d_cast))
+```
+
+## Casts CalCOFI Already Has (held out)
+
+A NOAA cast that is the same cast as a `calcofi_ctd-cast` or `calcofi_bottle`
+cast is a duplicate of a calibrated SIO record. `match_by_site_datetime()` finds,
+for each NOAA cast, the CalCOFI cast at the same `site_key` on the nearest date
+(within 1 day), **once against the bottle casts and once against the CTD casts**:
+the two CalCOFI datasets can time the same cast hours apart (first render,
+2026-10-06: on 2005-01 New Horizon the CTD casts read about 8 h earlier than the
+bottle casts), and a single match picks only one candidate per date. A cast is
+held out when either match is within **6 hours**. The threshold and the hold-out
+are Q01.
+
+```{r}
+#| label: overlap
+ref_tbls <- c(ref_bottle = "calcofi_bottle", ref_ctd_cast = "calcofi_ctd-cast")
+for (tbl in names(ref_tbls)) {
+  ds <- ref_tbls[[tbl]]
+  dbExecute(con, glue("
+    CREATE OR REPLACE TABLE {tbl} AS
+    SELECT sample_key AS ref_cast_key, site_key, datetime
+    FROM read_parquet('{shard_path(ds, 'sample')}')
+    WHERE sample_type = 'cast' AND site_key IS NOT NULL AND datetime IS NOT NULL"))
+}
+
+match_hours <- function(ref_tbl, fk, hrs) {
+  m <- match_by_site_datetime(
+    con, "ctd_cast", ref_tbl, fk_col = fk, ref_pk = "ref_cast_key",
+    key_col = "site_key", datetime_col = "datetime_start_utc",
+    ref_datetime_col = "datetime", window_days = 1)
+  dbExecute(con, glue("ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS {hrs} DOUBLE"))
+  dbExecute(con, glue("
+    UPDATE ctd_cast SET {hrs} = ABS(EPOCH(ctd_cast.datetime_start_utc) - EPOCH(r.datetime)) / 3600
+    FROM {ref_tbl} r WHERE r.ref_cast_key = ctd_cast.{fk}"))
+  m
+}
+m_btl <- match_hours("ref_bottle", "bottle_cast_key", "bottle_hours")
+m_ctd <- match_hours("ref_ctd_cast", "ctd_cast_key", "ctd_hours")
+
+dbExecute(con, "ALTER TABLE ctd_cast ADD COLUMN IF NOT EXISTS is_calcofi_dup BOOLEAN")
+dbExecute(con, "
+  UPDATE ctd_cast SET is_calcofi_dup =
+    COALESCE(bottle_hours <= 6, FALSE) OR COALESCE(ctd_hours <= 6, FALSE)")
+
+d_overlap <- dbGetQuery(con, "
+  SELECT cruise_ym, ship_code, COUNT(*) AS n_casts,
+         SUM(is_calcofi_dup::INT)                 AS n_held_dup,
+         COUNT(*) FILTER (WHERE bottle_hours <= 6) AS n_bottle_6h,
+         COUNT(*) FILTER (WHERE ctd_hours <= 6)    AS n_ctd_6h,
+         COUNT(*) FILTER (WHERE NOT is_calcofi_dup
+                           AND (bottle_cast_key IS NOT NULL OR ctd_cast_key IS NOT NULL)) AS n_near_not_dup
+  FROM ctd_cast GROUP BY 1, 2 ORDER BY 1, 2")
+d_overlap |> datatable(caption = "Casts per cruise that CalCOFI already has (held out, Q01)", rownames = FALSE)
+
+# the CTD-vs-bottle timing offset that motivated two matches, reported
+dbGetQuery(con, "
+  SELECT cruise_ym, ship_code, COUNT(*) AS n_both,
+         ROUND(MEDIAN(ctd_hours - bottle_hours), 1) AS median_ctd_minus_bottle_h
+  FROM ctd_cast WHERE bottle_hours IS NOT NULL AND ctd_hours IS NOT NULL
+  GROUP BY 1, 2 ORDER BY 1, 2") |>
+  datatable(caption = "NOAA casts matched to both CalCOFI datasets: hours to each", rownames = FALSE)
+
+n_dup <- sum(d_overlap$n_held_dup)
+n_pub <- nrow(d_cast) - n_dup
+cat(glue("{n_dup} of {nrow(d_cast)} casts duplicate a CalCOFI cast and are held out; ",
+         "{n_pub} casts are published"), "\n")
+stopifnot("some casts remain to publish" = n_pub > 0)
+
+dbExecute(con, "CREATE OR REPLACE TABLE ctd_cast_pub AS SELECT * FROM ctd_cast WHERE NOT is_calcofi_dup")
+```
+
+## Add Spatial
+
+```{r}
+#| label: spatial
+load_prior_tables(
+  con, parquet_dir = cc_stage_path("parquet", "swfsc_ichthyo"),
+  gcs_prefix = "ingest/swfsc_ichthyo",
+  tables = c("grid"), geom_tables = c("grid"), as_view = TRUE)
+add_point_geom(con, "ctd_cast_pub", lon_col = "longitude", lat_col = "latitude")
+assign_grid_key(con, "ctd_cast_pub") |> datatable(caption = "Grid assignment (published casts)")
+```
+
+## Load Dataset Metadata
+
+```{r}
+#| label: load-dataset-metadata
+this_provider <- provider; this_dataset <- dataset
+d_dataset <- ingest_yaml_to_dataset_df(read_ingest_yaml(here())) |>
+  filter(provider == this_provider, dataset == this_dataset)
+stopifnot(nrow(d_dataset) == 1)
+dbWriteTable(con, "dataset", as.data.frame(d_dataset), overwrite = TRUE)
+```
+
+## Schema Documentation
+
+```{r}
+#| label: schema
+ctd_rels <- list(
+  primary_keys = list(
+    ctd_cast         = "cast_id",
+    ctd_measurement  = "measurement_id",
+    measurement_type = "measurement_type"),
+  foreign_keys = list(
+    list(table = "ctd_measurement", column = "cast_id",
+         ref_table = "ctd_cast", ref_column = "cast_id"),
+    list(table = "ctd_measurement", column = "measurement_type",
+         ref_table = "measurement_type", ref_column = "measurement_type")))
+cc_erd(
+  con, tables = c("ctd_cast", "ctd_measurement", "measurement_type", "dataset"),
+  rels = ctd_rels,
+  colors = list(lightblue = c("ctd_cast", "ctd_measurement"),
+                lightyellow = "measurement_type", white = "dataset"))
+```
+
+| source | core | transform |
+|---|---|---|
+| one row per `(cruise, ship_code, order_occupied)` | `sample` (`cast`) | key `swfsc_ctd-noaa:cast:{cruise}-{ship_code}-{order_occupied}`; `depth_min_m`/`depth_max_m` = the cast's shallowest/deepest standard depth; time = `time` (UTC) |
+| `temperature` | `obs` `temperature_1` | verbatim, degC, at `ctd_depth` |
+| `salinity` | `obs` `salinity_1` | verbatim, PSU, at `ctd_depth` |
+| `oxygen` | `obs` `oxygen_ml_l_1` | verbatim, ml/L, at `ctd_depth`; `NaN` (4,475 rows) not published |
+| `percent_saturation` | -- | **not published** (5 cruises only, derivable, Q05) |
+| casts matching a CalCOFI cast | -- | **held out** (Q01) |
+
+## Check Declared Bounds
+
+All three types already carry bounds in the registry (temperature_1 -2 to 40
+degC, salinity_1 0 to 45 PSU, oxygen_ml_l_1 0 to 15 ml/L). The suspicious values
+the provider is asked about in Q02 (surface salinity of 22 and 24 PSU; oxygen of
+12-13 ml/L at 6 degC on 2012-04) are inside those bounds, so nothing is dropped.
+
+```{r}
+#| label: bounds-check
+bounds_pre <- check_measurement_bounds(con, "ctd_measurement", mt = d_meas_type)
+bounds_datatable(bounds_pre)
+oob_tally <- drop_out_of_bounds(con, "ctd_measurement", mt = d_meas_type)
+cat(glue("out-of-range rows removed: {sum(oob_tally$n_bad %||% 0)}"), "\n")
+bounds_post <- check_measurement_bounds(
+  con, "ctd_measurement", mt = d_meas_type, include_undeclared = FALSE)
+stopifnot(
+  "every emitted type has declared bounds" = all(bounds_pre$status != "undeclared"),
+  "no value outside a declared bound" = sum(bounds_post$status == "out_of_range") == 0)
+```
+
+## Enforce Column Types
+
+```{r}
+#| label: enforce-types
+enforce_column_types(con)
+```
+
+## Data Preview
+
+```{r}
+#| label: preview-cast
+cols <- dbGetQuery(con,
+  "SELECT column_name FROM information_schema.columns
+   WHERE table_name='ctd_cast_pub' AND data_type NOT LIKE 'GEOMETRY%'")$column_name
+dbGetQuery(con, glue("SELECT {paste(cols, collapse=', ')} FROM ctd_cast_pub LIMIT 200")) |>
+  datatable(caption = "ctd_cast_pub -- first 200 published casts", rownames = FALSE, filter = "top")
+```
+
+## Emit Core Tables
+
+```{r}
+#| label: emit_core
+append_sample(con, sample_arm_self(
+  ds_key, "ctd_cast_pub", "sample_key_id", "cast",
+  dt_col = "datetime_start_utc", site_expr = "site_key",
+  ord_expr = "order_occupied",
+  depth_min = "depth_min_m", depth_max = "depth_max_m"))
+
+append_obs(con, glue("
+  SELECT 'env', '{ds_key}', {ns_key(ds_key, 'cast', 'c.sample_key_id')},
+         c.grid_key, c.cruise_key, c.latitude, c.longitude,
+         CAST(c.datetime_start_utc AS TIMESTAMP), m.depth_m, m.depth_m,
+         NULL::VARCHAR, NULL::VARCHAR, m.measurement_type, m.measurement_value,
+         NULL::VARCHAR, NULL::DOUBLE
+  FROM ctd_measurement m
+  JOIN ctd_cast_pub c USING (cast_id)"))
+
+q1 <- function(sql) dbGetQuery(con, sql)[[1]]
+n_exp_obs <- q1("SELECT COUNT(*) FROM ctd_measurement m JOIN ctd_cast_pub c USING (cast_id)")
+core <- list(sample = q1("SELECT COUNT(*) FROM sample"), obs = q1("SELECT COUNT(*) FROM obs"))
+cat(glue("core projection -- sample={core$sample} obs={core$obs}"), "\n")
+stopifnot(
+  "one sample per published cast" = core$sample == n_pub,
+  "obs is one row per published value" = core$obs == n_exp_obs,
+  "only the three sensor types are emitted" =
+    setequal(dbGetQuery(con, glue("SELECT DISTINCT measurement_type FROM obs
+                                   WHERE dataset_key = '{ds_key}'"))$measurement_type,
+             meas_map$measurement_type),
+  "sample_key is unique" =
+    q1(glue("SELECT COUNT(*) - COUNT(DISTINCT sample_key) FROM sample WHERE dataset_key = '{ds_key}'")) == 0,
+  "every obs.sample_key resolves in sample" =
+    q1("SELECT COUNT(*) FROM obs o LEFT JOIN sample s USING (sample_key) WHERE s.sample_key IS NULL") == 0,
+  "obs depth lies within its cast's depth range" =
+    q1("SELECT COUNT(*) FROM obs o JOIN sample s USING (sample_key)
+        WHERE o.depth_max_m < s.depth_min_m OR o.depth_max_m > s.depth_max_m") == 0)
+
+invisible(dbExecute(con, "DROP TABLE IF EXISTS ctd_measurement_src"))
+invisible(dbExecute(con, "ALTER TABLE ctd_measurement RENAME TO ctd_measurement_src"))
+invisible(dbExecute(con, glue(
+  "CREATE OR REPLACE VIEW ctd_measurement AS
+   SELECT o.obs_id AS measurement_id, o.sample_key, o.depth_max_m AS depth_m,
+          o.measurement_type, o.measurement_value, o.measurement_qual
+   FROM obs o WHERE o.dataset_key = '{ds_key}'")))
+```
+
+### Declared NULLs
+
+```{r}
+#| label: validate
+results <- validate_for_release(con, checks = "all", strict = FALSE)
+cat("validate_for_release:", ifelse(results$passed, "PASSED",
+    "reported findings -- reconciled against the declared NULLs below"), "\n")
+if (length(results$errors) > 0)
+  cat("Errors:\n", paste("-", results$errors, collapse = "\n"), "\n")
+
+n_null <- function(col) q1(glue(
+  "SELECT COUNT(*) FROM sample WHERE dataset_key = '{ds_key}' AND {col} IS NULL"))
+nullable <- tribble(
+  ~table,   ~column,             ~n,                          ~reason,
+  "sample", "parent_sample_key", n_null("parent_sample_key"), "single-level dataset: every cast is a root",
+  "sample", "grid_key",          n_null("grid_key"),          "cast outside the CalCOFI grid (the NOAA cruises off Oregon, Washington and British Columbia)",
+  "sample", "site_key",          n_null("site_key"),          "negative line or station number (extended numbering north of the CalCOFI grid): not a CalCOFI station")
+nullable |> datatable(caption = "Declared NULLs (count and reason)", rownames = FALSE)
+stopifnot(
+  "every cast is a root" = nullable$n[nullable$column == "parent_sample_key"] == n_pub,
+  "no cast lacks a time or cruise_key" = n_null("datetime") == 0 && n_null("cruise_key") == 0,
+  "a NULL site_key only where the line or station is negative" =
+    n_null("site_key") == q1("SELECT COUNT(*) FROM ctd_cast_pub WHERE line < 0 OR station < 0"))
+```
+
+### Core ERD
+
+```{r}
+#| label: erd-core
+core_tbls <- core_output_tables(con)
+cc_erd(con, tables = core_tbls, rels = core_relationships(core_tbls))
+```
+
+## Write Parquet Outputs
+
+```{r}
+#| label: write-parquet
+dir_create(dir_parquet)
+tbls_out <- core_output_tables(con, extra = c("measurement_type", "dataset"))
+parquet_stats <- write_parquet_outputs(
+  con = con, output_dir = dir_parquet,
+  tables = tbls_out,
+  sort_by = list(obs = c("grid_key", "measurement_type")),
+  strip_provenance = FALSE)
+build_relationships_json(
+  rels = core_relationships(tbls_out), output_dir = dir_parquet,
+  provider = provider, dataset = dataset)
+parquet_stats |> mutate(file = basename(path)) |> select(-path) |>
+  datatable(caption = "Parquet export statistics")
+```
+
+## Write Metadata
+
+```{r}
+#| label: write-metadata
+d_tbls_rd <- read_csv(file.path(dir_meta, "tbls_redefine.csv"))
+d_flds_rd <- read_csv(file.path(dir_meta, "flds_redefine.csv"))
+metadata_path <- build_metadata_json(
+  con = con, d_tbls_rd = d_tbls_rd, d_flds_rd = d_flds_rd,
+  metadata_derived_csv = c(here("metadata/core_dictionary.csv"),
+                           file.path(dir_meta, "metadata_derived.csv")),
+  output_dir = dir_parquet, tables = tbls_out,
+  set_comments = TRUE, provider = provider, dataset = dataset,
+  workflow_url = cc$workflow_url, tables_owned = tables_owned,
+  sources = src_stamp)
+```
+
+## Upload to GCS
+
+```{r}
+#| label: upload-gcs
+if (publish_to_gcs) {
+  sync_to_gcs(local_dir = dir_stage, sidecar_dir = dir_parquet,
+              gcs_prefix = glue("ingest/{dir_label}"), bucket = "calcofi-db")
+} else cat("CALCOFI_SKIP_GCS set -- skipping the upload (local verification run)\n")
+```
+
+## Questions for Data Providers
+
+Follow-up questions for NOAA SWFSC (Ed Weber), ranked. Q01 (the overlap with
+CalCOFI's own casts) decides how much of this dataset is new.
+
+```{r}
+#| label: provider-questions
+questions_datatable(
+  here(cc$questions_file),
+  caption = "Questions for the swfsc ctd-noaa data providers (ranked)")
+```
+
+## Cleanup
+
+```{r}
+#| label: cleanup
+close_duckdb(con)
+cat(glue("parquet outputs written to: {dir_parquet}"), "\n")
+```
