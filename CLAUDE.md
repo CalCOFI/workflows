@@ -271,6 +271,13 @@ Rscript scripts/build_workflows_index.R
   fetches the species and measurement faces whenever the promoted release has a
   key their sidecars lack (`media_due.py`), and only then. `libs/release_content_gaps.R` reports, never gates, the measurement
   keys with no face or why and the datasets with no citation, licence or DOI.
+- **Private preview** (`preview-release`): a held dataset (`in_release: false`) reaches its
+  provider only through a candidate release in `gs://calcofi-preview` (`scripts/preview_candidate.sh`,
+  one root per dataset, run from a checkout `origin/main` contains) and `scripts/build_preview.sh`;
+  the decision in the preview's form is folded into the dataset's consent question, the provider's
+  Sheet and git by `scripts/pull_preview_consent.R`, and `check_dataset_consent()` stops a public
+  release that would carry a dataset without a given consent. Never weaken a public gate for a
+  preview: ratchet a held dataset apart (`key_null_max`, `DEPTH_SEAFLOOR_OVER_HELD`) or gate on the bucket.
 - **Publishers** (`publish-template`): every `publish_to-*.qmd` depends on
   `test_release` and rebuilds a dataset only when its input fingerprint changed
   (`publish_fingerprint()` → `publish_decide()`; never fingerprint the release
