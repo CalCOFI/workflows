@@ -20,6 +20,18 @@ The chapter is [Providing data](../../../../docs/provide.qmd) (calcofi.io/docs/p
 | 6. **Un-hold** — flip `in_release: false` → `true` in the notebook, promote the ratchet baselines into the public ones, re-render, next public release | the ingest PR | `check_dataset_consent(halt = TRUE)` in `release_database.qmd`: a dataset in a public run whose consent row is not `answered` + `yes` + `who` stops the release; a preview run exempts the datasets it includes |
 | 7. **Retire the preview** — delete `datasets/<key>-<token>/` and the candidate root from the bucket; the consent record stays | by hand (`gcloud storage rm`) | — |
 
+**The tracker** — the data team's one view of every row of this table: the Google Sheet
+"CalCOFI integrated database — private preview tracker" in the `questions` folder of the Shared
+Drive (`metadata/preview_tracker.yml`; shared with Ben, Erin, Betty and Mark only, it holds the
+private links). One row per held dataset and per dataset that exists only in an unmerged PR:
+its PRs with their state (open | merged | closed without merge), the candidate version, the
+preview link and build, decisions not yet pulled, the consent row's status. It is generated,
+never typed (`scripts/sync_preview_tracker.R --execute`; dry run without the flag; every column
+but `notes` is overwritten): `build_preview.sh` refreshes it after each build, and a merge,
+a consent pull or a retired preview is followed by a refresh by hand. `preview_candidate.sh`
+stamps each root with `dataset_key.txt` so the tracker maps roots to datasets without guessing.
+Rules in `scripts/test_preview_tracker.R`.
+
 ## Mechanics and traps (each cost hours)
 
 - **Candidates run only from a checkout `origin/main` contains, after every sibling held

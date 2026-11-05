@@ -156,3 +156,8 @@ PY2
 fi
 if [ "$ACCESS" = link ]; then echo "shown: https://$HOST$URLBASE/  (build $BUILD, link)"
 else echo "shown: https://calcofi-preview-199066946721.us-west1.run.app$URLBASE/  (build $BUILD, iap)"; fi
+
+# 7. the data team's tracker Sheet (scripts/sync_preview_tracker.R) now lists this build; a
+# refusal (no service-account key, no gh) is reported, never fatal: the preview is up ----
+Rscript scripts/sync_preview_tracker.R --execute >/dev/null 2>&1 && echo "tracker refreshed" ||
+  echo "tracker refresh failed — run: Rscript scripts/sync_preview_tracker.R --execute"
