@@ -8,6 +8,47 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Seasons are DJF/MAM/JJA/SON and a cruise's month is its median cast date
+
+Through v2026.10.30 every anomaly, the Explorer's season filter and the seasonal baseline keyed
+on the month the cruise's `cruise_key` designates (`YYYY-MM`) and on calendar quarters (Q1
+Jan–Mar … Q4 Oct–Dec), so June sat in spring with April and a July cruise's 30 June stations
+could only be kept together by the key. Rasmus Swalethorp asked (2026-10-16) that the quarters
+match the seasons, winter being December–February, and that a cruise's month come from its dates
+rather than its ID, which "was established prior to delays, and sometimes being based on the
+month that the cruise started and other times which month was mostly covered"; Ben Best proposed
+(2026-10-20) the meteorological seasons with **December counting toward the following year's
+winter** and the **median cast date** of each cruise as its month, and Rasmus agreed
+(2026-10-27). Both are in this release.
+
+`cruise` gains `date_median` (the median datetime of the cruise's root samples), `month_median`,
+`season` (`DJF`, `MAM`, `JJA`, `SON`) and `season_year` (the year of that date, plus one for
+December, so Dec 2025 + Jan–Feb 2026 is winter 2026), written by
+`calcofi4db::add_cruise_median_date()` (4.34.0). The `climatology` is built on `month_median`
+(`build_climatology(cruise_tbl = "cruise")`), `obs_env` / `obs_bio` `year` and `quarter` are the
+cruise's median year and season, and both append `cruise_month` and `season_year` after `hex7`.
+A cruise with no dated sample keeps its key's month. Measured on v2026.10.30: of the 868 cruises
+in `cruise` (847 with a dated sample), 59 centre on a month other than their key's (25 on the
+month before, 34 on the month after; `1981-02-31JD` on 1 March, `2025-04-3322` on 31 March),
+and 12 of those change season under DJF. For the CTD headline temperature (`temperature_ave`) the
+monthly baseline keeps 21,684 of 21,690 cells (3 gained, 9 lost; 14,211 cells change their
+cruise count, by 0.043 °C on average and 0.9 °C at most) and the share of post-2013 values with a
+monthly normal moves from 85.8 % to 83.6 % (a cruise that centres on the month beside its key's
+now looks up that month, which is thinner on some lines) while the seasonal normal covers 91.1 %
+either way; for bottle `temperature` the monthly cells go from 11,232 to 11,511 (348 gained, 69
+lost), the monthly coverage from 76.7 % to 77.0 % and the seasonal from 89.9 % to 91.0 %.
+
+**Consumers:** `quarter` on `climatology`, `obs_env` and `obs_bio` is redefined — 1 = DJF,
+2 = MAM, 3 = JJA, 4 = SON (it was 1 = Jan–Mar … 4 = Oct–Dec) — and the `season_*` baseline is
+pooled by these seasons; a December cruise's `quarter` is 1 and its `season_year` the year after.
+Read a cruise's month from `cruise.month_median` (or `obs_env.cruise_month`), never from
+`substr(cruise_key, 6, 2)`. New columns: `cruise.date_median`, `cruise.month_median`,
+`cruise.season`, `cruise.season_year`; `obs_env` / `obs_bio` `cruise_month`, `season_year`. The
+Explorer, ctd-transects and calcofi4r (`cc_climatology(season = TRUE)`, `cc_anomaly()`,
+`cc_cast_anomaly()`) read the new columns from this release on and label the seasons Dec–Feb,
+Mar–May, Jun–Aug, Sep–Nov. `test_release.qmd` asserts the `cruise` columns, that a December
+cruise is DJF of the following year, that `obs_env`'s `quarter` / `cruise_month` / `season_year`
+match its cruise, and that CalCOFI 2607 is still summer.
 ## July 2009 ship code corrected on the three CCE-LTER CalCOFI bottle datasets (held)
 
 `cce-lter_toc` (621 samples), `cce-lter_poc-pon` (254) and `cce-lter_hplc-pigments-calcofi` (254)
