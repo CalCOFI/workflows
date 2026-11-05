@@ -385,3 +385,20 @@ def test_head_and_ranges_on_data_and_files(link_store, monkeypatch):
     assert c.head(f"{LINK}/f/summary.html").status_code == 200
     assert c.head(f"{LINK}/f/missing.html").status_code == 404
     assert c.head(f"/d/{KEY}/f/summary.html").status_code == 404   # the iap family, in link mode
+
+
+def test_a_body_over_the_cloud_run_cap_goes_out_chunked(link_store, monkeypatch):
+    # regression 2026-11-05: the Explorer's 35.7 MB duckdb-eh.wasm was a 500 (Cloud Run's 32 MiB cap on
+    # a response with Content-Length) and the Explorer hung on "engine warming…"
+    import app.main as m
+    monkeypatch.setattr(m, "CHUNKED_ABOVE", 1 << 20)               # stand-in for 31 MiB
+    c = client(link_store, monkeypatch, email="", access="link")
+    big, n = f"{LINK}/data/ducklake-preview/releases/big.parquet", 3 * (1 << 20) + 5
+    r = c.get(big)                                                 # whole: no length, every byte
+    assert r.status_code == 200 and "content-length" not in r.headers and len(r.content) == n
+    r = c.get(big, headers={"Range": "bytes=0-"})                  # a large range: the same
+    assert r.status_code == 206 and "content-length" not in r.headers and len(r.content) == n
+    assert r.headers["content-range"] == f"bytes 0-{n - 1}/{n}"
+    r = c.get(big, headers={"Range": "bytes=0-9"})                 # a small range keeps its length
+    assert r.status_code == 206 and r.headers["content-length"] == "10"
+    assert c.head(big).headers["content-length"] == str(n)         # HEAD still tells the size
