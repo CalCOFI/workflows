@@ -321,6 +321,15 @@ def dataset_data(slug: str, path: str, email: str | None, store, via: str, reque
 
 
 RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
+# Cloud Run refuses a response it must buffer above 32 MiB, headers included ("HTTP response was too
+# large: 33555219. The limit is: 33554432." for the Explorer's 35.7 MB duckdb-eh.wasm, a 500 with no
+# body, so DuckDB-WASM never compiled and the Explorer sat on "engine warming…"). A body without
+# Content-Length goes out chunked, which Cloud Run streams uncapped; HEAD still reports the size.
+CHUNKED_ABOVE = 32 * (1 << 20) - (1 << 20)
+
+
+def length_header(n: int) -> dict:
+    return {} if n > CHUNKED_ABOVE else {"Content-Length": str(n)}
 
 
 def stream(store, name: str, missing: str, request: Request | None = None):
@@ -350,11 +359,11 @@ def stream(store, name: str, missing: str, request: Request | None = None):
         chunks = store.stream(name, start, end)
         return StreamingResponse(chunks, status_code=206, media_type=ctype,
                                  headers={**headers, "Content-Range": f"bytes {start}-{end}/{size}",
-                                          "Content-Length": str(end - start + 1)})
+                                          **length_header(end - start + 1)})
     chunks = store.stream(name)
     if chunks is None:
         raise HTTPException(404, missing)
-    return StreamingResponse(chunks, media_type=ctype, headers={**headers, "Content-Length": str(size)})
+    return StreamingResponse(chunks, media_type=ctype, headers={**headers, **length_header(size)})
 
 
 def consent(slug: str, decision: str, comment: str, build_id: str, name: str, email_typed: str,
