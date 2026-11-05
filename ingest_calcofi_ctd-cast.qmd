@@ -389,18 +389,35 @@ d_zips_web <- tryCatch(
 # agree wherever both exist (20-2601RL → /downloads/2026/, 2026-01), but a local
 # zip has no URL to read them from. Web rows keep the URL derivation so no
 # currently-published value changes.
+# a Shared-Drive drop is classified by its CONTENTS, a calcofi.org link by its name: the fall
+# 2026 in-cruise drop `20-2611_CTDCast.zip` (Rasmus Swalethorp, 2026-11-04) holds the bottle-merged
+# 1 m-binned `20-2611_CTDBTL_001-011D.csv` / `…U.csv` under a name the rule above reads as a
+# raw-cast archive, which download_and_unzip() never opens. A local archive whose members are db
+# products is a preliminary drop whatever its name; the central directory is one seek per archive
+# (utils::unzip, not the masked zip::unzip — see [jrw_overlap_report]). Only `raw`-named local
+# archives are inspected, so the JRW finals and the Prelim drops keep their name rule.
+zip_holds_db_csvs <- function(file_zip) {
+  members <- tryCatch(utils::unzip(file.path(dir_dl, file_zip), list = TRUE)$Name,
+                      error = function(e) character(0))
+  any(str_detect(members, "_CTD(BTL)?_\\d{3}-\\d{3}[DU]\\.csv$"))
+}
 d_zips_local <- tibble(
   file_zip = list.files(dir_dl, pattern = "\\.zip$")) |>
   anti_join(d_zips_web, by = "file_zip") |>
   add_zip_meta() |>
   mutate(
+    zip_by_content = zip_type == "raw" & map_lgl(file_zip, zip_holds_db_csvs),
+    zip_type       = if_else(zip_by_content, "preliminary", zip_type),
     url    = NA_character_,
     # "19-" / "20-" gives the century, "YYMM" the rest
     year   = as.integer(str_extract(file_zip, "^(\\d{2})", group = 1)) * 100L +
              as.integer(str_extract(file_zip, "^\\d{2}-(\\d{2})", group = 1)),
     month  = as.integer(str_extract(file_zip, "^\\d{2}-\\d{2}(\\d{2})", group = 1)),
     source = "gcs") |>
-  select(url, file_zip, year, month, cruise_key, zip_type, source)
+  select(url, file_zip, year, month, cruise_key, zip_type, source, zip_by_content)
+if (any(d_zips_local$zip_by_content))
+  say(glue("Preliminary by contents (a raw-named Shared-Drive drop holding db CSVs): ",
+           "{paste(d_zips_local$file_zip[d_zips_local$zip_by_content], collapse = ', ')}"))
 
 d_zips <- bind_rows(d_zips_web, d_zips_local) |>
   arrange(desc(year), desc(month), file_zip)
@@ -964,6 +981,16 @@ merge has happened, plain `_CTD_` before it:
 | `_CTDFinalDB.zip` (Shared Drive) | `…_CTDBTL_…csv` at top level | `final` |
 | `_CTDPrelim.zip` | `db-csvs/…_CTDBTL_…csv` | `preliminary_with_bottle` |
 | `_CTDPrelim.zip` | `…_CTD_…csv` | `preliminary_without_bottle` |
+| `_CTDCast.zip` (Shared Drive, an in-cruise drop) | `…_CTDBTL_…csv` / `…_CTD_…csv` | by its contents, as a `_CTDPrelim.zip` |
+
+A Shared-Drive drop is classified by its **contents**, a calcofi.org link by its name: the
+fall 2026 in-cruise drop `20-2611_CTDCast.zip` (Rasmus Swalethorp, 2026-11-04: lines 93.3 and
+part of 90, posted from the ship for the media webinar) carries the bottle-merged 1 m-binned
+`20-2611_CTDBTL_001-011D.csv` / `…U.csv` under a name the web rule reads as a raw-cast archive,
+which is never unzipped. So a local archive whose members are db products
+(`_CTD_` / `_CTDBTL_` `NNN-NNN[DU].csv`) is a preliminary drop whatever its name
+(`zip_type = "preliminary"` in [d_zips], and the tier arms below key on that, not on
+`Prelim` in the folder name); ctd-cast question Q51 asks the provider to confirm the naming.
 
 This matters well beyond labelling. Only the *station-corrected* salinity and oxygen
 are canonical — following the provider's own guidance that "station-corrected data
@@ -987,7 +1014,14 @@ d_csv <- tibble(
   mutate(
     file_csv = basename(path),
     path_unzip = str_replace(path, glue("{dir_ext}/"), ""),
-    dir_unzip = str_extract(path_unzip, "^[^/]+"),
+    dir_unzip = str_extract(path_unzip, "^[^/]+")) |>
+  # the archive's zip_type from the inventory: a raw-named Shared-Drive drop classified
+  # `preliminary` by its contents ([d_zips]) has no `Prelim` in its folder name
+  left_join(
+    d_zips |> transmute(dir_unzip = str_remove(file_zip, "\\.zip$"), zip_type),
+    by = "dir_unzip") |>
+  mutate(
+    zip_prelim = str_detect(dir_unzip, "Prelim") | coalesce(zip_type == "preliminary", FALSE),
     cruise_key = str_extract(
       path_unzip,
       "\\d{2}-(\\d{4}[A-Z0-9]{2,4})_.*",
@@ -1018,12 +1052,10 @@ d_csv <- tibble(
       str_detect(dir_unzip, "CTDFinalDB$") &
         path_unzip == paste0(dir_unzip, "/", file_csv) ~ "final",
       # preliminary, bottle-merged: _CTDBTL_ means the bottle merge has run
-      str_detect(dir_unzip, "Prelim") &
-        str_detect(file_csv, "_CTDBTL_") ~ "preliminary_with_bottle",
+      zip_prelim & str_detect(file_csv, "_CTDBTL_") ~ "preliminary_with_bottle",
       # preliminary, sensor only: _CTD_ (no BTL) — corrected salinity/oxygen and
       # every bottle column are empty in these
-      str_detect(dir_unzip, "Prelim") &
-        str_detect(file_csv, "_CTD_") ~ "preliminary_without_bottle",
+      zip_prelim & str_detect(file_csv, "_CTD_") ~ "preliminary_without_bottle",
       # NOTE: the hardcoded `cruise_key == "2111SR"` arm that used to sit here is
       # gone, and deliberately. 2111SR puts its db CSVs in csvs-plots/ rather than
       # db-csvs/, so the old *directory*-based rules missed it and it needed a
