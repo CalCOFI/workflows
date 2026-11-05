@@ -39,7 +39,9 @@
 #
 # After a successful render the script writes the version the run produced to
 # gs://<bucket>/ducklake-preview-<short>/releases/latest.txt (what build_preview.sh reads; the
-# public test_release.qmd does not run on a candidate) and prints the build_preview.sh command.
+# public test_release.qmd does not run on a candidate), stamps the root with the dataset it
+# holds (dataset_key.txt, what scripts/sync_preview_tracker.R reads) and prints the
+# build_preview.sh command.
 # The render log is $CALCOFI_STAGE_DIR/render_<utc>.log. A failed attempt leaves
 # releases/v<date>/ in its root; delete it before the rerun.
 set -euo pipefail
@@ -116,6 +118,7 @@ fi
 gcloud storage ls "gs://$BUCKET/$ROOT/releases/$VERSION/" >/dev/null ||
   { echo "the render finished but gs://$BUCKET/$ROOT/releases/$VERSION/ holds nothing" >&2; exit 1; }
 printf '%s\n' "$VERSION" | gcloud storage cp - "gs://$BUCKET/$ROOT/releases/latest.txt"
+printf '%s\n' "$KEY" | gcloud storage cp - "gs://$BUCKET/$ROOT/dataset_key.txt"
 cat <<EOF
 
 candidate $VERSION of $KEY at gs://$BUCKET/$ROOT/releases/$VERSION/ (latest.txt written)
