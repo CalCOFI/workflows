@@ -9,9 +9,86 @@
 # entity name fully determines the bytes. That makes it the preferred route for
 # any CCE-LTER dataset that is mirrored on EDI.
 #
+# Since 2026-07-30 PASTA requires authentication for every REST call
+# (anonymous calls answer HTTP 403 "Public Access is not authorized"). An EDI
+# access key (https://auth.edirepository.org → Profile → Access Keys; the
+# project's lives at ~/.config/calcofi/edi_access_key.txt, or EDI_ACCESS_KEY)
+# is exchanged once per session for a short-lived token that travels in a
+# Cookie header, so the key never appears in a URL, a log or a cached file
+# (edi_token()). Without a key the helpers fall back to the DataONE replica,
+# which refused anonymous reads too on 2026-11-05 (HTTP 403), so the key is the
+# only working route for now.
+#
 # Sourced by libs/download_euphausiids.R, libs/download_iron.R,
-# libs/download_picoplankton_bacteria.R, libs/download_poc_pon.R and
-# libs/download_toc.R; not called directly from a notebook.
+# libs/download_picoplankton_bacteria.R, libs/download_poc_pon.R,
+# libs/download_toc.R and libs/download_chl_size_fractionated.R; not called
+# directly from a notebook.
+
+.edi <- new.env(parent = emptyenv())
+
+#' The EDI access key, or "" when none is configured
+#'
+#' `EDI_ACCESS_KEY` wins; else the first line of the file named by
+#' `EDI_ACCESS_KEY_FILE` (default `~/.config/calcofi/edi_access_key.txt`).
+#' The value is never printed.
+edi_access_key <- function() {
+  key <- Sys.getenv("EDI_ACCESS_KEY", "")
+  if (!nzchar(key)) {
+    f <- Sys.getenv("EDI_ACCESS_KEY_FILE", "~/.config/calcofi/edi_access_key.txt")
+    if (file.exists(f))
+      key <- readLines(f, n = 1, warn = FALSE)
+  }
+  trimws(key)
+}
+
+#' An EDI authentication token for this session, or "" when there is no key
+#'
+#' Exchanges the access key for a token (`POST /auth/v1/key`,
+#' https://auth.edirepository.org/auth/ui/api-docs/token) once per R session.
+#' An invalid key is an error naming the file, never the key itself.
+edi_token <- function() {
+  if (!is.null(.edi$token)) return(.edi$token)
+  key <- edi_access_key()
+  if (!nzchar(key)) return(.edi$token <- "")
+  stopifnot(requireNamespace("curl", quietly = TRUE), requireNamespace("jsonlite", quietly = TRUE))
+  h <- curl::new_handle(
+    postfields    = jsonlite::toJSON(list(key = key), auto_unbox = TRUE),
+    customrequest = "POST")
+  curl::handle_setheaders(h, "Content-Type" = "application/json")
+  r <- curl::curl_fetch_memory("https://auth.edirepository.org/auth/v1/key", handle = h)
+  if (r$status_code != 200L)
+    stop(glue::glue(
+      "EDI refused the access key (HTTP {r$status_code}: ",
+      "{jsonlite::fromJSON(rawToChar(r$content))$msg %||% 'no message'}). ",
+      "Create one at https://auth.edirepository.org (Profile > Access Keys) and ",
+      "put it in ~/.config/calcofi/edi_access_key.txt or EDI_ACCESS_KEY."))
+  .edi$token <- jsonlite::fromJSON(rawToChar(r$content))[["edi-token"]]
+}
+
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+
+#' A curl handle carrying the EDI token cookie (anonymous when there is no key)
+edi_handle <- function() {
+  h <- curl::new_handle(useragent = "calcofi-workflows (libs/download_edi.R)")
+  tok <- edi_token()
+  if (nzchar(tok)) curl::handle_setheaders(h, Cookie = paste0("edi-token=", tok))
+  h
+}
+
+#' GET a PASTA URL as lines; NULL on any non-200 answer (the callers fall back)
+edi_read_lines <- function(url) {
+  r <- tryCatch(curl::curl_fetch_memory(url, handle = edi_handle()), error = function(e) NULL)
+  if (is.null(r) || r$status_code != 200L) return(NULL)
+  strsplit(rawToChar(r$content), "\n", fixed = TRUE)[[1]]
+}
+
+#' GET a PASTA URL to a file; an error on any non-200 answer
+edi_download <- function(url, dest) {
+  r <- curl::curl_fetch_disk(url, dest, handle = edi_handle())
+  if (r$status_code != 200L)
+    stop(glue::glue("EDI answered HTTP {r$status_code} for {url}"))
+  invisible(dest)
+}
 
 #' Resolve the latest revision of an EDI package
 #'
@@ -19,11 +96,7 @@
 #' @param id    package id, e.g. 313
 #' @return integer revision (the highest published)
 edi_latest_rev <- function(scope, id) {
-  revs <- tryCatch(
-    suppressWarnings(readLines(
-      glue::glue("https://pasta.lternet.edu/package/eml/{scope}/{id}"),
-      warn = FALSE)),
-    error = function(e) NULL)
+  revs <- edi_read_lines(glue::glue("https://pasta.lternet.edu/package/eml/{scope}/{id}"))
   if (is.null(revs)) {
     # PASTA refused (see download_edi_entity()): the revisions the DataONE
     # coordinating node has indexed for this package (checked 2026-11-04:
@@ -80,28 +153,27 @@ download_edi_entity <- function(
   pkg  <- glue::glue("{scope}.{id}.{rev}")
   dir.create(dirname(dest), showWarnings = FALSE, recursive = TRUE)
 
-  # PASTA refuses every anonymous call now and then (2026-11-04: HTTP 403
-  # "Public Access is not authorized" on every endpoint, from two networks),
-  # so the entity listing is tried and, if it fails, the same bytes are read
-  # from EDI's DataONE member node, where the package is replicated under the
-  # PASTA identifiers (see edi_dataone_entity()).
-  ents <- tryCatch(
-    suppressWarnings(readLines(
-      glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}"),
-      warn = FALSE)),
-    error = function(e) NULL)
+  # PASTA refuses every anonymous call (HTTP 403 "Public Access is not
+  # authorized" since 2026-07-30; seen 2026-11-04 from two networks). With an
+  # access key the call is authenticated (edi_handle()); without one, or if
+  # PASTA still refuses, the same bytes are read from EDI's DataONE member
+  # node, where the package is replicated under the PASTA identifiers (see
+  # edi_dataone_entity()).
+  ents <- edi_read_lines(
+    glue::glue("https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}"))
 
   if (is.null(ents)) {
     if (verbose) cat(glue::glue(
-      "EDI: PASTA refused the entity listing for {pkg}; ",
+      "EDI: PASTA refused the entity listing for {pkg}",
+      "{if (nzchar(edi_access_key())) '' else ' (no access key configured)'}; ",
       "reading it from the DataONE replica (gmn.lternet.edu)\n\n"))
     edi_dataone_entity(scope, id, rev, entity_name, dest, verbose = verbose)
   } else {
     ents <- ents[nzchar(ents)]
     names(ents) <- vapply(ents, function(e) {
-      paste(readLines(
-        glue::glue("https://pasta.lternet.edu/package/name/eml/{scope}/{id}/{rev}/{e}"),
-        warn = FALSE), collapse = "")
+      paste(edi_read_lines(
+        glue::glue("https://pasta.lternet.edu/package/name/eml/{scope}/{id}/{rev}/{e}")),
+        collapse = "")
     }, character(1))
 
     if (!entity_name %in% names(ents))
@@ -114,7 +186,7 @@ download_edi_entity <- function(
       "https://pasta.lternet.edu/package/data/eml/{scope}/{id}/{rev}/{entity_id}")
 
     if (verbose) cat(glue::glue("EDI: downloading {pkg} '{entity_name}'\n\n"))
-    utils::download.file(url, dest, mode = "wb", quiet = !verbose)
+    edi_download(url, dest)
   }
 
   if (!is.null(md5)) {
