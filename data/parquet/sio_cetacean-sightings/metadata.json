@@ -20,6 +20,10 @@
       "name_long": "Sample Measurement",
       "description_md": "Event-level (effort) measurements: quantities that describe the sampling event itself rather than anything observed in it — net volume filtered, standard haul factor, proportion sorted, bottle cast conditions. Kept apart from `obs` so effort is never mistaken for an observation."
     },
+    "sample_track": {
+      "name_long": "Sample Track",
+      "description_md": "One row per sampling event that is a **path** on the sea surface rather than a point: an effort segment of a visual line-transect survey, the observer's line of sight from the ship to a sighted group (a net tow's start and end in future). The beginning, middle and end in x, y and t, the length and a beginning-to-end `LINESTRING`; `sample` keeps one point per event (a segment's midpoint, a sighting's animal position), so every consumer that reads `sample` is unchanged. At most one path per sample (`sample_key` is the key). Present only in a release where a dataset has one."
+    },
     "taxon": {
       "name_long": "Taxon",
       "description_md": "One authoritative row per taxon, keyed by `taxon_key` = `worms:<AphiaID>` (or `itis:<TSN>` for birds). Replaces the per-dataset taxon tables; duplicates across datasets collapse to one row, with names and lineage coalesced by source priority."
@@ -494,6 +498,69 @@
       "name_long": "Measurement Qualifier",
       "description_md": "Source quality flag, verbatim."
     },
+    "sample_track.sample_key": {
+      "name_long": "Sample Key",
+      "description_md": "The event this path belongs to: primary key here, foreign key to `sample.sample_key`."
+    },
+    "sample_track.dataset_key": {
+      "name_long": "Dataset Key",
+      "description_md": "Provenance stamp: `provider_dataset`."
+    },
+    "sample_track.track_type": {
+      "name_long": "Track Type",
+      "description_md": "What the path is: `effort_segment` (a survey segment from its start to its end), `sight_line` (the observer's line of sight from the ship's position to the animal's)."
+    },
+    "sample_track.datetime_beg": {
+      "name_long": "Datetime Beginning",
+      "description_md": "Time at the beginning of the path (UTC). A sight line is instantaneous: the same time at both ends."
+    },
+    "sample_track.datetime_mid": {
+      "name_long": "Datetime Middle",
+      "description_md": "Halfway in time between the beginning and the end (UTC), computed."
+    },
+    "sample_track.datetime_end": {
+      "name_long": "Datetime End",
+      "description_md": "Time at the end of the path (UTC)."
+    },
+    "sample_track.longitude_beg": {
+      "name_long": "Longitude Beginning",
+      "units": "decimal degrees",
+      "description_md": "Longitude where the path begins (WGS84): a segment's start, a sight line's ship position."
+    },
+    "sample_track.latitude_beg": {
+      "name_long": "Latitude Beginning",
+      "units": "decimal degrees",
+      "description_md": "Latitude where the path begins (WGS84)."
+    },
+    "sample_track.longitude_mid": {
+      "name_long": "Longitude Middle",
+      "units": "decimal degrees",
+      "description_md": "Longitude of the great-circle midpoint of the path (WGS84), computed; for an effort segment this is the `sample` row's position."
+    },
+    "sample_track.latitude_mid": {
+      "name_long": "Latitude Middle",
+      "units": "decimal degrees",
+      "description_md": "Latitude of the great-circle midpoint of the path (WGS84), computed."
+    },
+    "sample_track.longitude_end": {
+      "name_long": "Longitude End",
+      "units": "decimal degrees",
+      "description_md": "Longitude where the path ends (WGS84): a segment's end, a sight line's animal position (the sighting's `sample` row position)."
+    },
+    "sample_track.latitude_end": {
+      "name_long": "Latitude End",
+      "units": "decimal degrees",
+      "description_md": "Latitude where the path ends (WGS84)."
+    },
+    "sample_track.length_km": {
+      "name_long": "Length",
+      "units": "km",
+      "description_md": "Length of the path: the provider's own where it supplies one (a segment's `SegmentLength_km`), else the great-circle distance from beginning to end; a sight line's is the radial distance to the animal."
+    },
+    "sample_track.geom": {
+      "name_long": "Geometry",
+      "description_md": "Two-point `LINESTRING` from the beginning to the end, tagged EPSG:4326 at release; NULL where an end has no position."
+    },
     "taxon.taxon_key": {
       "name_long": "Taxon Key",
       "description_md": "Global taxon key: lowercase authority prefix plus id, `worms:127023` or `itis:176754`."
@@ -589,13 +656,18 @@
       "owned": true,
       "shared": true
     },
+    "sample_track": {
+      "rows": 7315,
+      "owned": true,
+      "shared": true
+    },
     "obs": {
       "rows": 4959,
       "owned": true,
       "shared": true
     },
     "obs_attribute": {
-      "rows": 16039,
+      "rows": 35098,
       "owned": true,
       "shared": true
     },
@@ -620,7 +692,7 @@
       "shared": true
     },
     "measurement_type": {
-      "rows": 234,
+      "rows": 298,
       "owned": true,
       "shared": true
     }

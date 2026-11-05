@@ -307,7 +307,7 @@ registry <- build_release_table_registry(here())
 # `cruise`) but would silently keep ONE dataset's `obs` and drop the other 14.
 # So the core is excluded here and assembled by union below (assemble_core()).
 core_shard_tables <- c(
-  "sample", "obs", "obs_attribute", "sample_measurement", "obs_ctd_full", "obs_mets_full",
+  "sample", "obs", "obs_attribute", "sample_measurement", "sample_track", "obs_ctd_full", "obs_mets_full",
   "taxon", "dataset_taxon", "taxon_group")
 
 # use only canonical, non-supplemental tables
@@ -737,7 +737,7 @@ shard_total <- function(tbl) {
 }
 
 core_tbls <- intersect(
-  c("sample", "obs", "obs_attribute", "sample_measurement"), dbListTables(con_wdl))
+  c("sample", "obs", "obs_attribute", "sample_measurement", "sample_track"), dbListTables(con_wdl))
 conservation <- tibble(
   table    = core_tbls,
   shards   = vapply(core_tbls, shard_total, numeric(1)),
@@ -771,6 +771,9 @@ fk_bad <- c(
     q("SELECT COUNT(*) n FROM obs_attribute WHERE taxon_key IS NOT NULL AND taxon_key NOT IN (SELECT taxon_key FROM taxon)") else 0,
   "dataset_taxon.taxon_key" = q("SELECT COUNT(*) n FROM dataset_taxon WHERE taxon_key NOT IN (SELECT taxon_key FROM taxon)"),
   "sample_measurement.sample_key" = q("SELECT COUNT(*) n FROM sample_measurement WHERE sample_key NOT IN (SELECT sample_key FROM sample)"),
+  # a path per sample (calcofi4db 4.35.0): present only when a dataset in the release has one
+  "sample_track.sample_key" = if ("sample_track" %in% dbListTables(con_wdl))
+    q("SELECT COUNT(*) n FROM sample_track WHERE sample_key NOT IN (SELECT sample_key FROM sample)") else 0,
   # the measurement vocabulary must cover EVERY grain, not just obs: promoting
   # bottom_depth_m into sample_measurement added a type that was not registered,
   # and with only obs.measurement_type asserted it went unnoticed.
@@ -1775,6 +1778,7 @@ dir.create(dir_frozen, recursive = TRUE, showWarnings = FALSE)
 # release but excluded from the ERD and default table list (opt-in deep dives).
 core_keep <- c(
   "obs", "sample", "obs_attribute", "sample_measurement",                    # core facts
+  "sample_track",                           # a path per sample (effort segments, sight lines; calcofi4db 4.35.0), when a dataset has one
   "grid", "cruise", "ship", "measurement_type", "dataset", "region",         # refs
   "taxon", "dataset_taxon", "taxon_group", "lookup",                         # taxa + lookups
   "spatial", "spatial_attribute",
@@ -2402,9 +2406,9 @@ freeze_stats <- freeze_stats |>
 # assertion after the catalog is built now makes this drift impossible to ship.
 core_spec <- dplyr::bind_rows(
   tibble(
-    table       = c("sample", "obs", "obs_attribute", "sample_measurement",
+    table       = c("sample", "obs", "obs_attribute", "sample_measurement", "sample_track",
                     "taxon", "dataset_taxon", "taxon_group"),
-    partitioned = c(FALSE,    TRUE,  FALSE,           FALSE,
+    partitioned = c(FALSE,    TRUE,  FALSE,           FALSE,                FALSE,
                     FALSE,    FALSE,           FALSE)),
   # browser-shaped objects built in [browser_objects]; obs_env and climatology are one object per variable
   tibble(table       = c("sample_spatial", "sample_root", "obs_bio", "obs_env", "climatology"),
@@ -2717,7 +2721,7 @@ if (length(meta_paths) > 0) {
   # exactly one dataset (dataset_key) -> clean, non-over-attributed stacks.
   ds_workflow <- vapply(ingest_yaml,
     function(cc) cc$workflow_url %||% NA_character_, character(1))
-  for (tbl in intersect(c("obs", "sample", "obs_attribute", "sample_measurement"),
+  for (tbl in intersect(c("obs", "sample", "obs_attribute", "sample_measurement", "sample_track"),
                         dbListTables(con_wdl))) {
     by_ds <- DBI::dbGetQuery(con_wdl, glue(
       "SELECT dataset_key, COUNT(*) AS n FROM {tbl} GROUP BY 1 ORDER BY n DESC"))

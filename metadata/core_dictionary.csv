@@ -86,3 +86,18 @@ taxon_group,,Taxon Group,,"Portable groupings of taxa (phytoplankton functional 
 taxon_group,taxon_group_key,Taxon Group Key,,"Group key, `<dataset-or-known-list>:<group>`."
 taxon_group,description,Description,,Human-readable description of the group.
 taxon_group,taxon_key,Taxon Key,,A member taxon; joins `taxon`.
+sample_track,,Sample Track,,"One row per sampling event that is a **path** on the sea surface rather than a point: an effort segment of a visual line-transect survey, the observer's line of sight from the ship to a sighted group (a net tow's start and end in future). The beginning, middle and end in x, y and t, the length and a beginning-to-end `LINESTRING`; `sample` keeps one point per event (a segment's midpoint, a sighting's animal position), so every consumer that reads `sample` is unchanged. At most one path per sample (`sample_key` is the key). Present only in a release where a dataset has one."
+sample_track,sample_key,Sample Key,,"The event this path belongs to: primary key here, foreign key to `sample.sample_key`."
+sample_track,dataset_key,Dataset Key,,Provenance stamp: `provider_dataset`.
+sample_track,track_type,Track Type,,"What the path is: `effort_segment` (a survey segment from its start to its end), `sight_line` (the observer's line of sight from the ship's position to the animal's)."
+sample_track,datetime_beg,Datetime Beginning,,Time at the beginning of the path (UTC). A sight line is instantaneous: the same time at both ends.
+sample_track,datetime_mid,Datetime Middle,,"Halfway in time between the beginning and the end (UTC), computed."
+sample_track,datetime_end,Datetime End,,Time at the end of the path (UTC).
+sample_track,longitude_beg,Longitude Beginning,decimal degrees,"Longitude where the path begins (WGS84): a segment's start, a sight line's ship position."
+sample_track,latitude_beg,Latitude Beginning,decimal degrees,Latitude where the path begins (WGS84).
+sample_track,longitude_mid,Longitude Middle,decimal degrees,"Longitude of the great-circle midpoint of the path (WGS84), computed; for an effort segment this is the `sample` row's position."
+sample_track,latitude_mid,Latitude Middle,decimal degrees,"Latitude of the great-circle midpoint of the path (WGS84), computed."
+sample_track,longitude_end,Longitude End,decimal degrees,"Longitude where the path ends (WGS84): a segment's end, a sight line's animal position (the sighting's `sample` row position)."
+sample_track,latitude_end,Latitude End,decimal degrees,Latitude where the path ends (WGS84).
+sample_track,length_km,Length,km,"Length of the path: the provider's own where it supplies one (a segment's `SegmentLength_km`), else the great-circle distance from beginning to end; a sight line's is the radial distance to the animal."
+sample_track,geom,Geometry,,"Two-point `LINESTRING` from the beginning to the end, tagged EPSG:4326 at release; NULL where an end has no position."
