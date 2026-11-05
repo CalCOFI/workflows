@@ -669,7 +669,13 @@ release keeps what it already had.
 
 ```{r}
 #| label: pick_archives
+#| eval: true
 
+# always evaluates: the chunk above may have set eval=FALSE to skip read+bind when
+# resuming from the ctd_raw checkpoint, but `d_zips_read` is also what
+# [archive_sources] archives after write_parquet — a resumed render stopped there
+# with "object 'd_zips_read' not found" (v2026.11.05). These are data-frame filters
+# on the already-listed d_zips, so they cost nothing in either mode.
 # a GCS-only final is redundant when calcofi.org already publishes a final for that
 # cruise. Everything else — every preliminary, every raw, and every final for a
 # cruise calcofi.org has no final for — is read.
