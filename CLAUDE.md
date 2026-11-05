@@ -97,6 +97,10 @@ Rscript scripts/build_workflows_index.R
   the targets lock and the orphaned `rmd.R`.
 - **Never depend on the CTD team's live PostgreSQL in a pipeline run.** The
   bridge is the nightly `gs://calcofi-db/qc/ctd/flag_accepted.parquet` snapshot.
+- **EDI (PASTA) refuses anonymous calls since 2026-07-30.** Every EDI acquisition goes
+  through `libs/download_edi.R`, which swaps the access key in
+  `~/.config/calcofi/edi_access_key.txt` (or `EDI_ACCESS_KEY`) for a session token carried
+  in a cookie; the key never goes in a URL, a log, a notebook or git (README 'EDI access key').
 - Notebook chunks use `cat()` not `message()`, one `datatable()` call per
   preview, and `----`-suffixed section headings in long chunks.
 
