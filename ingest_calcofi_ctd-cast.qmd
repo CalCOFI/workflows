@@ -5822,7 +5822,14 @@ to look. This is a **sample, not a sweep** — the remaining cruises are the app
 
 rules_cruise <- filter(rules_act, coalesce(scope, "all") == "cruise")
 
-if (has_full && nrow(rules_cruise)) {
+# CTD_SKIP_CRUISE_RULES=TRUE leaves this sample out of a render. On DuckDB 2.0.0 the
+# out-of-range scan below (obs parquet view JOIN measurement_type) stopped making
+# progress twice in a row on 2026-11-05 — main thread in Executor::WaitForTask, every
+# worker parked, 0 % CPU for hours — and the v2026.11.05 release was cut without it.
+# The sample is a report, not a gate; skipping it is said so below, never read as pass.
+skip_cruise_rules <- isTRUE(as.logical(Sys.getenv("CTD_SKIP_CRUISE_RULES", "FALSE")))
+
+if (has_full && nrow(rules_cruise) && !skip_cruise_rules) {
   worst_cruise <- dbGetQuery(fcon, "
     SELECT o.cruise_key, COUNT(*) AS n
     FROM obs o JOIN measurement_type m USING (measurement_type)
@@ -5856,7 +5863,9 @@ if (has_full && nrow(rules_cruise)) {
 } else {
   worst_cruise <- NA_character_
   qc_sum_cr    <- NULL
-  say("obs_ctd_full not present — the profile rules are SKIPPED, not passed")
+  say(if (skip_cruise_rules)
+    "CTD_SKIP_CRUISE_RULES set — the profile-rule sample is SKIPPED this render, not passed" else
+    "obs_ctd_full not present — the profile rules are SKIPPED, not passed")
 }
 ```
 
