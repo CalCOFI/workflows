@@ -1,0 +1,19 @@
+tbl_old,tbl_new,fld_old,fld_new,type_old,type_new,fld_description,units,notes
+SizeFractionatedChl,chl_size_station,studyName,study_name,VARCHAR,VARCHAR,Provider cruise identifier string; ship NODC code in the trailing token.,,"12 distinct, e.g. '1994-01-20-C-31JD'"
+SizeFractionatedChl,chl_size_station,Cruise,cruise_ym,VARCHAR,VARCHAR,CalCOFI cruise designation (YYYYMM).,,differs from the start month in studyName on 70 rows
+SizeFractionatedChl,chl_size_station,Station ID,station_id_src,VARCHAR,VARCHAR,"CalCOFI station as written in the source ('LLL.L SSS.S'), with lines 76.7/81.8/83.3/86.7 rounded to whole numbers.",,mapped to site_key through station_crosswalk.csv (Q03)
+SizeFractionatedChl,chl_size_measurement,Total Chl a (mg/m²),,VARCHAR,,"Total chlorophyll a integrated 0-100 m (ten GF/F samples, integrated algebraically).",mg/m2,pivoted to measurement_type='chl_a_int_100m'; 9.3-585.8
+SizeFractionatedChl,chl_size_measurement,Chl a > 8µm (mg/m²),,VARCHAR,,"Chlorophyll a of cells >= 8 um integrated 0-100 m (one physically integrated sample on an 8 um membrane filter).",mg/m2,pivoted to measurement_type='chl_a_gt8um_int_100m'; 0.04-350
+SizeFractionatedChl,chl_size_station,Chl a < 8µm (mg/m²),chl_a_lt8um,VARCHAR,DOUBLE,Chlorophyll a of cells < 8 um: total minus >= 8 um. Not published (derivable).,mg/m2,asserted equal to the difference
+SizeFractionatedChl,chl_size_station,Total Zooplankton Displacement Volume (ml/1000m3),zooplankton_dv_ml_1000m3,VARCHAR,DOUBLE,Total zooplankton displacement volume. Not published (Q02).,ml/1000m3,blank on 5 rows
+SizeFractionatedChl,chl_size_station,Nitracline Depth (m),nitracline_depth_m,VARCHAR,DOUBLE,Nitracline depth. Not published (derivable from calcofi_bottle nutrients).,m,0-162 m
+SizeFractionatedChl,chl_size_station,,station_id,,INTEGER,Integer pivot FK between chl_size_station and chl_size_measurement.,,derived: row_number()
+SizeFractionatedChl,chl_size_station,,sample_key_id,,VARCHAR,"Natural key: study_name-LLL.L_SSS.S (asserted unique); the id part of sample_key cce-lter_chl-size-fractionated:cast:{id}.",,derived
+SizeFractionatedChl,chl_size_station,,site_key,,VARCHAR,Official CalCOFI station key from station_crosswalk.csv.,,
+SizeFractionatedChl,chl_size_station,,cruise_key,,VARCHAR,Cruise natural key YYYY-MM-NODC from the matched calcofi_bottle cast (asserted equal to the source designation).,,
+SizeFractionatedChl,chl_size_station,,datetime_start_utc,,TIMESTAMP,Time of the matched calcofi_bottle cast.,,
+SizeFractionatedChl,chl_size_station,,latitude,,DOUBLE,Latitude of the matched calcofi_bottle cast.,decimal_degrees,
+SizeFractionatedChl,chl_size_station,,longitude,,DOUBLE,Longitude of the matched calcofi_bottle cast.,decimal_degrees,
+SizeFractionatedChl,chl_size_measurement,,measurement_id,,INTEGER,Sequential measurement identifier.,,derived (row_number)
+SizeFractionatedChl,chl_size_measurement,,measurement_type,,VARCHAR,FK to measurement_type.measurement_type.,,
+SizeFractionatedChl,chl_size_measurement,,measurement_value,,DOUBLE,Numeric value; units carried by measurement_type.,,
