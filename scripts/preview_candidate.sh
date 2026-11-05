@@ -25,6 +25,9 @@
 #   CALCOFI_DUCKDB_THREADS       DuckDB threads (default 5)
 #   CALCOFI_CAND_ROOT            where each candidate's own stage dir lives (default ~/_big/calcofi-cand)
 #   CALCOFI_SHARED_STAGE_DIR     the shared stage dir whose parquet/ the candidate reads (default ~/_big/calcofi)
+#   CALCOFI_CAND_OVERRIDE        space-separated dataset keys whose shard the caller rendered into
+#                                $CALCOFI_CAND_ROOT/<short>/parquet/<key>/ for this candidate alone; every other
+#                                dataset is a symlink to the shared shard
 # and ~/.config/calcofi/env.sh is sourced first when present (R_LIBS_USER, the service account,
 # the CalCOFI limits). Set by the script for the render, never by the caller:
 #   CALCOFI_STAGE_DIR=$CALCOFI_CAND_ROOT/<short>  its own releases-staging/<version> and tmp/;
@@ -89,7 +92,27 @@ SHARED="${CALCOFI_SHARED_STAGE_DIR:-$HOME/_big/calcofi}"
 STAGE="$CAND_ROOT/$DS"
 [ -d "$SHARED/parquet" ] || { echo "no shared shards at $SHARED/parquet" >&2; exit 1; }
 mkdir -p "$STAGE/tmp/release_duckdb"
-ln -sfn "$SHARED/parquet" "$STAGE/parquet"
+# the shards: a symlink to the shared parquet/, or, when CALCOFI_CAND_OVERRIDE names datasets the
+# caller re-rendered for this candidate alone (e.g. farallon_bird-mammal with the marine-mammal cut
+# that is gated off in public), a directory of one symlink per shared dataset with those datasets as
+# real directories the caller filled beforehand (render with CALCOFI_STAGE_DIR=$STAGE)
+if [ -n "${CALCOFI_CAND_OVERRIDE:-}" ]; then
+  [ -L "$STAGE/parquet" ] && rm "$STAGE/parquet"
+  mkdir -p "$STAGE/parquet"
+  for d in "$SHARED"/parquet/*/; do
+    k="$(basename "$d")"
+    case " $CALCOFI_CAND_OVERRIDE " in
+      *" $k "*) [ -f "$STAGE/parquet/$k/sample.parquet" ] ||
+                  { echo "override $k: no shard at $STAGE/parquet/$k (render it with CALCOFI_STAGE_DIR=$STAGE first)" >&2; exit 1; };;
+      *)        [ -d "$STAGE/parquet/$k" ] && [ ! -L "$STAGE/parquet/$k" ] && { echo "$STAGE/parquet/$k is a real directory but not in CALCOFI_CAND_OVERRIDE" >&2; exit 1; }
+                ln -sfn "${d%/}" "$STAGE/parquet/$k";;
+    esac
+  done
+  echo "shards: $SHARED/parquet with override(s) $CALCOFI_CAND_OVERRIDE"
+else
+  [ -d "$STAGE/parquet" ] && [ ! -L "$STAGE/parquet" ] && { echo "$STAGE/parquet is a directory (an override farm); set CALCOFI_CAND_OVERRIDE or remove it" >&2; exit 1; }
+  ln -sfn "$SHARED/parquet" "$STAGE/parquet"
+fi
 export CALCOFI_STAGE_DIR="$STAGE"
 export CALCOFI_PREVIEW_BUCKET="$BUCKET" CALCOFI_RELEASE_BUCKET="$BUCKET"
 export CALCOFI_RELEASE_PREFIX="$ROOT/releases" CALCOFI_TABLES_PREFIX="$ROOT/tables"
