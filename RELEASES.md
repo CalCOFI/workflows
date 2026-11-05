@@ -121,6 +121,56 @@ the samples key to `2009-07-33MH` (toc Q08, poc-pon Q07, hplc Q08). All three st
 `in_release: false`; the correction reaches a release only through their private previews until
 their consent questions are answered.
 
+## `sio_cetacean-sightings` (held): every effort segment becomes a path and every sighting is placed at the animal
+
+The second private preview of the Scripps Whale Acoustics Lab's visual sightings (Ben, 2026-11-06,
+after the lab's review of the first on 2026-11-05) publishes what the first kept as midpoints and
+ship positions. A new core table **`sample_track`** (calcofi4db 4.35.0) holds one row per sample
+whose event is a path on the sea surface: each of the 3,165 on-effort segments as an
+`effort_segment` (beginning, middle and end in position and time, the lab's `SegmentLength_km` as
+`length_km`, a start-to-end `LINESTRING`; its `sample` row keeps the great-circle midpoint as its
+point), and for each placed sighting a `sight_line` from the ship's position to the animal's. A
+sighting's `sample` point is now the **animal's position**, placed by coordinate geometry
+(`cogo_true_bearing()`, `cogo_destination()`) from the ship's position, the lab's angle off the bow
+and side, and the radial distance (the binocular-reticle distance or the recorded distance,
+whichever reproduces the lab's perpendicular distance): 4,150 of the 4,961 sightings are placed
+and 811 stay at the ship's position (no bearing or no distance; `position_method`). Four
+`obs_attribute` types join the group-size range and calves on every counted sighting:
+`perp_distance` (m, the lab's own, withheld on the 13 sightings where it was computed from the
+horizon distance, Q27), `radial_distance` (m), `sighting_angle` (degrees off the bow, the side in
+`bin_label`) and `beaufort`; 35,098 attribute rows. The lab's three source files and the
+inspection files (segments, placed sightings and sight lines as GeoJSON) are archived to
+`gs://calcofi-files-private/archive/sio/cetacean-sightings/` and served beside the preview's
+notebook as `src/`. Questions Q16–Q29 are added to the dataset's register (the lab doc of
+2026-10-08, the horizon distance, the sightings far from their segment, and the publication of the
+geometry). `release_database.qmd` assembles `sample_track` from the shards with the core, checks
+its key against `sample`, and exports it with the default set; a public release has the table only
+once a dataset with paths is released.
+
+## Farallon's marine mammals are cut on the cruises the SIO cetacean survey covers, once that survey is released
+
+`farallon_bird-mammal` (Farallon Institute's seabird and marine-mammal strip transects) and
+`sio_cetacean-sightings` (the Scripps Whale Acoustics Lab's line-transect cetacean survey) ride the
+same CalCOFI cruises with independent observer teams, so from the start of the SIO survey a
+cetacean group can be logged by both and summing the two datasets counts it twice. Decided
+2026-11-06 after the 2026-11-05 meeting with the lab: `ingest_farallon_bird-mammal.qmd` drops
+Farallon's marine-mammal observations (species of ERDDAP `type` mammal) on the cruises where the
+SIO survey has effort segments, from the survey's first segment on (2004-07-13 in the staged
+shard). Farallon's birds, fish and turtles, its transects (`sample`), its mammals before the SIO
+survey began and its mammals on cruises the survey did not sail are kept. The rule is gated: it
+applies only when `sio_cetacean-sightings` is `in_release: true`, so while that dataset is held
+this release's Farallon rows are unchanged. `CALCOFI_FARALLON_CUT_COVERED=1` applies the cut for a
+review render or a private preview candidate, and the notebook now depends on the sightings
+ingest. A render with the flag (sightings shard staged 2026-10-04, effort on 64 cruises) cut 2,282
+source observation rows on 36 cruises, which is 2,059 `obs` headline rows (69,661 → 67,602) and
+2,282 `obs_attribute` rows (87,813 → 85,531). It kept 3,394 mammal rows: 3,240 before the survey
+and 154 on four cruises the survey did not sail (2005-04-31JD, 2010-04-31FN, the 2011 Fronts
+cruise with no `cruise_key`, and 2012-08-32I1, the 2012 Fronts cruise). The notebook's table lists
+every Farallon cruise with marine mammals since the survey began. Asserted at render time:
+non-mammal rows are never cut, no pre-survey mammal is cut, no mammal remains on a covered cruise
+when the cut applies, and the row count is unchanged when it does not. A render without the flag
+staged `sample` / `obs` / `obs_attribute` with the same content hashes as before.
+
 # v2026.11.04
 
 ## Hypoxic boundary depths, the nitracline, the pycnocline and N² join the CTD-derived products

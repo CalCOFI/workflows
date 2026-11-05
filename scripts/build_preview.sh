@@ -13,6 +13,8 @@
 #
 # Env: SITE_DIR (a CalCOFI.github.io checkout with scripts/build_preview.sh, default
 # ../CalCOFI.github.io), EXPLORE_DIR (a CalCOFI/explore checkout with VITE_PREVIEW, default
+# ../explore), PREVIEW_SRC_DIR (the notebook's inspection files served as src/, default
+# $CALCOFI_STAGE_DIR/inspect/<key>),
 # ../explore), CALCOFI_PREVIEW_BUCKET (default calcofi-preview), PREVIEW_RELEASE_ROOT (default
 # ducklake-preview). PREVIEW_ACCESS must match the service's: `iap` (default) shows the build at
 # /d/<key>/ to the addresses access.csv grants; `link` shows it at /<key>/<token>/, token = 8 of
@@ -80,6 +82,15 @@ if [ -n "$NOTEBOOK" ]; then
   else
     cp "$NOTEBOOK" "$OUT/ingest.html"
   fi
+fi
+
+# 3b. the inspection files the notebook links as src/… (the provider's source files, the GeoJSON of
+# effort segments and sight lines): the ingest writes them under $CALCOFI_STAGE_DIR/inspect/<key>/
+# and archives them to the private bucket; PREVIEW_SRC_DIR overrides the directory ----
+SRC_DIR="${PREVIEW_SRC_DIR:-${CALCOFI_STAGE_DIR:-$HOME/_big/calcofi}/inspect/$KEY}"
+if [ -n "$NOTEBOOK" ] && [ -d "$SRC_DIR" ]; then
+  mkdir -p "$OUT/src" && cp -R "$SRC_DIR"/. "$OUT/src/"
+  echo "src/: $(find "$OUT/src" -type f | wc -l | tr -d ' ') inspection files from $SRC_DIR"
 fi
 
 # 4. build.json: what is on show and the consent question it answers ----

@@ -6,6 +6,9 @@ calcofi:
   dependency:
     - ingest_swfsc_ichthyo
     - ingest_calcofi_ctd_cast
+    # the SIO survey's effort segments decide which cruises' marine mammals are
+    # cut (see "Marine mammals on cruises with a dedicated cetacean survey")
+    - ingest_sio_cetacean_sightings
   output: data/parquet/farallon_bird-mammal/manifest.json
   provider: farallon
   dataset: bird-mammal
@@ -61,6 +64,11 @@ served, not patched from DataZoo.
   `bird_mammal_species` (**ERDDAP** `_sp`, with the ITIS TSN and include /
   unidentified flags joined back from the committed DataZoo list — see Build
   Lookups) and `bird_mammal_behavior` (**local**) lookups.
+- **Marine mammals**: on the cruises the Scripps Whale Acoustics Lab's dedicated
+  cetacean survey (`sio_cetacean-sightings`) covers, Farallon's marine-mammal
+  observations are cut so a cetacean group is not counted twice, but only once
+  that survey is in the release; birds, fish and turtles are never cut (see
+  Marine mammals on cruises with a dedicated cetacean survey).
 - **Taxonomy**: the species vocabulary is *declared* here with
   `calcofi4db::append_dataset_taxon()` and *resolved* by the package against
   WoRMS/ITIS (taxon plan D1–D3, calcofi4db ≥ 3.29.0); see Emit Core Tables.
@@ -110,9 +118,10 @@ dir_dl       <- here(glue("data/cache/{dir_label}")); dir_create(dir_dl)
 # DataZoo's species list, committed once: the ITIS TSN per code plus the
 # include / unidentified flags that ERDDAP's species table dropped (Build Lookups)
 f_datazoo    <- here("metadata/farallon/bird-mammal/species_itis_datazoo.csv")
-# GCS uploads (source archive + parquet mirror). Flip to FALSE to render without
-# publishing -- a review render, or a machine without gcloud credentials.
-publish_to_gcs <- TRUE
+# GCS uploads (source archive + parquet mirror). CALCOFI_SKIP_GCS=1 renders
+# without publishing -- a review render, or a machine without gcloud credentials
+# (as in ingest_calcofi_bottle / ctd-cast)
+publish_to_gcs <- Sys.getenv("CALCOFI_SKIP_GCS") == ""
 
 if (overwrite) {
   if (file_exists(db_path))                 file_delete(db_path)
@@ -448,6 +457,146 @@ The unresolved label is correct as NULL, not a gap to be filled:
 
 `CAC2021_7` (2021-07-33P4) and `CAC2022_8` (2022-08-39C2) were NULL until the
 track took in the CTD casts; both cruises sailed without an ichthyo tow.
+
+## Marine mammals on cruises with a dedicated cetacean survey
+
+From 2004-07 the Scripps Whale Acoustics Lab runs its own line-transect cetacean
+survey (`sio_cetacean-sightings`) on the same CalCOFI cruises Farallon's
+observers ride, with an independent observer team. A whale or dolphin group can
+then be logged by both teams, and summing the two datasets counts it twice. Ben
+decided on 2026-11-06 (after the 2026-11-05 meeting with the lab) to cut
+**Farallon's marine-mammal observations on the cruises the SIO survey covers**
+(the distinct `cruise_key` of its effort segments, from the date its survey
+begins), and only those: Farallon's birds, fish and turtles are untouched, and
+its mammals before the SIO survey begins or on a cruise the survey did not sail
+stay. The transects (`sample`) stay too, so effort is unchanged.
+
+The cut is gated on the replacement being public: it applies when
+`sio_cetacean-sightings` is `in_release: true` in its notebook's `calcofi:`
+block, and otherwise the observations are unchanged, so the release never loses
+Farallon's mammals while the SIO dataset is held. `CALCOFI_FARALLON_CUT_COVERED=1`
+applies the cut regardless, for a review render or a private preview candidate.
+The table below lists every Farallon cruise with marine-mammal observations
+since the SIO survey began, covered or not, and which were cut.
+
+```{r}
+#| label: mammal-sio-cut
+
+# the gate: the SIO notebook's own in_release flag (a notebook without the key
+# is released), or the env var for a review render / preview candidate
+cc_sight    <- read_calcofi_meta(here("ingest_sio_cetacean-sightings.qmd"))
+cut_covered <- isTRUE(cc_sight$in_release %||% TRUE) ||
+  Sys.getenv("CALCOFI_FARALLON_CUT_COVERED") == "1"
+
+# covered cruises: the SIO survey's effort segments (sample_type 'transect');
+# a sighting alone does not make a cruise covered
+f_sight <- cc_stage_path("parquet", "sio_cetacean-sightings", "sample.parquet")
+stopifnot(
+  "the sio_cetacean-sightings sample shard must be staged (a declared dependency)" =
+    file_exists(f_sight))
+d_sio <- dbGetQuery(con, glue("
+  SELECT cruise_key, MIN(datetime) AS dt_min
+  FROM read_parquet('{f_sight}')
+  WHERE sample_type = 'transect' AND cruise_key IS NOT NULL
+  GROUP BY cruise_key"))
+covered      <- sort(d_sio$cruise_key)
+first_survey <- min(d_sio$dt_min)
+
+# marine mammal = a species whose ERDDAP type is 'mammal'
+q_mam <- "
+  SELECT o.gis_key, o.species_code, tr.cruise_key, tr.cruise_label,
+         tr.datetime_start_utc AS datetime
+  FROM bird_mammal_observation o
+  JOIN bird_mammal_transect tr USING (gis_key)
+  JOIN bird_mammal_species  s  USING (species_code)
+  WHERE s.is_mammal"
+n_obs_0    <- dbGetQuery(con, "SELECT COUNT(*) FROM bird_mammal_observation")[[1]]
+n_nonmam_0 <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM bird_mammal_observation o
+  LEFT JOIN bird_mammal_species s USING (species_code)
+  WHERE NOT coalesce(s.is_mammal, FALSE)")[[1]]
+d_mam_0 <- dbGetQuery(con, q_mam) |>
+  mutate(
+    covered  = !is.na(cruise_key) & cruise_key %in% covered,
+    post     = !is.na(datetime) & datetime >= first_survey,
+    # a mammal on a covered cruise before the survey's first segment was seen
+    # by Farallon alone, so the cut is covered AND on/after first_survey
+    to_cut   = cut_covered & covered & post)
+n_pre_0 <- sum(!d_mam_0$post)
+
+# the cut: the mammal rows on the cut transects; transects and every other
+# species stay
+gis_cut <- unique(d_mam_0$gis_key[d_mam_0$to_cut])
+if (cut_covered && length(gis_cut) > 0) {
+  dbWriteTable(con, "tmp_gis_cut", tibble(gis_key = gis_cut),
+               temporary = TRUE, overwrite = TRUE)
+  dbExecute(con, "
+    DELETE FROM bird_mammal_observation
+    WHERE gis_key IN (SELECT gis_key FROM tmp_gis_cut)
+      AND species_code IN (SELECT species_code FROM bird_mammal_species WHERE is_mammal)")
+  dbExecute(con, "DROP TABLE tmp_gis_cut")
+}
+
+# what is left ----
+n_obs_1    <- dbGetQuery(con, "SELECT COUNT(*) FROM bird_mammal_observation")[[1]]
+n_nonmam_1 <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM bird_mammal_observation o
+  LEFT JOIN bird_mammal_species s USING (species_code)
+  WHERE NOT coalesce(s.is_mammal, FALSE)")[[1]]
+d_mam_1 <- dbGetQuery(con, q_mam) |>
+  mutate(
+    covered = !is.na(cruise_key) & cruise_key %in% covered,
+    post    = !is.na(datetime) & datetime >= first_survey)
+n_cut <- sum(d_mam_0$to_cut)
+
+stopifnot(
+  "when cutting, no mammal observation remains on a covered cruise after the survey begins" =
+    !cut_covered || !any(d_mam_1$covered & d_mam_1$post),
+  "when not cutting, the observation row count is unchanged" =
+    cut_covered || n_obs_1 == n_obs_0,
+  "the rows removed are exactly the mammal rows marked to cut" =
+    n_obs_0 - n_obs_1 == n_cut,
+  "the cut never removes a non-mammal row" =
+    n_nonmam_1 == n_nonmam_0,
+  "no mammal observation before the SIO survey begins is removed" =
+    sum(!d_mam_1$post) == n_pre_0,
+  "every covered cruise key is a YYYY-MM-NODC key" =
+    all(grepl("^\\d{4}-(0[1-9]|1[0-2])-[A-Za-z0-9]{4}$", covered)))
+
+# every Farallon cruise with mammals since the SIO survey began ----
+d_span <- dbGetQuery(con, "
+  SELECT cruise_label, MIN(date) AS date_start, MAX(date) AS date_end
+  FROM bird_mammal_transect GROUP BY cruise_label")
+d_mam_cruise <- d_mam_0 |>
+  filter(post) |>
+  group_by(cruise_key, cruise_label) |>
+  summarize(
+    n_mammal_obs = n(), covered = any(covered), cut = any(to_cut),
+    .groups = "drop") |>
+  left_join(d_span, by = "cruise_label") |>
+  relocate(date_start, date_end, .after = cruise_label) |>
+  arrange(date_start)
+
+d_mam_cruise |>
+  datatable(
+    caption  = glue(
+      "Farallon cruises with marine-mammal observations since the SIO cetacean ",
+      "survey began ({format(first_survey, '%Y-%m-%d')}): covered = the SIO survey ",
+      "has effort on the cruise; cut = its Farallon mammals are dropped"),
+    rownames = FALSE, filter = "top")
+
+n_cruise_cut <- sum(d_mam_cruise$cut)
+n_uncov      <- sum(d_mam_1$post & !d_mam_1$covered)
+cat(glue(
+  "SIO survey begins {format(first_survey, '%Y-%m-%d')}, effort on ",
+  "{length(covered)} cruises; ",
+  "{if (cut_covered) 'CUT' else 'NOT cut (sio_cetacean-sightings is held)'}: ",
+  "{format(n_cut, big.mark = ',')} mammal obs dropped on {n_cruise_cut} cruises; ",
+  "{format(nrow(d_mam_1), big.mark = ',')} mammal obs remain ",
+  "({format(sum(!d_mam_1$post), big.mark = ',')} before the survey, ",
+  "{format(n_uncov, big.mark = ',')} on {sum(!d_mam_cruise$covered)} uncovered cruises",
+  "{if (cut_covered) '' else glue(', ', format(sum(d_mam_1$post & d_mam_1$covered), big.mark = ','), ' on covered cruises')})"), "\n")
+```
 
 ## Load Dataset Metadata + Schema
 
