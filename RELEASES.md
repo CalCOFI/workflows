@@ -8,6 +8,19 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## July 2009 ship code corrected on the three CCE-LTER CalCOFI bottle datasets (held)
+
+`cce-lter_toc` (621 samples), `cce-lter_poc-pon` (254) and `cce-lter_hplc-pigments-calcofi` (254)
+carry the CalCOFI bottle database's cruise id for July 2009, `2009-07-14-C-31M4` (MCARTHUR, out of
+service since 2003), and keyed those samples to a derived `2009-07-31M4` beside SWFSC's
+`2009-07-33MH` (MCARTHUR II) at the same stations within 24 h, which check 11 of
+`check_cruise_key_integrity()` stopped at the 2026-11-04 preview candidates. The registry row in
+`metadata/cruise_ship_corrections.csv` that already corrects the bottle, picoplankton and DIC
+datasets now lists these three, each ingest calls `correct_cruise_ship()` before keying cruises, and
+the samples key to `2009-07-33MH` (toc Q08, poc-pon Q07, hplc Q08). All three stay
+`in_release: false`; the correction reaches a release only through their private previews until
+their consent questions are answered.
+
 # v2026.11.04
 
 ## Hypoxic boundary depths, the nitracline, the pycnocline and N² join the CTD-derived products
