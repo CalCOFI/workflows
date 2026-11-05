@@ -205,10 +205,16 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
 `cc_climatology()` (reads it when the connection has it). Rules that fell out:
 
 - **Month-matched, always — and the month is the cruise's.** A cast's anomaly is its value
-  minus the cell of *its own* station and cruise month (`substr(cruise_key, 6, 2)`, the
-  month SWFSC designates), never `month(datetime)` (calcofi4db 4.22.0: 2607's 30 June
-  casts looked up a June baseline no cruise samples). Pooling months is never an option,
-  whatever the UI's season filter says.
+  minus the cell of *its own* station and cruise month, never `month(datetime)` (calcofi4db
+  4.22.0: 2607's 30 June casts looked up a June baseline no cruise samples). Since 4.34.0
+  the cruise's month is its **median cast month**, `cruise.month_median`, written at release
+  by `add_cruise_median_date()` from the median datetime of the cruise's root samples
+  (Rasmus Swalethorp 2026-10-16, Ben Best 2026-10-20: a cruise ID names sometimes the month
+  the cruise started, sometimes the month it mostly covered; 59 of 868 cruises centre on the
+  month beside their key's), falling back to the key's `substr(cruise_key, 6, 2)` only where
+  the cruise table lacks it. `build_climatology()` / `build_obs_slim()` take it through
+  `cruise_tbl`; a consumer reads `cruise.month_median` or `obs_env.cruise_month`, never the
+  key. Pooling months is never an option, whatever the UI's season filter says.
 - **10 m floor bins, not 5.** `obs` carries the *thinned* CTD series (10 m grid + RDP
   inflection points + bottle depths); at 5 m the off-grid bins hold a third of the casts,
   sampled where the profile bends, and their means sit visibly off their neighbours'.
@@ -229,20 +235,25 @@ with `scripts/climatology_fallback.sql` for a release that predates it), explore
   (`test_release.qmd` fails it).
 - **The seasonal baseline is columns, not rows** (4.24.0, `season = TRUE`, which the
   release sets): `quarter`, `season_mean`, `season_sd`, `season_n`, `season_n_cruises`,
-  by the quarter of the *cruise's month* (Q1 Jan–Mar … Q4 Oct–Dec — the Explorer's season
-  filter), on every month of a quarter that passes the cruise floor. Rows, not columns,
+  by the season of the *cruise's month* — **1 = DJF, 2 = MAM, 3 = JJA, 4 = SON since
+  4.34.0** (`cruise_quarter_sql()`; Q1 Jan–Mar … Q4 Oct–Dec through v2026.10.30), December
+  counting toward the following year's winter (`season_year`), the Explorer's season
+  filter — on every month of a season that passes the cruise floor. Rows, not columns,
   would double-count in anything that sums the table. A month below the monthly floor
-  inside a passing quarter (mostly lines 60–73.3) gets a row with **`clim_mean` NULL**:
+  inside a passing season (mostly lines 60–73.3) gets a row with **`clim_mean` NULL**:
   that is "no monthly baseline", the same as an absent row, so a consumer tests
   `clim_mean IS NOT NULL` before it subtracts and never draws the blank as 0.
   `calcofi4r::cc_climatology(season = TRUE)` and `cc_cast_anomaly()` read them;
   `build_measurements_catalog()` ignores rows whose monthly `clim_mean` is NULL.
   Requested by Rasmus Swalethorp, 2026-10-06/07.
 - **`obs_env` / `obs_bio` `year` and `quarter` are the cruise's** (`build_obs_slim()`,
-  4.24.0), from `cruise_key`; the calendar date only where the key does not parse. The
-  Explorer's season filter and the seasonal baseline therefore agree on 2607's 30 June
-  casts: Q3. `test_release.qmd` asserts it (`cruise_key = '2026-07-3322' AND quarter <> 3`
-  is zero), with the per-cast cell, every-monthly-cell-has-a-season, and NULL-`depth_bin`
-  checks beside it.
+  4.24.0), from `cruise.month_median` / `date_median` since 4.34.0 (the key where the table
+  lacks it; the calendar date only where the key does not parse), with `cruise_month` and
+  `season_year` appended after `hex7`. The Explorer's season filter and the seasonal
+  baseline therefore agree on 2607's 30 June casts: JJA (`quarter` 3). `test_release.qmd`
+  asserts it (`cruise_key = '2026-07-3322' AND quarter <> 3` is zero), that `cruise` carries
+  the four median columns, that a December cruise is DJF of the following year and that
+  every `obs_env` row's `quarter` / `cruise_month` / `season_year` match its cruise, with
+  the per-cast cell, every-monthly-cell-has-a-season, and NULL-`depth_bin` checks beside it.
 - **Plotly's built-in `"RdBu"` runs blue → red** (`0 = rgb(5,10,172)`). Pass an explicit
   ramp — both apps share ctd-transects' five stops — and check the sign in a screenshot.

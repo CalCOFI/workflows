@@ -53,6 +53,24 @@ Google Drive → rclone → GCS (calcofi-files) → targets → Parquet → Duck
    - `gcs`: Google Cloud Storage (project: ucsd-sio-calcofi)
 3. run sync: `./scripts/sync_gdrive_to_gcs.sh`
 
+### EDI access key
+
+EDI (the Environmental Data Initiative, `pasta.lternet.edu`) has required authentication
+for every REST call since 2026-07-30, and its DataONE replica refuses anonymous reads too.
+The CCE-LTER acquisitions in `libs/download_*.R` go through `libs/download_edi.R`, which
+exchanges an EDI access key for a short-lived token once per session (the token travels in
+a cookie, so the key never appears in a URL or a log).
+
+1. sign in at https://auth.edirepository.org (Google, ORCID, GitHub or Microsoft) and open
+   Profile → Access Keys → New Key; copy the key when it is shown (it is shown once)
+2. save it as the single line of `~/.config/calcofi/edi_access_key.txt` (`chmod 600`), or
+   export `EDI_ACCESS_KEY`; `EDI_ACCESS_KEY_FILE` overrides the path
+3. never commit the key, paste it into a notebook or put it in a URL; the helper reports an
+   invalid key as `EDI refused the access key (HTTP 401: Invalid access key)`
+
+The key lives on both machines (laptop and the mini) and its master copy is Ben's
+`~/My Drive/private/` folder.
+
 ### R package functions
 
 The `calcofi4db` package provides helper functions:
