@@ -24,6 +24,24 @@ than its baseline would stop at `depth_coverage`; neither count can grow silentl
 **Consumers:** nothing changes for a consumer of the public release; both datasets stay
 absent from `catalog.json` until consent is recorded.
 
+## `sio_cetacean-sightings` (held): the second preview candidate carries `sample_track` and the Farallon cut
+
+No public table changes. The second private preview of the Scripps Whale Acoustics Lab's visual
+sightings (root `ducklake-preview-sightings`) is cut from the sightings shard rendered on
+2026-11-06 and from a Farallon shard rendered with the marine-mammal cut, passed to
+`scripts/preview_candidate.sh` through `CALCOFI_CAND_OVERRIDE`, so the lab sees the two surveys as
+they would stand together once theirs is released: the effort segments and the ship-to-animal
+sight lines as `sample_track` paths, every placed sighting at the animal's position, the four
+sighting attributes, the lab's source files beside the notebook, and no Farallon marine mammal on
+a cruise the survey covered. Both rules are described under v2026.11.05 below (the entries were
+written before that release was cut and were promoted with it, though neither reached its
+tables): the public release still has no `sample_track` table and still carries every Farallon
+marine mammal, and will until the lab's consent is recorded and the dataset is un-held. The
+Explorer gained an Effort layer (`effort=on`, CalCOFI/explore#45) that draws the segments and
+sight lines of a release that has `sample_track`, and stays disabled on one that does not.
+
+**Consumers:** nothing changes for a consumer of the public release.
+
 # v2026.11.05
 
 ## The fall 2026 cruise reaches the database from the ship: CalCOFI 2611, lines 93.3 and 90, as posted
