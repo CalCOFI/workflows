@@ -8,6 +8,22 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Two held datasets reach their private previews: CCE-LTER size-fractionated chlorophyll and NOAA's CTD casts
+
+No public table changes. `cce-lter_chl-size-fractionated` (workflows#155) and `swfsc_ctd-noaa`
+(workflows#154) are staged and held (`in_release: false`) until their providers decide from a
+private preview, so this section describes what the preview candidates carry and what the
+public release gains in validation. The depth-vs-seafloor ratchet (`DEPTH_SEAFLOOR_OVER_HELD`)
+now carries a baseline for each: 13 of the 422 chlorophyll casts are 0–100 m integrations at
+three stations whose GEBCO 2025 floor is 56–84 m (CCE-LTER question Q05, the provider's call
+on whether the integration stopped at the bottom bottle), and eight of the 886 NOAA CTD casts
+have a deepest standard depth 12–250 m below the GEBCO floor (SWFSC question Q06, Ed Weber:
+position or filled depths). A public release that carried either dataset with more such casts
+than its baseline would stop at `depth_coverage`; neither count can grow silently.
+
+**Consumers:** nothing changes for a consumer of the public release; both datasets stay
+absent from `catalog.json` until consent is recorded.
+
 # v2026.11.05
 
 ## The fall 2026 cruise reaches the database from the ship: CalCOFI 2611, lines 93.3 and 90, as posted
