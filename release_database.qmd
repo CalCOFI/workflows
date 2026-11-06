@@ -1108,7 +1108,12 @@ DEPTH_SEAFLOOR_OVER_HELD <- c(
   # shallow stations (80.0 51.0 x11, 86.7 33.0, 86.7 50.0) are recorded as 0-100 m integrations over a
   # 56-84 m (64-88 m max 3x3) GEBCO floor, up to 36 m over; whether the integration
   # stopped at the bottom bottle is the provider's call (cce-lter/chl-size-fractionated Q05)
-  "cce-lter_chl-size-fractionated" = 13L)
+  "cce-lter_chl-size-fractionated" = 13L,
+  # measured 2026-11-06 on the first ctd-noaa candidate (workflows #154): eight casts whose
+  # deepest standard depth (150-500 m) is 12-250 m below a 33-451 m (max 3x3) GEBCO floor, e.g.
+  # 2014-07 SH order 30 to 400 m over ~150 m; position or filled depths is the provider's call
+  # (swfsc/ctd-noaa Q06, Ed Weber)
+  "swfsc_ctd-noaa"         = 8L)
 d_over_held <- d_over |> filter(dataset_key %in% release_include)
 d_over      <- d_over |> filter(!dataset_key %in% release_include)
 if (nrow(d_over_held)) {
