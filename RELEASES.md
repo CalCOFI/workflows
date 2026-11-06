@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.11.05
+
 ## The fall 2026 cruise reaches the database from the ship: CalCOFI 2611, lines 93.3 and 90, as posted
 
 Rasmus Swalethorp posted `20-2611_CTDCast.zip` to the Shared Drive on 2026-11-04 from the fall
