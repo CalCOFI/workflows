@@ -8,6 +8,29 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## Fall cruise 2611 grows from 11 to 36 casts: lines 93.3, 90 and 86.7, with 83.3 begun
+
+The ship re-issued `20-2611_CTDCast.zip` on 2026-11-08 (Ben Gire, CalCOFI technicians) with
+casts 1–36, 31 October to 7 November, covering lines 93.3, 90 and 86.7 and the first station of
+83.3, against the 11 casts of v2026.11.05. Cruise `2026-11-33P4` goes from 24,986 to 80,945
+headline observations (`obs_env`, now 37 measurement types) and from 347,634 to 1,133,895 in
+`obs_ctd_full`; `calcofi_ctd-derived` gains the same casts' `sigma_theta_ave`, `spiciness0` and
+`buoyancy_n2` (2,016,414 to 2,021,751 rows). The tier is still `preliminary_with_bottle`, with no
+nutrients yet. No other cruise changed: every other cruise × measurement type of `calcofi_ctd-cast`
+and `calcofi_ctd-derived` has the same row count, sum and flags as v2026.11.05.
+
+The re-issue also revises casts 1–11, as the corrections are refitted over more bottles: corrected
+salinity moves by at most 0.0009, the averaged station-corrected oxygen by at most 0.02 mL/L, and
+the cruise-corrected chlorophyll estimate by up to 0.23 µg/L. `dynamic_height` and
+`specific_volume_anomaly` arrive for casts 1–11, which had shipped without them. On cast 7's
+upcast the ship has flagged the primary temperature, salinity and oxygen sensors 9 from 1–24 m, so
+the averaged oxygen there rests on the secondary sensor alone and rises by up to 64 µmol/kg.
+
+Two gaps come from the source and are left as they are: dynamic height and its flag are blank on
+every upcast in this file (the technicians will address the cause later), so `dynamic_height` is
+downcast only for this cruise; and cast 36 (83.3 51) has bottle salts only, so it carries no
+station-corrected oxygen or chlorophyll.
+
 ## Two held datasets reach their private previews: CCE-LTER size-fractionated chlorophyll and NOAA's CTD casts
 
 No public table changes. `cce-lter_chl-size-fractionated` (workflows#155) and `swfsc_ctd-noaa`
