@@ -8,6 +8,8 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+# v2026.11.09
+
 ## Fall cruise 2611 grows from 11 to 36 casts: lines 93.3, 90 and 86.7, with 83.3 begun
 
 The ship re-issued `20-2611_CTDCast.zip` on 2026-11-08 (Ben Gire, CalCOFI technicians) with
