@@ -8,6 +8,17 @@ versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run`
 
 # Unreleased
 
+## `sample_root` says which stage its data are at, so an app can label a preliminary cruise
+
+`sample_root` gains `data_stage` as its last column (calcofi4db 4.37.0, `build_sample_root()`):
+the root sample's own `sample.data_stage`, NULL where the dataset records none. Until now the
+stage was only on `sample`, which the Explorer does not load, so it drew the preliminary fall
+cruise with no label while the CTD transects app marked it. The release notebook's column-order
+check accepts `hex7` followed by `data_stage`.
+
+**Consumers:** additive. A reader that selects `sample_root` columns by name is unaffected; one
+that relies on `hex7` being the table's last column should select by name instead.
+
 # v2026.11.09
 
 ## Fall cruise 2611 grows from 11 to 36 casts: lines 93.3, 90 and 86.7, with 83.3 begun

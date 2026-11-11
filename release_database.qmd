@@ -2056,8 +2056,11 @@ stopifnot(
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'main' AND table_name = 'sample' AND data_type LIKE 'GEOMETRY%'
       AND data_type NOT LIKE '%EPSG:4326%'")) == 0,
-  "hex7 must be the last column of sample and of sample_root (columns are appended, never reordered)" =
-    tail(dbListFields(con_wdl, "sample"), 1) == "hex7" && tail(dbListFields(con_wdl, "sample_root"), 1) == "hex7")
+  # sample_root gains data_stage after hex7 from calcofi4db 4.37.0 (CalCOFI/calcofi4db#46); either build passes
+  "hex7 must be the last column of sample, and sample_root must end in hex7, then data_stage when it has one (columns are appended, never reordered)" =
+    tail(dbListFields(con_wdl, "sample"), 1) == "hex7" &&
+    tail(setdiff(dbListFields(con_wdl, "sample_root"), "data_stage"), 1) == "hex7" &&
+    (!"data_stage" %in% dbListFields(con_wdl, "sample_root") || tail(dbListFields(con_wdl, "sample_root"), 1) == "data_stage"))
 # --- D-S1 (pre-release plan 2026-09-03; calcofi4db >= 3.31.0): the pair IS the observation store ----
 # obs_bio / obs_env now carry sample_key, measurement_prec and hex_id too, so each is a strict superset
 # of obs under a name mapping (realm = the table, value = measurement_value), and `obs` becomes a VIEW
