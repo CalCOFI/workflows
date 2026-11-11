@@ -34,6 +34,7 @@ sample_root,root_id,Root ID,,"Dense integer id of a root sampling event (`sample
 sample_root,root_sample_key,Root Sample Key,,The `sample.sample_key` this root id stands for.
 sample_root,seafloor_depth_m,Seafloor Depth,m,"GEBCO seafloor depth at the root sample's position (positive down), from `sample`."
 sample_root,hex7,H3 Cell (res 7),,"The root sample's own `sample.hex7`, carried unchanged: one `UBIGINT` H3 cell at resolution 7, the parent of the resolution-10 cell of the root's position; NULL without a finite position. Coarser parents are bit arithmetic (`calcofi4db::h3_parent_sql()`), no extension needed."
+sample_root,data_stage,Data Stage,,"The root sample's own `sample.data_stage`, carried unchanged: the provider's processing stage of the root event (a preliminary or a final CTD cast, for example); NULL where the dataset records none. Lets an app label a preliminary cruise without loading `sample`."
 sample,hex7,H3 Cell (res 7),,"One `UBIGINT` H3 cell at resolution 7: the parent of the resolution-10 cell of this event's own `latitude` / `longitude` (not the resolution-7 cell the position falls in), defined exactly as `obs_bio.hex7` / `obs_env.hex7`; NULL without a finite position. Lets a per-sample value in `sample_measurement` be drawn in hexagons. An observation carries its own position, so a CTD scan can sit in another cell than its cast."
 sample_spatial,root_id,Root ID,,Root sampling event (`sample_root.root_id`).
 sample_spatial,root_sample_key,Root Sample Key,,The root `sample.sample_key`.
