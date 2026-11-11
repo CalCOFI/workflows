@@ -11,10 +11,18 @@
 #   Rscript scripts/render_md_on_storage.R                  # every *.md under the prefixes below
 #   Rscript scripts/render_md_on_storage.R gs://calcofi-db/ducklake/releases/RELEASES.md  …   # just these
 #   Rscript scripts/render_md_on_storage.R --dry-run        # render locally, upload nothing
+#   Rscript scripts/render_md_on_storage.R --out-dir=DIR gs://…/RELEASES.md   # the same, and keep
+#                                                           # the page at DIR/{bucket}/{path}.html to read
+#
+# RELEASES.md (the changelog) is rendered from calcofi4db::release_notes_page(): its `# Unreleased`
+# heading stays in the source for the release gate but is left off the page while it has no
+# entries, and each release heading is followed by that release's DOI as the folder's
+# versions.json records it. Every other markdown object is rendered as it is.
 #
 # The prefixes: the release notes (ducklake/releases), the staged portal bundles (publish/), the
 # netCDF site and the archived source folders on calcofi-files-public.
 librarian::shelf(commonmark, glue, here, jsonlite, calcofi4db, quiet = TRUE)
+stopifnot("release_notes_page() needs calcofi4db >= 4.36.0" = packageVersion("calcofi4db") >= "4.36.0")
 # libs/gcs_index.R finds gcloud with Sys.which(); an Rscript's PATH may not carry the SDK
 Sys.setenv(PATH = paste(dirname(calcofi4db:::find_gcloud()), Sys.getenv("PATH"), sep = ":"))
 source(here("libs/gcs_index.R"))
@@ -22,9 +30,10 @@ source(here("libs/gcs_index.R"))
 PREFIXES <- c("gs://calcofi-db/ducklake/releases/", "gs://calcofi-db/publish/",
               "gs://calcofi-files-public/netcdf/", "gs://calcofi-files-public/archive/")
 
-args <- commandArgs(trailingOnly = TRUE)
-dry  <- "--dry-run" %in% args
-uris <- grep("^gs://", args, value = TRUE)
+args    <- commandArgs(trailingOnly = TRUE)
+out_dir <- sub("^--out-dir=", "", grep("^--out-dir=", args, value = TRUE))
+dry     <- "--dry-run" %in% args || length(out_dir) > 0   # keeping a page to read is never an upload
+uris    <- grep("^gs://", args, value = TRUE)
 
 list_md <- function(prefix) {
   p <- calcofi4db:::parse_gcs_path(prefix)
@@ -62,9 +71,11 @@ heading_versions <- function(x, known = character()) {
   if (length(v) < 2 || !length(known)) return(v)
   c(v, sort(setdiff(known[known >= min(v) & known <= max(v)], v)))
 }
-# versions.json beside the object being rendered, read once per folder. Only the release prefix
-# has one; `known` is passed unevaluated, so a folder without one is never asked (R forces the
-# promise at the first range heading, and a `{v}/RELEASE_NOTES.md` has none).
+# versions.json beside the object being rendered, read once per folder: its `versions` records
+# (version, doi, …), the same file the release writes each DOI into. Only the release prefix has
+# one; `known` is passed unevaluated, so a folder without one is never asked (R forces the
+# promise at the first range heading, and a `{v}/RELEASE_NOTES.md` has none). The changelog
+# itself always asks: its DOIs come from here.
 VERSIONS_CACHE <- list()
 release_versions <- function(uri) {
   folder <- paste0(dirname(uri), "/")
@@ -72,12 +83,14 @@ release_versions <- function(uri) {
   txt <- suppressWarnings(system2(calcofi4db:::find_gcloud(),
                                   c("storage", "cat", shQuote(paste0(folder, "versions.json"))),
                                   stdout = TRUE, stderr = FALSE))
-  v <- character()
+  v <- NULL
   if (length(txt))
-    v <- tryCatch(as.character(jsonlite::fromJSON(paste(txt, collapse = "\n"))$versions$version),
-                  error = function(e) character())
-  if (!length(v))
-    cat("note: no readable versions.json at", folder, "— a range heading anchors only the versions it names\n")
+    v <- tryCatch(jsonlite::fromJSON(paste(txt, collapse = "\n"))$versions, error = function(e) NULL)
+  if (!is.data.frame(v) || !length(v$version)) {
+    v <- data.frame(version = character())
+    cat("note: no readable versions.json at", folder,
+        "— a range heading anchors only the versions it names, and no release shows a DOI\n")
+  }
   VERSIONS_CACHE[[folder]] <<- v
   v
 }
@@ -134,6 +147,9 @@ render_one <- function(uri) {
   system2(calcofi4db:::find_gcloud(), c("storage", "cp", shQuote(uri), shQuote(local_md)), stdout = FALSE, stderr = FALSE)
   if (!file.exists(local_md)) stop("could not fetch ", uri)
   md   <- readLines(local_md, warn = FALSE, encoding = "UTF-8")
+  # the changelog as a reader wants it: no empty `# Unreleased`, each release's DOI under its heading
+  if (basename(p$path) == "RELEASES.md")
+    md <- strsplit(release_notes_page(md, release_versions(uri)), "\n", fixed = TRUE)[[1]]
   title <- sub("^#\\s+", "", grep("^#\\s+", md, value = TRUE)[1])
   if (is.na(title) || !nzchar(title)) title <- basename(p$path) else
     md <- md[-grep("^#\\s+", md)[1]]   # the page's h1 is the document's first heading; not twice
@@ -141,7 +157,7 @@ render_one <- function(uri) {
   folder <- dirname(p$path)
   # ids on every h1–h3, and the nested list beside the page; the folder's versions.json, where
   # there is one, tells a range heading which versions it spans
-  toc  <- add_toc(body, release_versions(uri))
+  toc  <- add_toc(body, as.character(release_versions(uri)$version))
   body <- toc$body
   crumb  <- glue('<p class="crumb"><a href="https://storage.calcofi.io/{p$bucket}/{folder}/">{esc(folder)}</a> / ',
                  '{esc(basename(p$path))} · <a href="{https}">raw markdown ↗</a></p>')
@@ -157,7 +173,15 @@ render_one <- function(uri) {
                crumb = crumb)
   local_html <- sub("\\.md$", ".html", local_md); writeLines(html, local_html, useBytes = TRUE)
   target <- sub("\\.md$", ".html", uri)
-  if (dry) { cat("dry:", target, "\n"); return(invisible(FALSE)) }
+  if (dry) {
+    if (length(out_dir)) {
+      kept <- file.path(out_dir[1], p$bucket, sub("\\.md$", ".html", p$path))
+      dir.create(dirname(kept), recursive = TRUE, showWarnings = FALSE)
+      file.copy(local_html, kept, overwrite = TRUE)
+      cat("kept:", kept, "\n")
+    }
+    cat("dry:", target, "\n"); return(invisible(FALSE))
+  }
   # md5-compared first (the same rule as calcofi4db::put_gcs_file()), then uploaded with the
   # content type a browser renders — the package's gcloud path sends none, and an HTML object
   # served as octet-stream downloads instead of opening

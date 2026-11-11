@@ -90,6 +90,16 @@ sixteen shipped and named tables retired months earlier.
   empty `<a id>` beside it). Link a release that way — never the raw `.md` on
   `storage.googleapis.com`. A version that appears only in a section's prose, and not in a
   heading, has no anchor.
+- **The rendered page differs from the source in two ways, both generated**
+  (`calcofi4db::release_notes_page()`, which `scripts/render_md_on_storage.R` calls for
+  `RELEASES.md` and nothing else). An `# Unreleased` section with no entries is left off
+  `RELEASES.html`: the heading stays in the markdown, where the release gate needs it, and it is
+  back on the page as soon as it has an entry. And each release heading is followed by that
+  release's own DOI, read from the folder's `versions.json`: never type a DOI into
+  `RELEASES.md`. A release with no line has no `doi` in `versions.json` yet;
+  `Rscript scripts/publish_release_notes.R` after Zenodo mints it writes both. To read the
+  page before it is published, `Rscript scripts/render_md_on_storage.R --out-dir=DIR
+  gs://calcofi-db/ducklake/releases/RELEASES.md` renders it to `DIR` and uploads nothing.
 - `release_database.qmd`'s `release_notes_narrative` chunk (before the freeze) renames a
   non-empty `# Unreleased` to the release and **stops the release** if no section for
   `release_version` exists — `calcofi4db::promote_unreleased()`. Do not bypass it by
