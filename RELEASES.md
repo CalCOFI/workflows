@@ -1,10 +1,15 @@
 # CalCOFI integrated database — release notes
 
-What changed between releases and why. One section per release, newest first; the
-`# Unreleased` section collects changes since the last release and becomes the next release's
-section when `release_database.qmd` runs. Each release's `RELEASE_NOTES.md` on GCS is the
-section below plus a generated appendix (tables, rows, datasets, validation gates, package
-versions). Conventions: see `CLAUDE.md` § "Release rules" and the `release-run` skill.
+What changed in each release of the CalCOFI integrated database, and why. One section per
+release, newest first. A release is frozen once it is published, so a correction made later is a
+new release with its own section here. Changes made since the newest release, when there are
+any, come first under "Unreleased" and become the next release's section. Each release folder
+also holds a `RELEASE_NOTES.md`: that release's section from this page plus a generated appendix
+(tables, rows, datasets, validation gates, package versions).
+
+<!-- maintainers: the `# Unreleased` heading below stays in this file even when it has no entries
+(`promote_unreleased()` renames it at the next cut; the rendered page leaves it out while it is
+empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill. -->
 
 # Unreleased
 
