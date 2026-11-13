@@ -377,8 +377,8 @@ stopifnot(top$site_key == "093.3 030.0", top$depth_bin == 40, nrow(cr) == 1)
 # temperature and salinity departures of every cruise over the inner-Bight stations, upper 50 m, against the BOTTLE
 # series' normals (quality-controlled; the CTD salinity normal carries unflagged spikes). Bottle casts through 2021;
 # the fall 2026 cruise from its CTD, whose salinity matches the bottles drawn on board (see "Bottles").
-# A station counts when at least three of its five 10 m bins have a value and a normal; a cruise when 8 stations do.
-d_tsx <- q("
+# a station counts when at least three of its five 10 m bins have a value and a normal; a cruise when 8 stations do
+d_tsx_all <- q("
   WITH o AS (
     SELECT cruise_key, CASE WHEN measurement_type LIKE 'salinity%' THEN 'S' ELSE 'T' END AS var, site_key, depth_bin,
            any_value(cruise_month) AS m, avg(value) AS v
@@ -388,22 +388,28 @@ d_tsx <- q("
         OR (dataset_key = 'calcofi_ctd-cast' AND measurement_type IN ('temperature_ave', 'salinity_ave_corr') AND cruise_key = {CRUISE}))
     GROUP BY ALL),
   a AS (
-    SELECT o.cruise_key, o.var, o.site_key, avg(o.v - c.clim_mean) AS anom
+    SELECT o.cruise_key, o.var, o.site_key,
+           count(c.clim_mean)   AS bins,   avg(o.v - c.clim_mean)   AS anom,      -- against the monthly normal
+           count(c.season_mean) AS bins_s, avg(o.v - c.season_mean) AS anom_s     -- against the seasonal normal
     FROM o JOIN climatology c
       ON c.dataset_key = 'calcofi_bottle' AND c.measurement_type = CASE o.var WHEN 'S' THEN 'salinity' ELSE 'temperature' END
-     AND c.site_key = o.site_key AND c.depth_bin = o.depth_bin AND c.month = o.m AND c.clim_mean IS NOT NULL
-    GROUP BY ALL HAVING count(*) >= 3)
+     AND c.site_key = o.site_key AND c.depth_bin = o.depth_bin AND c.month = o.m
+    GROUP BY ALL)
   SELECT a.cruise_key, r.year, r.cruise_month,
-         count(*) FILTER (WHERE var = 'T') AS n_t, avg(anom) FILTER (WHERE var = 'T') AS t_anom,
-         count(*) FILTER (WHERE var = 'S') AS n_s, avg(anom) FILTER (WHERE var = 'S') AS s_anom,
-         min(anom) FILTER (WHERE var = 'S') AS s_min, max(anom) FILTER (WHERE var = 'S') AS s_max
-  FROM a JOIN cruise_ref r USING (cruise_key) GROUP BY ALL
-  HAVING count(*) FILTER (WHERE var = 'T') >= 8 AND count(*) FILTER (WHERE var = 'S') >= 8")
+         count(*) FILTER (WHERE var = 'T' AND bins >= 3) AS n_t, avg(anom) FILTER (WHERE var = 'T' AND bins >= 3) AS t_anom,
+         count(*) FILTER (WHERE var = 'S' AND bins >= 3) AS n_s, avg(anom) FILTER (WHERE var = 'S' AND bins >= 3) AS s_anom,
+         min(anom) FILTER (WHERE var = 'S' AND bins >= 3) AS s_min, max(anom) FILTER (WHERE var = 'S' AND bins >= 3) AS s_max,
+         count(*) FILTER (WHERE var = 'S' AND bins_s >= 3) AS n_ss, avg(anom_s) FILTER (WHERE var = 'S' AND bins_s >= 3) AS s_season
+  FROM a JOIN cruise_ref r USING (cruise_key) GROUP BY ALL")
+d_tss   <- d_tsx_all |> filter(n_ss >= 8) |> arrange(desc(s_season))        # by the seasonal normal: more cruises
+d_tsx   <- d_tsx_all |> filter(n_t >= 8, n_s >= 8)                          # by the monthly normal
 tsx     <- function(cruise) d_tsx |> filter(cruise_key == cruise)
 fs0     <- function(x, d = 2) if (abs(x) < 0.5 * 10^-d) f1(0, d) else fs(x, d)   # a departure that rounds to zero carries no sign
 ts26    <- tsx(CRUISE)
 ts_prev <- d_tsx |> filter(cruise_key != CRUISE) |> slice_max(s_anom, n = 1)
-stopifnot(nrow(ts26) == 1, ts26$s_anom > ts_prev$s_anom, ts_prev$cruise_key == "1998-02-31JD", abs(tsx("2015-11-32OC")$s_anom) < 0.05)
+stopifnot(
+  nrow(ts26) == 1, ts26$s_anom > ts_prev$s_anom, ts_prev$cruise_key == "1998-02-31JD", abs(tsx("2015-11-32OC")$s_anom) < 0.05,
+  d_tss$cruise_key[1:2] == c(CRUISE, "1998-02-31JD"), nrow(d_tss) > nrow(d_tsx), "1997-09-32NM" %in% d_tss$cruise_key)   # the seasonal normal gives the same order
 ```
 
 ::: {.callout-important title="Preliminary data"}
@@ -1850,7 +1856,9 @@ warm period has the same sign: about 0.2 in the mixed layer of January 1958 [@re
 its subsurface water was fresher than normal [@simpson1984a].
 
 Fall 2026 is of the salty kind and beyond it: `r fs(ts26$s_anom, 2)`, the highest of the `r nrow(d_tsx)` cruises,
-where the cruise-to-cruise standard deviation is `r f1(sd(d_tsx$s_anom[d_tsx$cruise_key != CRUISE]), 2)`. By its salt
+where the cruise-to-cruise standard deviation is `r f1(sd(d_tsx$s_anom[d_tsx$cruise_key != CRUISE]), 2)`. The seasonal
+normal reaches more cruises (`r nrow(d_tss)`, September 1997 among them) and orders them the same way:
+`r fs(d_tss$s_season[1], 2)` for fall 2026, `r fs(d_tss$s_season[2], 2)` for February 1998. By its salt
 this water resembles what the 1997 El Niño brought to Baja California, 0.8 above normal on line 120 in October 1997
 [@lynn1998], more than anything measured before off Southern California.
 
@@ -2078,7 +2086,7 @@ ggplot(d_gl, aes(date, scti)) +
   theme_story()
 ```
 
-The glider group publishes one number for line 90, the Southern California Temperature Index: "the interannual
+The glider group publishes one number for line 90, the Southern California Temperature Index (@fig-glider): "the interannual
 temperature anomaly at 50m depth along the coastal section of Line 90 (coast to 200-km offshore) with a 3-month
 running mean applied" [@rudnick2017data]. Its latest value, centred on `r format(gl_last$date, "%B %Y")`, is
 `r fs(gl_last$scti)` °C, the `r c("highest", "second highest", "third highest")[gl_rank]` of `r nrow(d_gl)` months since
