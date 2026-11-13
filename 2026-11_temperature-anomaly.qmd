@@ -15,6 +15,8 @@ format:
     fig-dpi: 200
     link-citations: true
 bibliography: 2026-11_temperature-anomaly.bib
+resources:
+  - figures/2026-11_temperature-anomaly/*
 execute:
   echo: true
   warning: false
@@ -546,6 +548,25 @@ ggplot(mapping = aes(temp, depth_m)) +
 
 Both figures may be reproduced with credit to CalCOFI. Click a figure to enlarge it; the code that draws each one is
 folded above it, and everything on this page is computed from the public release when the page is rendered.
+
+```{r}
+#| label: video
+#| echo: false
+#| results: asis
+# the 30-second animation, when its file is in the repo (rendered in CalCOFI/explore, story/elnino-2026/)
+DIR_FIG <- "figures/2026-11_temperature-anomaly"
+f_vid   <- file.path(DIR_FIG, "calcofi_elnino_2026_30s.mp4")
+f_pos   <- file.path(DIR_FIG, "calcofi_elnino_2026_poster.png")
+if (file.exists(here(f_vid))) cat(glue(
+  "### In thirty seconds {{.unnumbered}}\n\n",
+  '<video controls playsinline preload="metadata" poster="{f_pos}" style="width: 100%; border-radius: 6px;">',
+  '<source src="{f_vid}" type="video/mp4">',
+  'This browser does not play the video: <a href="{f_vid}">download it</a>.</video>\n\n',
+  "The same data as an animation, without sound: the nine November cruises behind the normal, the normal itself, ",
+  "each November since 2014 as its difference from that normal on one fixed colour scale, and the section of line 93.3 ",
+  "under the sea surface. [Download the video]({f_vid}) ({f1(file.size(here(f_vid)) / 1e6)} MB) or its ",
+  "[last frame]({f_pos}). How it is made is under [Code](#sec-code).\n"))
+```
 
 ## What CalCOFI measures, and what "normal" means here {#sec-background}
 
