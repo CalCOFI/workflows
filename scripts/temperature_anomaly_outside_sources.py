@@ -13,7 +13,10 @@ for the days and places of the November 2026 CTD casts.
        satellite_at_casts.csv
   3. Argo float profiles in and around the cruise's box and dates, from the Ifremer ERDDAP.
        argo_profiles.csv
-  4. sources.csv: every URL requested, and when.
+  4. The SCCOOS automated shore station on Scripps Pier (temperature and salinity at the coast, 2013 to now), as daily
+     means of the values that pass the station's own quality tests, from the IOOS sensors ERDDAP (Axiom).
+       pier_daily.csv
+  5. sources.csv: every URL requested, and when.
 
 usage: temperature_anomaly_outside_sources.py <casts.csv> <cache_dir> <out_dir>
   casts.csv is written by the notebook from the release (site_key, cast_id, time_utc, lat, lon, ctd_t_top3m).
@@ -35,6 +38,7 @@ SERIES  = ["46225", "46254", "LJAC1", "46258", "46232", "46086", "46221", "46219
 NDBC    = "https://www.ndbc.noaa.gov"
 ERDDAP  = "https://coastwatch.pfeg.noaa.gov/erddap/griddap/"
 ARGO    = "https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.csv"
+PIER    = "https://erddap.sensors.axds.co/erddap/tabledap/scripps-pier-automated-shore-sta-1.csv"
 SOURCES = []
 
 def fetch(url, cache_dir, name=None, tries=3, wait=4):
@@ -129,6 +133,16 @@ def main():
   if txt:
     rows = list(csv.reader(txt.strip().splitlines()))
     write(os.path.join(out, "argo_profiles.csv"), [dict(zip(rows[0], r)) for r in rows[2:]], rows[0])
+
+  # ---- 4. Scripps Pier: daily means of temperature and of salinity, each where its own QC aggregate is 1 (pass) ----
+  day = {}
+  for var, key in (("sea_water_temperature_ctd", "temp"), ("sea_water_practical_salinity_ctd", "sal")):
+    txt = fetch(f"{PIER}?time,{var}&{var}_qc_agg=1&orderByMean(%22time/1day%22)", cache, f"pier_{key}_daily.csv")
+    for ln in (txt or "").strip().splitlines()[2:]:
+      t, v = ln.split(",")[:2]
+      if v not in ("NaN", ""): day.setdefault(t[:10], {})[key] = round(float(v), 3)
+  if day:
+    write(os.path.join(out, "pier_daily.csv"), [dict(date=d, temp=v.get("temp", ""), sal=v.get("sal", "")) for d, v in sorted(day.items())])
 
   # ---- 2. satellite analyses ----
   # OISST: one gridded request per day over the cruise's box. MUR: one point request per cast and variable.

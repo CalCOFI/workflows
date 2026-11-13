@@ -368,7 +368,8 @@ found the largest departure from normal temperature in that record.
   `r f1(mean(k$sal_anom))` above normal): the mark of water from the subtropics, not of local water warmed in place.
 - **It has been checked.** The instrument's two temperature sensors agree within 0.01 °C through the warm layer,
   and its salinity matches water samples analysed on board. A buoy 2 km from one station read 25.1 °C when the
-  instrument read 25.0 °C. Satellite analyses show the surface there about 5 °C above normal on the same day.
+  instrument read 25.0 °C. The shore station on Scripps Pier recorded both the heat and the salt on its own
+  instruments. Satellite analyses show the surface there about 5 °C above normal on the same day.
 - **What it does not show.** The cruise sampled `r n_st` stations on CalCOFI's three southern lines, off Southern
   California, and says nothing about waters farther north. The measurements show how warm the water is, not why.
 
@@ -752,9 +753,9 @@ chk <- list(
 ```
 
 The CTD carries two independent temperature sensors. Through the warm layer at stations 28 and 30 (the top 50 m,
-`r chk$pair_core$n` one-metre values) they never differ by more than **`r f1(chk$pair_core$max, 3)` °C**, and by
-`r f1(chk$pair_core$median, 3)` °C at the median. Over every cast of the cruise, in the top 100 m, their mean
-difference is `r f1(chk$pair_all$mean, 4)` °C.
+`r chk$pair_core$n` one-metre values) they never differ by more than **`r f1(chk$pair_core$max, 3)` °C**; half of
+the values differ by `r f1(chk$pair_core$median * 1000, 1)` thousandths of a degree or less. Over every cast of the
+cruise, in the top 100 m, their mean difference is `r f1(chk$pair_all$mean, 4)` °C.
 
 Each station is also measured twice, on the way down and on the way up. At those two stations the two passes
 through the top 40 m are `r chk$gap[1]` to `r chk$gap[2]` minutes apart and differ by `r f1(chk$du_core$mean, 2)` °C
@@ -919,7 +920,7 @@ write_csv(d_casts, file.path(DIR_DATA, "casts.csv"), na = "")
 
 # the outside sources are fetched once by scripts/temperature_anomaly_outside_sources.py (NDBC keeps 45 days only)
 # and kept in the repo; a missing file means that script has not been run
-f_out <- file.path(DIR_DATA, c("buoy_stations.csv", "buoys_at_casts.csv", "buoy_series.csv", "satellite_at_casts.csv", "argo_profiles.csv", "sources.csv"))
+f_out <- file.path(DIR_DATA, c("buoy_stations.csv", "buoys_at_casts.csv", "buoy_series.csv", "satellite_at_casts.csv", "argo_profiles.csv", "sources.csv", "pier_daily.csv"))
 stopifnot("run scripts/temperature_anomaly_outside_sources.py first" = all(file.exists(f_out)))
 buoy_name <- function(x) str_remove(x, ",? CA\\b.*$") |> str_to_title()   # "Torrey Pines Outer, CA (100)" -> "Torrey Pines Outer"
 d_bstn  <- read_csv(f_out[1]) |> mutate(name = buoy_name(name))
@@ -928,6 +929,7 @@ d_bser  <- read_csv(f_out[3]) |> mutate(time = as.POSIXct(hour_utc, format = "%Y
 d_sat   <- read_csv(f_out[4])
 d_argo  <- read_csv(f_out[5])
 d_osrc  <- read_csv(f_out[6])
+d_pier  <- read_csv(f_out[7]) |> mutate(yr = as.integer(format(date, "%Y")), md = format(date, "%m-%d"))
 ```
 
 Moored buoys report water temperature near the surface every half hour, through the National Data Buoy Center.
@@ -994,6 +996,88 @@ ggplot(d_b, aes(time, wtmp, colour = buoy)) +
     caption  = "Buoys: Coastal Data Information Program and NOAA National Data Buoy Center, through NDBC realtime files, read 13 November 2026.") +
   theme_story()
 ```
+
+### Scripps Pier
+
+The shore station on Scripps Pier in La Jolla has its own instruments in the water at the coast and reports
+temperature and salinity every few minutes (the SCCOOS automated shore station, running since 2013). These are its
+daily means, of the values that pass the station's own quality tests.
+
+```{r}
+#| label: fig-pier
+#| fig-cap: "Daily mean temperature and salinity at the Scripps Pier automated shore station from 1 August to 12 November: 2026 in red, over the range of the same calendar day in every earlier year of the record (grey band, 2013–2025) and its median (grey line). The cruise is the shaded week."
+#| fig-alt: "Two time series. Pier temperature in 2026 runs above the earlier range from late October and reaches 24 degrees Celsius in early November, when earlier years were at 16 to 20. Pier salinity in 2026 jumps from 33.6 to 34.25 in the week of the cruise, above anything in the earlier range."
+#| fig-width: 9
+#| fig-height: 5.6
+WIN <- c("08-01", "11-12")
+p_long <- d_pier |>
+  filter(md >= WIN[1], md <= WIN[2], md != "02-29") |>
+  pivot_longer(c(temp, sal), names_to = "var", values_to = "value") |>
+  filter(!is.na(value)) |>
+  mutate(day = as.Date(paste0("2026-", md)), var = factor(var, c("temp", "sal"), c("Temperature (°C)", "Salinity")))
+p_rng <- p_long |> filter(yr < 2026) |> group_by(var, day) |>
+  summarize(lo = min(value), hi = max(value), mid = median(value), n = n(), .groups = "drop") |> filter(n >= 8)
+p_26  <- p_long |> filter(yr == 2026)
+
+pier_panel <- function(v, ylim, breaks) {
+  ggplot(filter(p_26, var == v), aes(day)) +
+    annotate("rect", xmin = cr$date_min, xmax = cr$date_max + 1, ymin = -Inf, ymax = Inf, fill = SAND) +
+    geom_ribbon(data = filter(p_rng, var == v), aes(ymin = lo, ymax = hi), fill = STONE, alpha = 0.45) +
+    geom_line(data = filter(p_rng, var == v), aes(y = mid), colour = MUTED, linewidth = 0.4) +
+    geom_line(aes(y = value), colour = COL_2026, linewidth = 0.9) +
+    scale_x_date(date_breaks = "2 weeks", date_labels = "%e %b", expand = expansion(mult = 0.01)) +
+    scale_y_continuous(breaks = breaks) +
+    coord_cartesian(ylim = ylim) +          # the band may leave the axis: a few earlier days dip far below it
+    labs(subtitle = v, x = NULL, y = NULL) +
+    theme_story() +
+    theme(plot.subtitle = element_text(colour = INK, face = "bold", size = rel(0.95), margin = margin(b = 2)))}
+s_low    <- p_rng |> filter(var == "Salinity") |> pull(lo) |> min()
+s_low_26 <- p_26  |> filter(var == "Salinity") |> slice_min(value, n = 1, with_ties = F)
+
+(pier_panel("Temperature (°C)", c(14, 26), seq(14, 26, 4)) + theme(axis.text.x = element_blank())) /
+  pier_panel("Salinity", c(32.8, 34.4), seq(33, 34.4, 0.4)) +
+  plot_annotation(
+    title    = "At Scripps Pier, on other instruments: the same heat and the same salt",
+    subtitle = glue("Daily means. Red: 2026. Grey: the range and median of the same calendar day, {min(d_pier$yr)}–2025."),
+    caption  = glue(
+      "The salinity axis is cut at 32.8: the earlier range dips below it on some days (to {f1(s_low)}), and so does 2026 in late August (to {f1(s_low_26$value)} on {trimws(format(s_low_26$day, '%e %B'))}).\n",
+      "SCCOOS automated shore station, Scripps Pier (Scripps Institution of Oceanography), through the IOOS sensors ERDDAP, read 13 November 2026."),
+    theme    = theme_story())
+```
+
+```{r}
+#| label: pier-numbers
+#| include: false
+pier_day <- function(md_) {
+  x <- d_pier |> filter(md == md_)
+  list(t26 = x$temp[x$yr == 2026], s26 = x$sal[x$yr == 2026],
+       t_prev = max(x$temp[x$yr < 2026], na.rm = T), t_prev_yr = x$yr[x$yr < 2026][which.max(x$temp[x$yr < 2026])],
+       s_prev = max(x$sal[x$yr < 2026], na.rm = T), n_prev = sum(x$yr < 2026 & !is.na(x$temp)))}
+pk    <- d_pier |> filter(yr == 2026, md >= "10-25") |> slice_max(temp, n = 1, with_ties = F)
+p_pk  <- pier_day(pk$md)
+p_c0  <- pier_day(format(cr$date_min - 6, "%m-%d"))          # six days before the cruise
+p_s   <- d_pier |> filter(!is.na(sal)) |> mutate(rk = min_rank(desc(sal)))
+p_top <- p_s |> filter(rk <= 20)
+p_all <- d_pier |> slice_max(temp, n = 1, with_ties = F)
+p_q   <- quantile(d_pier$sal[d_pier$date < as.Date("2026-06-01")], c(0.5, 0.99), na.rm = T)
+ctd_in <- d_casts |> filter(site_key == "093.3 026.7")
+PIER   <- c(lon = -117.257, lat = 32.867)                     # the shore station (and NOS station 9410230)
+km_in  <- as.numeric(st_distance(
+  st_sfc(st_point(PIER), crs = 4326), st_sfc(st_point(c(ctd_in$lon, ctd_in$lat)), crs = 4326))) / 1000
+s_in   <- q("SELECT avg(value) AS s FROM cast_1m WHERE site_key = '093.3 026.7' AND measurement_type = 'salinity_ave_corr' AND direction = 'd' AND depth_m <= 3")$s
+```
+
+On `r trimws(format(pk$date, "%e %B"))` the pier's daily mean was **`r f1(p_pk$t26, 2)` °C**. The highest for that
+calendar day in the `r p_pk$n_prev` earlier years of the record was `r f1(p_pk$t_prev, 2)` °C (`r p_pk$t_prev_yr`).
+The pier's warmest day on record, `r f1(p_all$temp, 2)` °C, came in `r format(p_all$date, "%B %Y")`, in high summer.
+
+Salinity is the sharper signal. Before June 2026 the pier's daily salinity had a median of `r f1(p_q[1], 2)` and
+exceeded `r f1(p_q[2], 2)` on one day in a hundred. Six days before the cruise it read `r f1(p_c0$s26, 2)`. By
+`r trimws(format(pk$date, "%e %B"))` it read **`r f1(p_pk$s26, 2)`**, and `r sum(p_top$yr == 2026 & p_top$md >= "10-31")`
+of the `r nrow(p_top)` saltiest days in the whole record are from `r trimws(format(cr$date_min, "%e %B"))` onward.
+The CTD at station 93.3 26.7, `r f1(km_in, 0)` km from the pier,
+read `r f1(ctd_in$ctd_t_top3m, 2)` °C and `r f1(s_in, 2)` at the surface on `r trimws(format(cr$date_min, "%e %B"))`.
+The salty water reached the pier during the week of the cruise.
 
 ### Satellites
 
@@ -1075,7 +1159,7 @@ salinities and the oxygen.
 
 Not an artifact. The normal is the right one (same station, same depth, the cruise's own month, and the answer
 barely moves under six other definitions). The instrument agrees with itself, with the bottles, with the buoys
-beside it and with two satellite analyses.
+beside it, with the shore station on Scripps Pier and with the satellite analyses.
 
 ## Where it ranks {#sec-rank}
 
@@ -1493,7 +1577,9 @@ The quantity of heat makes the same point. Through the upper 200 m at station `r
 holds about **`r f1(hc_top$gj)` GJ per square metre** more heat than normal
 (`r f1(mean(hc$gj))` GJ m⁻² on average over the `r nrow(hc)` stations sampled to 200 m). At a net surface heating of
 100 W m⁻², a generous figure chosen only for scale, the atmosphere would need about `r fk(round(wm$days, -1))` days to
-supply it. Both the salt and the heat say this water was carried in, not warmed where it lies.
+supply it. Both the salt and the heat say this water was carried in, not warmed where it lies. The
+[Scripps Pier record](#fig-pier) shows it arriving at the coast: salinity there rose by `r f1(p_pk$s26 - p_c0$s26, 1)`
+within about ten days.
 
 ::: {.callout-note title="A flaw in the salinity normal, found while drawing this figure"}
 The diagram draws the normal from the bottle series because the CTD salinity normal at this station is wrong at
@@ -1560,7 +1646,7 @@ kable(d_cov, col.names = c("series", "decade", "cruises", "with a monthly normal
   measured values.
 - **Mixed-layer depth** is the release's `mld_sigma_theta_0125` (the depth where density exceeds its 10 m value by
   0.125 kg m⁻³), with its own November normal.
-- **Outside sources** (buoys, satellite analyses, Argo) are fetched by
+- **Outside sources** (buoys, the Scripps Pier shore station, satellite analyses, Argo) are fetched by
   `scripts/temperature_anomaly_outside_sources.py` and kept as small tables in
   `data/2026-11_temperature-anomaly/`, because the buoy files hold only the last 45 days.
 
@@ -1593,6 +1679,7 @@ d_osrc |>
       str_detect(url, "Oisst")           ~ "NOAA OISST v2.1 (CoastWatch ERDDAP)",
       str_detect(url, "MUR")             ~ "JPL MUR SST v4.1 (CoastWatch ERDDAP)",
       str_detect(url, "ifremer")         ~ "Argo (Ifremer ERDDAP)",
+      str_detect(url, "scripps-pier")    ~ "SCCOOS automated shore station, Scripps Pier (IOOS sensors ERDDAP)",
       TRUE                               ~ "other"),
     url = glue("<a href='{url}'>{str_trunc(url, 110)}</a>")) |>
   select(source, accessed_utc, status, url) |>
