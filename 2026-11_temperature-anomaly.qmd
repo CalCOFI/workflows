@@ -23,6 +23,13 @@ editor_options:
   chunk_output_type: console
 ---
 
+```{=html}
+<style>
+  /* long paths and URLs wrap on a phone instead of widening the page */
+  main :not(pre) > code, main a.uri { overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
+</style>
+```
+
 ```{r}
 #| label: setup
 #| include: false
@@ -373,7 +380,9 @@ found the largest departure from normal temperature in that record.
   instrument read 25.0 °C. The shore station on Scripps Pier recorded both the heat and the salt on its own
   instruments. Satellite analyses show the surface there about 5 °C above normal on the same day.
 - **What it does not show.** The cruise sampled `r n_st` stations on CalCOFI's three southern lines, off Southern
-  California, and says nothing about waters farther north. The measurements show how warm the water is, not why.
+  California, and says nothing about waters farther north. The measurements show how warm the water is, not why:
+  NOAA reports a strong El Niño in progress on top of a marine heatwave off California since 2025, and says the two
+  [cannot yet be separated](#sec-context).
 
 ::: {.callout-tip title="Describing it correctly"}
 - "`r f1(k$top_anom)` °C warmer than normal" needs "**at 40 to 50 m depth**" beside it. At the sea surface the
@@ -1703,6 +1712,48 @@ salinity normal of the warm layer above 60 m, whose standard deviation is about 
 recorded here because this analysis is where it surfaced.
 :::
 
+## The event in context {#sec-context}
+
+### What the agencies were reporting in fall 2026
+
+These are other institutions' statements, quoted as published and read on 12–13 November 2026. They are context
+for the measurements above, not part of them.
+
+- **A strong El Niño is in progress.** NOAA's Climate Prediction Center, in its
+  [ENSO Diagnostic Discussion of 12 November 2026](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_disc_nov2026/ensodisc.shtml),
+  keeps an El Niño Advisory in force: "El Niño continues to strengthen, with a strong-to-very strong El Niño likely
+  through January-March 2027". Its Niño-3.4 index for October was +2.5 °C. That is a *relative* index (the tropical
+  mean is subtracted), which NOAA has used officially since February 2026, so it is not comparable with the
+  Niño-3.4 values quoted for earlier events without saying which index is meant. At the equator NOAA reports "a
+  deeper-than-average thermocline and anomalies exceeding +10.0°C at depth in the eastern Pacific Ocean": large
+  departures at thermocline depth are how this event looks at its source as well.
+- **A marine heatwave was already there.** NOAA Fisheries'
+  [California Current Marine Heatwave Tracker](https://www.integratedecosystemassessment.noaa.gov/regions/california-current/california-current-marine-heatwave-tracker-blobtracker)
+  (updated 30 October 2026) has followed a heatwave off California, NEP25A, since May 2025, and says of the
+  recent warming: "Although the current MHW off California preceded the El Niño, we now infer that we are seeing
+  additional warming due to El Niño, primarily through the arrival of Kelvin waves, which act to further deepen the
+  surface mixed layer, reduce upwelling, and therefore lead to surface layer warming. It is unclear if we can
+  separate the warming that was already in place in California from the additional warming due to the El
+  Niño-forced Kelvin waves."
+- **Scripps Pier's century-long record.** The Shore Stations Program has measured the sea surface at the pier by
+  hand every day since 1916. Its [plot for 2026](https://shorestations.ucsd.edu/plots/SST_This_Year.png) gives
+  24.0 °C for 12 November, counts 74 daily record highs in 2026 so far, and marks the days of early November as
+  records for their dates. (This is the long manual record; the [automated station above](#fig-pier) is a separate
+  instrument on the same pier.)
+- **Gliders.** Scripps's underwater gliders have repeated CalCOFI line 90 for twenty years. The group's
+  [El Niño page](https://spraydata.ucsd.edu/products/el-nino/) says of that line: "The warm water anomaly is now
+  extending the deepest we've seen in 20 years of monitoring."
+- **A published anomaly at thermocline depth, farther north.** In Monterey Bay, MBARI
+  [reported on 29 October 2026](https://www.mbari.org/news/mbari-researchers-observe-the-arrival-of-el-nino-in-monterey-bay/)
+  that the temperature at 60 m "reached 18.18 degrees Celsius (64.72 degrees Fahrenheit), surpassing the time series
+  record high set on November 19, 1997", with temperatures "more than seven degrees centigrade over the long-term
+  average". That is the same kind of number as the one on this page, a departure at the depth of the thermocline,
+  from an independent mooring about 600 km to the north-west, and a little over half as large.
+
+Read together: the water CalCOFI measured arrived on top of a marine heatwave that had been in place for a year
+and a half, during a strong El Niño. The measurements on this page do not separate the two, and NOAA says it
+cannot yet either.
+
 ## What this does and does not show {#sec-caveats}
 
 ```{r}
@@ -1737,7 +1788,8 @@ kable(d_cov, col.names = c("series", "decade", "cruises", "with a monthly normal
 - **Single values or layer averages.** A ranking of single values rewards the thermocline, where a displaced layer
   makes the largest numbers, and it is where bad values in old data surface. The layer average over fixed stations
   is the fairer claim. Both rank fall 2026 first.
-- **Cause.** These measurements describe the water. They do not attribute it.
+- **Cause.** These measurements describe the water. They do not attribute it, and [neither, yet, does NOAA](#sec-context):
+  a marine heatwave has been in place off California since 2025 and a strong El Niño arrived on top of it.
 
 ## Methods {#sec-methods}
 
