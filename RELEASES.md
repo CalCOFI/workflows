@@ -13,6 +13,8 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+# v2026.11.12
+
 ## The 1 m CTD table is whole again: 22 cruises had been published with most of their casts missing
 
 `obs_ctd_full`, the supplemental table of 1 m CTD bins, was published short in v2026.11.05 and
