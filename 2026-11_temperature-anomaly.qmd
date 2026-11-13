@@ -95,15 +95,15 @@ mirror <- function(url) {
   path}
 
 # a DuckDB view over one release table: all of its objects, or the partitions named in `parts`
-release_view <- function(table, parts = NULL, cols = "*") {
+release_view <- function(table, parts = NULL, cols = "*", name = table) {
   src  <- cc_release_sources(CAT, table)
   urls <- src$urls
   if (!is.null(parts))
-    urls <- unlist(lapply(parts, \(p) grep(glue("={p}/"), urls, fixed = T, value = T)))
+    urls <- unique(unlist(lapply(parts, \(p) grep(glue("={p}/"), urls, fixed = T, value = T))))   # the catalog lists some objects twice
   stopifnot(length(urls) >= 1, is.null(parts) || length(urls) == length(parts))
   files <- vapply(urls, mirror, "", USE.NAMES = F)
   dbExecute(con, glue(
-    "CREATE OR REPLACE VIEW {table} AS SELECT {cols} FROM read_parquet(",
+    "CREATE OR REPLACE VIEW {name} AS SELECT {cols} FROM read_parquet(",
     "[{paste0(\"'\", files, \"'\", collapse = ', ')}], hive_partitioning = {tolower(src$hive)}, union_by_name = true)"))
   d_src <<- bind_rows(d_src, tibble(
     table = table, partition = if (is.null(parts)) NA_character_ else parts, url = urls, mb = file.size(files) / 1e6))
@@ -366,6 +366,8 @@ found the largest departure from normal temperature in that record.
   `r fs(k$l50_prev$anom)` °C (November 2015). At the peak of the 1997–98 El Niño it was `r fs(k$feb98)` °C.
 - **It is different water.** The warm layer is also unusually salty (`r f1(k$sal[1], 2)`–`r f1(k$sal[2], 2)`, about
   `r f1(mean(k$sal_anom))` above normal): the mark of water from the subtropics, not of local water warmed in place.
+  It is lighter than anything normally found at that station, and it has pressed the water beneath it about
+  100 m deeper than normal, which is what makes the departures at depth so large.
 - **It has been checked.** The instrument's two temperature sensors agree within 0.01 °C through the warm layer,
   and its salinity matches water samples analysed on board. A buoy 2 km from one station read 25.1 °C when the
   instrument read 25.0 °C. The shore station on Scripps Pier recorded both the heat and the salt on its own
@@ -749,6 +751,7 @@ chk <- list(
   pair_all  = d_pair |> filter(depth_m <= 100) |> summarize(n = n(), mean = mean(t1 - t2), p99 = quantile(abs(t1 - t2), 0.99)),
   pair_core = d_pair |> filter(site_key %in% core, depth_m <= 50) |> summarize(n = n(), max = max(abs(t1 - t2)), median = median(abs(t1 - t2))),
   du_core   = d_du   |> filter(site_key %in% core, depth_m <= 40) |> summarize(n = n(), mean = mean(abs(down - up)), max = max(abs(down - up))),
+  du_base   = d_du   |> filter(site_key %in% core, between(depth_m, 50, 65)) |> summarize(max = max(abs(down - up))),
   gap       = range(d_gap$minutes))
 ```
 
@@ -759,7 +762,9 @@ cruise, in the top 100 m, their mean difference is `r f1(chk$pair_all$mean, 4)` 
 
 Each station is also measured twice, on the way down and on the way up. At those two stations the two passes
 through the top 40 m are `r chk$gap[1]` to `r chk$gap[2]` minutes apart and differ by `r f1(chk$du_core$mean, 2)` °C
-on average.
+on average. At the base of the layer (50–65 m) they differ by up to `r f1(chk$du_base$max, 1)` °C: internal waves
+lift and drop that boundary by a few metres within the hour. That moves the 50–60 m bin. It does not move the
+40–50 m bin, which lies inside the layer on both passes.
 
 ### Bottles: salinity and oxygen
 
@@ -824,10 +829,20 @@ b_loo <- map_dbl(seq_len(nrow(b_in)), \(i) with(b_in[-i, ], sum(v * n_obs) / sum
 b_btl <- q("
   SELECT clim_mean, n_cruises FROM climatology
   WHERE measurement_type = 'temperature' AND dataset_key = 'calcofi_bottle' AND site_key = {k$top_site} AND depth_bin = {k$top_bin} AND month = 11")
+# the same baseline cruises from their FULL one-metre casts (obs_ctd_full), not the thinned series the normal is built from
+release_view("obs_ctd_full", parts = b_in$cruise_key, name = "obs_ctd_full_base")
+b_full <- q("
+  SELECT f.cruise_key, avg(f.measurement_value) AS v, count(*) AS n
+  FROM obs_ctd_full_base f JOIN sample s USING (sample_key)
+  WHERE f.measurement_type = 'temperature_ave' AND f.measurement_qual IS NULL AND s.site_key = {k$top_site}
+    AND f.depth_min_m >= {k$top_bin} AND f.depth_min_m < {k$top_bin + 10}
+  GROUP BY f.cruise_key")
+stopifnot(nrow(b_full) == nrow(b_in))
 d_base <- tribble(
   ~`definition of normal`,                                                             ~cruises,                ~normal,
   "the release's climatology: every 1993–2013 November value in the bin (used on this page)", top$n_cruises,     top$clim_mean,
   "the same cruises, one value per cruise",                                            nrow(b_in),               mean(b_in$v),
+  "the same cruises from their full one-metre casts, not the thinned series",          nrow(b_full),             mean(b_full$v),
   "leaving out each baseline cruise in turn: the lowest normal",                       nrow(b_in) - 1L,          min(b_loo),
   "leaving out each baseline cruise in turn: the highest normal",                      nrow(b_in) - 1L,          max(b_loo),
   "every earlier November cruise with a CTD cast, to 2025, one value per cruise",      nrow(b_cells),            mean(b_cells$v),
@@ -835,7 +850,7 @@ d_base <- tribble(
   "the release's seasonal normal (September to November)",                             top$season_n_cruises,     top$season_mean) |>
   mutate(`normal (°C)` = round(normal, 2), `departure of 25.00 °C (°C)` = round(top$v - normal, 2)) |>
   select(-normal)
-kable(d_base, caption = "The departure at the record cell (station 93.3 30.0, 40–50 m) under seven definitions of normal.")
+kable(d_base, caption = glue("The departure at the record cell (station 93.3 30.0, 40–50 m) under {nrow(d_base)} definitions of normal."))
 ```
 
 ```{r}
@@ -1158,7 +1173,7 @@ salinities and the oxygen.
 ### Verdict
 
 Not an artifact. The normal is the right one (same station, same depth, the cruise's own month, and the answer
-barely moves under six other definitions). The instrument agrees with itself, with the bottles, with the buoys
+barely moves under `r nrow(d_base) - 1` other definitions). The instrument agrees with itself, with the bottles, with the buoys
 beside it, with the shore station on Scripps Pier and with the satellite analyses.
 
 ## Where it ranks {#sec-rank}
@@ -1581,6 +1596,103 @@ supply it. Both the salt and the heat say this water was carried in, not warmed 
 [Scripps Pier record](#fig-pier) shows it arriving at the coast: salinity there rose by `r f1(p_pk$s26 - p_c0$s26, 1)`
 within about ten days.
 
+### Displaced water, or different water? {#sec-isopycnals}
+
+A deep warm layer pushes everything beneath it down, and that alone makes large departures at a fixed depth: the
+water at 100 m is warm partly because it is water that normally sits at 30 m. Following surfaces of equal density
+separates the two effects: how far each surface moved, and whether the water on it changed. This is done here at
+the record station from the one-metre down casts: fall 2026, and the casts of the `r nrow(b_in)` November cruises
+behind its normal.
+
+```{r}
+#| label: tbl-isopycnals
+# every one-metre down cast at the record station: the baseline's November cruises and fall 2026
+d_iso <- q("
+  WITH f AS (SELECT * FROM obs_ctd_full_base UNION ALL BY NAME SELECT * FROM obs_ctd_full)
+  SELECT f.cruise_key, f.depth_min_m AS depth_m,
+         max(f.measurement_value) FILTER (WHERE f.measurement_type = 'temperature_ave')   AS temp,
+         max(f.measurement_value) FILTER (WHERE f.measurement_type = 'salinity_ave_corr') AS sal
+  FROM f JOIN sample s USING (sample_key)
+  WHERE s.site_key = {k$top_site} AND right(f.sample_key, 1) = 'd' AND f.measurement_qual IS NULL
+    AND f.measurement_type IN ('temperature_ave', 'salinity_ave_corr')
+  GROUP BY ALL ORDER BY f.cruise_key, depth_m") |>
+  filter(!is.na(temp), !is.na(sal)) |>
+  mutate(
+    sa    = gsw_SA_from_SP(sal, depth_m, top$longitude, top$latitude),
+    sigma = gsw_sigma0(sa, gsw_CT_from_t(sa, temp, depth_m)),          # potential density anomaly, kg m-3 (TEOS-10)
+    when  = if_else(cruise_key == CRUISE, "fall 2026", "normal"))
+
+# depth, temperature and salinity where a cast first reaches each density (NA where the cast never holds it)
+SIG <- seq(24.5, 26.5, 0.5)
+on_sigma <- function(d, ...) {
+  d <- arrange(d, depth_m) |> mutate(sig_m = cummax(sigma))            # a stable column: density never falls with depth
+  tibble(sigma = SIG) |> mutate(
+    depth = approx(d$sig_m, d$depth_m, xout = sigma, ties = min, rule = 1)$y,
+    temp  = approx(d$depth_m, d$temp, xout = depth)$y,
+    sal   = approx(d$depth_m, d$sal,  xout = depth)$y)}
+d_on  <- d_iso |> group_by(cruise_key, when) |> group_modify(on_sigma) |> ungroup()
+d_onn <- d_on |> filter(when == "normal") |> group_by(sigma) |>
+  summarize(n = sum(!is.na(depth)), across(c(depth, temp, sal), list(mean = \(x) mean(x, na.rm = T), sd = \(x) sd(x, na.rm = T))), .groups = "drop")
+d_on26 <- d_on |> filter(when == "fall 2026") |> select(sigma, depth_26 = depth, temp_26 = temp, sal_26 = sal)
+d_surf <- left_join(d_onn, d_on26, by = "sigma") |> filter(n == nrow(b_in), !is.na(depth_26))
+
+d_surf |>
+  transmute(
+    `density surface (σθ, kg m⁻³)` = f1(sigma),
+    `normal depth (m)` = glue("{round(depth_mean)} ± {round(depth_sd)}"), `depth in 2026 (m)` = round(depth_26),
+    `deeper by (m)` = round(depth_26 - depth_mean),
+    `normal temperature (°C)` = glue("{f1(temp_mean, 2)} ± {f1(temp_sd, 2)}"), `in 2026 (°C)` = round(temp_26, 2),
+    `warmer by (°C)` = round(temp_26 - temp_mean, 2),
+    `normal salinity` = glue("{f1(sal_mean, 2)} ± {f1(sal_sd, 2)}"), `in 2026` = round(sal_26, 2), `saltier by` = round(sal_26 - sal_mean, 2)) |>
+  kable(align = "r", caption = glue("Station 93.3 30.0 on surfaces of equal density: fall 2026 beside the mean (± 1 standard deviation) of the {nrow(b_in)} November baseline casts."))
+```
+
+```{r}
+#| label: isopycnal-numbers
+#| include: false
+# the density of the sea surface (top 5 m) in each baseline cast, and the depth at which fall 2026 first reaches it
+sig0   <- d_iso |> filter(when == "normal", depth_m <= 5) |> group_by(cruise_key) |> summarize(s = mean(sigma)) |> pull(s)
+c26    <- d_iso |> filter(when == "fall 2026") |> arrange(depth_m) |> mutate(sig_m = cummax(sigma))
+z_mean <- c26$depth_m[which(c26$sig_m >= mean(sig0))[1]]
+z_min  <- c26$depth_m[which(c26$sig_m >= min(sig0))[1]]
+iso <- list(
+  sig0 = mean(sig0), sig0_min = min(sig0), z_mean = z_mean, z_min = z_min, sig26_0 = mean(c26$sigma[c26$depth_m <= 5]),
+  dz = range(d_surf$depth_26 - d_surf$depth_mean), dt = range(d_surf$temp_26 - d_surf$temp_mean), ds = range(d_surf$sal_26 - d_surf$sal_mean),
+  dt_sd = range((d_surf$temp_26 - d_surf$temp_mean) / d_surf$temp_sd))
+# split the departure at 150 m into the part from displacement and the part from changed water
+z_   <- 150
+t26  <- approx(c26$depth_m, c26$temp, z_)$y
+s26  <- approx(c26$depth_m, c26$sig_m, z_)$y
+n_pr <- d_iso |> filter(when == "normal") |> group_by(depth_m) |> summarize(temp = mean(temp), sigma = mean(sigma), n = n()) |>
+  filter(n == nrow(b_in)) |> arrange(depth_m) |> mutate(sig_m = cummax(sigma))
+tn_z  <- approx(n_pr$depth_m, n_pr$temp, z_)$y                                   # the normal temperature at 150 m
+z_n   <- approx(n_pr$sig_m, n_pr$depth_m, s26, ties = min)$y                     # where the normal column holds that density
+tn_s  <- approx(n_pr$depth_m, n_pr$temp, z_n)$y                                  # and its temperature there
+split <- list(z = z_, total = t26 - tn_z, heave = tn_s - tn_z, water = t26 - tn_s, z_n = z_n)
+stopifnot(abs(split$total - split$heave - split$water) < 1e-9, iso$z_min > 60)
+```
+
+Two things stand out.
+
+**The upper `r round(iso$z_min)` m is not normal water pushed down.** In the baseline casts the sea surface has a
+density of `r f1(iso$sig0, 2)` kg m⁻³ on average, and `r f1(iso$sig0_min, 2)` in the lightest of them. In fall 2026
+the surface was `r f1(iso$sig26_0, 2)`, and the water did not become as dense as the lightest baseline surface until
+**`r round(iso$z_min)` m** (as dense as the average one until `r round(iso$z_mean)` m). Everything above that depth is
+lighter than any water those six casts contain. It has no counterpart in the normal column to have been displaced
+from: it is water that is not normally there.
+
+**Beneath it, the density surfaces lay `r round(iso$dz[1])` to `r round(iso$dz[2])` m deeper than normal, and the
+water on them had changed as well.** On the same surfaces it was `r f1(iso$dt[1])` to `r f1(iso$dt[2])` °C warmer and
+`r f1(iso$ds[1], 2)` to `r f1(iso$ds[2], 2)` saltier than the baseline mean, `r f1(iso$dt_sd[1], 0)` to
+`r f1(iso$dt_sd[2], 0)` standard deviations of the six casts. At `r split$z` m, for example, the departure of
+`r fs(split$total)` °C splits into `r fs(split$heave)` °C from displacement (the water there has the density the
+normal column holds at `r round(split$z_n)` m) and `r fs(split$water)` °C from the water itself being warmer on that
+surface.
+
+So the depressed pycnocline accounts for most of the departure below about `r round(iso$z_min)` m, as expected of a
+deep warm layer, and the layer itself is a different water mass. A baseline on density surfaces for every station,
+built from the one-metre casts, would make this routine; here it is one station, by hand.
+
 ::: {.callout-note title="A flaw in the salinity normal, found while drawing this figure"}
 The diagram draws the normal from the bottle series because the CTD salinity normal at this station is wrong at
 `r min(d_bad$depth_bin)`–`r max(d_bad$depth_bin) + 10` m: `r f1(min(d_bad$ctd_normal), 2)`–`r f1(max(d_bad$ctd_normal), 2)`
@@ -1666,7 +1778,8 @@ d_src |>
 - Release citation: `r CAT$citation`
 - The same section in the CalCOFI apps:
   [CTD transects](https://calcofi.io/ctd-transects/?line=93.3&cruise=2026-11-33P4&var=temperature_ave&mode=anomaly),
-  [Explorer](https://calcofi.io/explore/).
+  the [Explorer's section](https://calcofi.io/explore/?lens=section&var=temperature&line=93.3&cruise=2026-11-33P4&anom=1)
+  and its [3-D view](https://calcofi.io/explore/?lens=section&var=temperature&line=93.3&cruise=2026-11-33P4&anom=1&view=3d).
 
 Outside sources, with the URL of every request and when it was made:
 
