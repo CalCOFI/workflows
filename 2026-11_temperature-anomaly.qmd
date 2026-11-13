@@ -42,8 +42,8 @@ librarian::shelf(
 options(readr.show_col_types = F, knitr.kable.NA = "")
 
 # constants ----
-VER       <- "v2026.11.09"    # the release this page is computed from (the promoted one when the analysis was made)
-VER_FIXED <- "v2026.11.12"    # the release that corrects the export of obs_ctd_full: compared with VER under the caveats
+VER       <- "v2026.11.12"    # the release this page is computed from
+VER_PREV  <- "v2026.11.09"    # the release its first version was computed from (archived beside it): compared under the caveats
 CRUISE    <- "2026-11-33P4"   # R/V Sally Ride, 31 October to 7 November 2026
 core      <- c("093.3 028.0", "093.3 030.0")   # the two stations at the heart of the warm layer
 BASE_URL  <- "https://storage.googleapis.com/calcofi-db"
@@ -640,8 +640,9 @@ stopifnot(file.exists(here(f_vid)), file.exists(here(f_pos)))
 
 The same data as an animation, without sound: the nine November cruises behind the normal, the normal itself, each
 November since 2014 as its difference from that normal on one fixed colour scale, and the section of line 93.3 under
-the sea surface. It is also [on YouTube](https://www.youtube.com/watch?v=5ReTP7iafkc), and the file can be
-[downloaded](`r f_vid`) (`r f1(file.size(here(f_vid)) / 1e6)` MB, 1920 × 1080), as can its [last frame](`r f_pos`).
+the sea surface. The file can be [downloaded](`r f_vid`) (`r f1(file.size(here(f_vid)) / 1e6)` MB, 1920 × 1080), as can
+its [last frame](`r f_pos`). Its first render, from release `r VER_PREV` with the same numbers, is
+[on YouTube](https://www.youtube.com/watch?v=5ReTP7iafkc).
 How it is made is under [Code](#sec-code).
 
 ## What CalCOFI measures, and what "normal" means here {#sec-background}
@@ -2238,43 +2239,43 @@ d_full <- q("
   SELECT a.cruise_key, CAST(substr(a.cruise_key, 1, 4) AS INTEGER) AS year, a.casts_1m, s.casts FROM a JOIN s USING (cruise_key) ORDER BY 1")
 stopifnot(nrow(d_full) == 7, d_full$casts_1m == d_full$casts)
 
-# the defect and its correction, read from the two catalogs themselves (the reader package hides a double listing) ----
-CAT_FIXED   <- cc_catalog(VER_FIXED)
+# the defect of the previous release and its correction, read from the two catalogs themselves ----
+CAT_PREV    <- cc_catalog(VER_PREV)
 cat_objects <- function(cat, tbl) {
   o <- cat$tables[[which(map_chr(cat$tables, \(x) x$name) == tbl)]]$objects
   tibble(path = map_chr(o, \(x) x$path), bytes = map_dbl(o, \(x) x$bytes), partition = map_chr(o, \(x) x$partition_value))}
-o_old <- cat_objects(CAT, "obs_ctd_full")
-o_new <- cat_objects(CAT_FIXED, "obs_ctd_full")
+o_prev <- cat_objects(CAT_PREV, "obs_ctd_full")
+o_now  <- cat_objects(CAT, "obs_ctd_full")
 # an object replaced in place keeps its address and changes its size: those are the cruises that were short
-d_short <- o_new |> inner_join(distinct(o_old, path, bytes_old = bytes), by = "path") |> filter(bytes != bytes_old) |>
+d_short <- o_now |> inner_join(distinct(o_prev, path, bytes_prev = bytes), by = "path") |> filter(bytes != bytes_prev) |>
   mutate(month = as.Date(paste0(substr(partition, 1, 7), "-01")))
 ctd_full <- list(
-  n_twice = sum(table(o_old$path) > 1), n_twice_fixed = sum(table(o_new$path) > 1), n_short = nrow(d_short),
+  n_twice_prev = sum(table(o_prev$path) > 1), n_twice = sum(table(o_now$path) > 1), n_short = nrow(d_short),
   first = format(min(d_short$month), "%B %Y"), last = format(max(d_short$month), "%B %Y"))
-stopifnot(ctd_full$n_short >= 1, ctd_full$n_twice_fixed == 0, !d_full$cruise_key %in% d_short$partition, nrow(o_new) == n_distinct(o_old$path))
+stopifnot(ctd_full$n_short >= 1, ctd_full$n_twice == 0, !d_full$cruise_key %in% d_short$partition, nrow(o_now) == n_distinct(o_prev$path))
 
-# which of the objects this page reads are the very same objects in the corrected release? ----
-u_fixed <- lapply(set_names(unique(d_src$table)), \(tbl) cc_release_sources(CAT_FIXED, tbl)$urls)
-d_same  <- d_src |> distinct(table, partition, url) |> mutate(same = map2_lgl(table, url, \(tbl, u) u %in% u_fixed[[tbl]]))
-# the objects that differ are partitions of `climatology`: read them from the corrected release and compare row by row
+# which of the objects this page reads are the very same objects in the previous release? ----
+u_prev <- lapply(set_names(unique(d_src$table)), \(tbl) cc_release_sources(CAT_PREV, tbl)$urls)
+d_same <- d_src |> distinct(table, partition, url) |> mutate(same = map2_lgl(table, url, \(tbl, u) u %in% u_prev[[tbl]]))
+# the objects that differ are partitions of `climatology`: read the previous release's and compare row by row
 p_diff <- d_same |> filter(!same)
 stopifnot(nrow(p_diff) >= 1, p_diff$table == "climatology", !is.na(p_diff$partition))
-f_fixed <- vapply(unlist(lapply(p_diff$partition, \(prt) grep(glue("={prt}/"), u_fixed$climatology, fixed = T, value = T))), mirror, "", USE.NAMES = F)
+f_prev <- vapply(unlist(lapply(p_diff$partition, \(prt) grep(glue("={prt}/"), u_prev$climatology, fixed = T, value = T))), mirror, "", USE.NAMES = F)
 invisible(dbExecute(con, glue(
-  "CREATE OR REPLACE VIEW climatology_fixed AS SELECT * FROM read_parquet(",
-  "[{paste0(\"'\", f_fixed, \"'\", collapse = ', ')}], hive_partitioning = true, union_by_name = true)")))
+  "CREATE OR REPLACE VIEW climatology_prev AS SELECT * FROM read_parquet(",
+  "[{paste0(\"'\", f_prev, \"'\", collapse = ', ')}], hive_partitioning = true, union_by_name = true)")))
 d_fix <- q("
   SELECT count(*) AS n_rows, count(*) FILTER (WHERE o.site_key IS NULL) AS unmatched,
          count(*) FILTER (WHERE n.clim_mean IS DISTINCT FROM o.clim_mean OR n.season_mean IS DISTINCT FROM o.season_mean) AS rows_differ,
          max(abs(n.clim_mean - o.clim_mean)) AS max_clim, max(abs(n.season_mean - o.season_mean)) AS max_season,
          count(*) FILTER (WHERE n.clim_n IS DISTINCT FROM o.clim_n OR n.n_cruises IS DISTINCT FROM o.n_cruises
                              OR n.clim_sd IS DISTINCT FROM o.clim_sd) AS other_differ
-  FROM climatology_fixed n LEFT JOIN climatology o
+  FROM (SELECT * FROM climatology WHERE measurement_type IN ({p_diff$partition*})) n LEFT JOIN climatology_prev o
     ON o.measurement_type = n.measurement_type AND o.dataset_key = n.dataset_key AND o.site_key = n.site_key AND o.month = n.month
    AND o.depth_bin IS NOT DISTINCT FROM n.depth_bin")
-n_old_rows <- q("SELECT count(*) AS n FROM climatology WHERE measurement_type IN ({p_diff$partition*})")$n
-fix_max    <- max(d_fix$max_clim, d_fix$max_season)
-stopifnot(d_fix$n_rows == n_old_rows, d_fix$unmatched == 0, d_fix$other_differ == 0, fix_max < 1e-5)
+n_prev_rows <- q("SELECT count(*) AS n FROM climatology_prev")$n
+fix_max     <- max(d_fix$max_clim, d_fix$max_season)
+stopifnot(d_fix$n_rows == n_prev_rows, d_fix$unmatched == 0, d_fix$other_differ == 0, fix_max < 1e-5)
 ```
 
 - **"The record" is the part of the record with a baseline.** A normal exists for `r n_site$n` stations of the
@@ -2298,23 +2299,24 @@ stopifnot(d_fix$n_rows == n_old_rows, d_fix$unmatched == 0, d_fix$other_differ =
 - **Peaks between cruises.** CalCOFI samples four times a year. The peak of the 1997–98 El Niño on line 90 was caught
   because extra cruises were added that winter [@lynn1998], and one of them is not in the release
   ([above](#sec-literature)). An earlier event's largest departure may have fallen between cruises; so may this one's.
-- **A defect in the published one-metre table does not reach this page.** In releases v2026.11.05 and v2026.11.09
-  the supplemental table `obs_ctd_full` was published with most casts missing for `r ctd_full$n_short` cruises
-  between `r ctd_full$first` and `r ctd_full$last`: a fault in the release export, not in the data, found while this
-  page was being written. Release `r VER_FIXED` corrected it: those `r ctd_full$n_short` objects were replaced by
-  whole ones at the same addresses, and its catalog lists every object once, where the catalog of `r VER` lists
-  `r ctd_full$n_twice` of them twice. Every departure, ranking and layer mean on this page is computed from the
-  thinned series (`obs_env`) and the `climatology` table, which were complete throughout. The one-metre table is
-  read for seven cruises only, fall 2026 and the six November cruises of the baseline
-  (`r paste(sort(d_full$year[d_full$cruise_key != CRUISE]), collapse = ", ")`). None of them is among the
+- **A defect in an earlier release's one-metre table did not reach this page.** In releases v2026.11.05 and
+  `r VER_PREV` the supplemental table `obs_ctd_full` was published with most casts missing for `r ctd_full$n_short`
+  cruises between `r ctd_full$first` and `r ctd_full$last`: a fault in the release export, not in the data, found
+  while this page was being written. Release `r VER`, from which the page is now computed, corrected it: those
+  `r ctd_full$n_short` objects were replaced by whole ones at the same addresses, and its catalog lists every object
+  once, where the catalog of `r VER_PREV` lists `r ctd_full$n_twice_prev` of them twice. Every departure, ranking and
+  layer mean on this page is computed from the thinned series (`obs_env`) and the `climatology` table, which were
+  complete throughout. The one-metre table is read for seven cruises only, fall 2026 and the six November cruises of
+  the baseline (`r paste(sort(d_full$year[d_full$cruise_key != CRUISE]), collapse = ", ")`). None of them is among the
   `r ctd_full$n_short`, and for each the published object holds every cast the release's `sample` table lists
   (`r fk(sum(d_full$casts))` casts in all, checked each time the page is rendered).
-- **The corrected release would change nothing here.** This page is computed from release `r VER`. Of the
-  `r nrow(d_same)` release objects it reads, `r sum(d_same$same)` are the very same objects in `r VER_FIXED`. The other
-  `r nrow(p_diff)` are partitions of the `climatology` table, which that release recomputed: the same
-  `r fk(d_fix$n_rows)` rows with the same counts of cruises and values, whose means differ from the ones used here
-  on `r fk(d_fix$rows_differ)` rows and by at most `r format(signif(fix_max, 1), scientific = F)` (°C, or units of
-  salinity), the last stored decimal. That is far below the precision of any number on this page.
+- **The page was first computed from release `r VER_PREV`.** That version is
+  [kept as it was](2026-11_temperature-anomaly_`r VER_PREV`.html). Of the `r nrow(d_same)` release objects the page
+  reads, `r sum(d_same$same)` are the very same objects in both releases. The other `r nrow(p_diff)` are partitions
+  of the `climatology` table, recomputed in `r VER` with the same `r fk(d_fix$n_rows)` rows and the same counts of
+  cruises and values. Their means differ from the earlier ones on `r fk(d_fix$rows_differ)` rows and by at most
+  `r format(signif(fix_max, 1), scientific = F)` (°C, or units of salinity), the last stored decimal, so no number
+  on the page moved.
 - **Cause.** These measurements describe the water. They do not attribute it, and [neither, yet, does NOAA](#sec-context):
   a marine heatwave has been in place off California since 2025 and a strong El Niño arrived on top of it.
 
@@ -2372,7 +2374,9 @@ d_src |>
   and its [3-D view](https://calcofi.io/explore/?lens=section&var=temperature&line=93.3&cruise=2026-11-33P4&anom=1&view=3d).
 
 To cite this page: CalCOFI (2026). *The November 2026 temperature anomaly off Southern California.*
-<https://calcofi.io/workflows/2026-11_temperature-anomaly.html>, with the release citation above for the data.
+<https://calcofi.io/workflows/2026-11_temperature-anomaly.html>, with the release citation above for the data. The
+page is computed from release `r VER`; its first version, computed from `r VER_PREV`, is kept at
+<https://calcofi.io/workflows/2026-11_temperature-anomaly_`r VER_PREV`.html>.
 
 Outside sources, with the URL of every request and when it was made:
 
@@ -2533,7 +2537,7 @@ notebook is [`2026-11_temperature-anomaly.qmd`](https://github.com/CalCOFI/workf
 ```
 
 **The animation** is a page of its own in the Explorer's repository, driven by one clock and stepped frame by
-frame into the video: [`story/elnino-2026/`](https://github.com/CalCOFI/explore/tree/9a20f0150798eb579987b29650c767604634a7c1/story/elnino-2026)
+frame into the video: [`story/elnino-2026/`](https://github.com/CalCOFI/explore/tree/ec730cc073f720c952173c1d500faf0b851f48b7/story/elnino-2026)
 at the commit it was rendered from ([CalCOFI/explore#55](https://github.com/CalCOFI/explore/pull/55)).
 `render.sh` is the whole pipeline in one command: it derives the page's data from the analysis database
 (`build_data.sql`), builds the page, captures 900 frames in headless Chrome (`capture.mjs`) and encodes them with
@@ -2544,7 +2548,7 @@ at the commit it was rendered from ([CalCOFI/explore#55](https://github.com/CalC
 #| echo: false
 #| results: asis
 # the animation's source, read from the explore repository at the commit the video was rendered from (cached)
-EXPLORE_SHA <- "9a20f0150798eb579987b29650c767604634a7c1"
+EXPLORE_SHA <- "ec730cc073f720c952173c1d500faf0b851f48b7"
 STORY_FILES <- c("README.md", "render.sh", "build_data.sh", "build_data.sql", "capture.mjs", "page/index.html", "page/main.ts", "page/terrain.ts", "page/style.css")
 STORY_LANG  <- c(md = "markdown", sh = "bash", sql = "sql", mjs = "javascript", html = "html", ts = "typescript", css = "css")
 for (f in STORY_FILES) {
