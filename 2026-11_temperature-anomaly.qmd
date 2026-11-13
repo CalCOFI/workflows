@@ -1263,13 +1263,17 @@ rng    <- function(x) glue("{f1(min(x))} to {f1(max(x))}")
 sat <- list(
   n = nrow(d_sat), n_oisst = sum(!is.na(d_sat$oisst_sst)), n_mur = sum(!is.na(d_sat$mur_sst)),
   d_oisst = mean(d_sat$oisst_sst - d_sat$ctd_t_top3m, na.rm = T), d_mur = mean(d_sat$mur_sst - d_sat$ctd_t_top3m, na.rm = T),
-  r_oisst = cor(d_sat$oisst_sst, d_sat$ctd_t_top3m, use = "complete.obs"))
-stopifnot(nrow(s_o) >= 3)
+  r_oisst = cor(d_sat$oisst_sst, d_sat$ctd_t_top3m, use = "complete.obs"),
+  r_mur   = if (sum(!is.na(d_sat$mur_sst)) >= 3) cor(d_sat$mur_sst, d_sat$ctd_t_top3m, use = "complete.obs") else NA_real_)
+# the summary says "about 5 °C above normal" for the satellite analyses at the two core stations: hold it to the data
+sat_core <- d_sat |> filter(site_key %in% core) |> select(oisst_anom, mur_anom) |> unlist()
+stopifnot(nrow(s_o) >= 3, abs(mean(sat_core, na.rm = T) - 5) < 1)
 ```
 
 Across the `r sat$n_oisst` casts with an OISST value, the analysis follows the CTD closely (correlation
 `r f1(sat$r_oisst, 2)`) and reads `r f1(abs(sat$d_oisst), 1)` °C `r if (sat$d_oisst < 0) "cooler" else "warmer"` on
 average, as a smoothed quarter-degree product does beside a point measurement in a warm pool with sharp edges.
+`r if (!is.na(sat$r_mur)) glue("MUR, at {sat$n_mur} casts, follows it as closely (correlation {f1(sat$r_mur, 2)}) and reads {f1(abs(sat$d_mur), 1)} °C {if (sat$d_mur < 0) 'cooler' else 'warmer'} on average.") else ""`
 
 At the `r nrow(s_o)` stations of the inner Bight that have one, OISST puts the surface **`r rng(s_o$oisst_anom)` °C
 above its own normal**, where the CTD reads `r rng(s_o$anom)` °C above the CalCOFI normal.
