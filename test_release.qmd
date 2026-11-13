@@ -688,6 +688,57 @@ contract_res |>
     options = list(pageLength = 20), colnames = c("", "contract query", "n", "ms", "error"))
 ```
 
+## Release objects — what is published, table by table
+
+The contract queries above read the data; they do not ask whether **every object the catalog
+lists is there, once, and whole**. v2026.11.05 and v2026.11.09 passed them while `obs_ctd_full`
+was published 47,189,291 rows short: DuckDB 2.0.0 wrote 24 of its 143 cruises as two or three
+files, each mapped to the cruise's one path, the uploads overwrote each other, and the catalog
+listed the path once per file (169 objects). No row here read a supplemental table, and
+`scripts/verify_release_objects.R` was not in the chain.
+
+`calcofi4db::check_release_objects()` checks every table in the catalog, supplemental ones
+included: the object paths are unique, a partitioned table has one object per partition value
+(plus at most one single-file twin, which `obs` publishes), and the rows in the published
+objects' parquet footers (read over https, no scan) equal the catalog's `rows`. Against
+v2026.11.09 as published it fails those three rows for `obs_ctd_full` and passes the other 75;
+against v2026.10.30, the last release written by DuckDB 1.5.5, it passes all 78.
+
+```{r}
+#| label: release_objects
+
+stopifnot("calcofi4db >= 4.38.0 carries check_release_objects()" =
+            exists("check_release_objects", mode = "function"))
+objects_cat <- jsonlite::fromJSON(
+  glue("https://storage.googleapis.com/calcofi-db/{release_prefix}/{release_version}/catalog.json"),
+  simplifyVector = FALSE)
+t0 <- Sys.time()
+objects_res <- tryCatch(
+  check_release_objects(objects_cat, con_test, base_url = "https://storage.googleapis.com/calcofi-db"),
+  error = function(e) tibble::tibble(table = "*", check = "check_release_objects", ok = FALSE,
+                                     n = NA_real_, expected = NA_real_, detail = conditionMessage(e)))
+cat(glue("release objects: {nrow(objects_res)} checks over {length(objects_cat$tables)} tables, ",
+         "{sum(!objects_res$ok)} failing, ",
+         "{round(as.numeric(difftime(Sys.time(), t0, units = 'secs')))} s"), "\n")
+
+# fold into the results table the promote gate reads
+results <- dplyr::bind_rows(results, tibble::tibble(
+  query  = glue("objects: {objects_res$table} {objects_res$check}"),
+  label  = "release-objects",
+  status = ifelse(objects_res$ok, "pass", "fail"),
+  reason = NA_character_,
+  rows   = as.integer(pmin(objects_res$n, .Machine$integer.max)),
+  ms     = NA_real_,
+  error  = objects_res$detail))
+
+objects_res |>
+  mutate(status_html = status_badge(ifelse(ok, "pass", "fail"))) |>
+  arrange(ok, table, check) |>
+  select(status_html, table, check, n, expected, detail) |>
+  DT::datatable(escape = FALSE, rownames = FALSE, options = list(pageLength = 10),
+    colnames = c("", "table", "check", "n", "expected", "detail"))
+```
+
 ## Package examples — calcofi4r and calcofi4py are consumers too
 
 The two client packages are the first thing a reader copies. On 2026-09-09 a researcher ran the

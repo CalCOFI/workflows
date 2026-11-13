@@ -2322,6 +2322,10 @@ cat(glue("RELEASES.md: # {notes_section$heading}\n"))
 #| label: freeze_release
 
 dir_frozen <- here(glue("{sidecar_root}/{release_version}"))
+# one object per partition value: calcofi4db < 4.38.0 under DuckDB 2.0.0 wrote obs_ctd_full's
+# cruises as 2-3 files to one path, and v2026.11.05 + v2026.11.09 published 22 of them short
+stopifnot("calcofi4db >= 4.38.0 writes one parquet file per partition" =
+            packageVersion("calcofi4db") >= "4.38.0")
 
 # BULK PARQUET STAGES OUTSIDE THE REPO, sidecars stay in it — the same split
 # 146da92 applied to ingest outputs, which stopped one step short of the release.
@@ -2586,23 +2590,48 @@ gcloud      <- find_gcloud()
 # copy under this release's parquet/ keeps every legacy URL working.
 plan <- freeze_plan(release_objs, prev_catalog, release_version,
                     layout = release_layout, release_prefix = release_prefix)
-if (release_layout == "canonical" && tables_prefix != CC_TABLES_PREFIX) {
+if (release_layout == "canonical" && tables_prefix != CC_TABLES_PREFIX)
   plan$path <- sub(paste0("^", CC_TABLES_PREFIX, "/"), paste0(tables_prefix, "/"), plan$path)
+if (release_layout == "canonical" && any(plan$action == "exists")) {
+  # what the store this run writes to actually holds, with sizes ----
+  have <- system2(gcloud, c("storage", "ls", "-l", "-r", glue("gs://{gcs_bucket}/{tables_prefix}/**")),
+                  stdout = TRUE, stderr = FALSE)
+  have <- have[grepl("[.]parquet$", have)]
+  have_bytes <- stats::setNames(
+    as.numeric(sub("^\\s*([0-9]+)\\s.*$", "\\1", have)),
+    sub(glue("^.*gs://{gcs_bucket}/"), "", have))
   # `exists` was decided against the PREVIOUS catalog's paths, and a staging catalog can name
   # objects the staging store never held (the 2026-09-04 staging run catalogued production
   # ducklake/tables/ paths before the tables-prefix guard existed; measured 2026-09-05: the
   # measurement_type object was `exists` and the compat copy 404'd). An object is reused only if
   # it is actually in the store this run writes to; otherwise it is uploaded like a new one.
-  have <- system2(gcloud, c("storage", "ls", "-r", glue("gs://{gcs_bucket}/{tables_prefix}/**")),
-                  stdout = TRUE, stderr = FALSE)
-  have <- sub(glue("^gs://{gcs_bucket}/"), "", have[grepl("[.]parquet$", have)])
-  missing <- plan$action == "exists" & !plan$path %in% have
-  if (any(missing)) {
-    message(glue("  {sum(missing)} object(s) marked `exists` are absent from {tables_prefix}/ — uploading them"))
-    plan$action[missing] <- "upload"
-    plan$bytes[missing]  <- plan$bytes_local[missing]
-    plan$sha256[missing] <- plan$sha256_local[missing]
+  missing <- plan$action == "exists" & !plan$path %in% names(have_bytes)
+  # ... and only if it is the object the previous catalog described. v2026.11.05 and .09 wrote
+  # 22 obs_ctd_full cruises as 2-3 files to one path (DuckDB 2.0.0 + calcofi4db < 4.38.0), the
+  # last and smallest won, and the catalog kept the first file's size (2015-11-32OC: 12,246,935
+  # bytes catalogued, 146,835 in the bucket). Their row signature, and so their canonical path,
+  # is unchanged, so without this check `exists` would leave the short bytes in place for good.
+  # plan$bytes of an `exists` object is the previous catalog's (freeze_plan(), calcofi4db 4.0.3).
+  wrong_size <- plan$action == "exists" & !missing &
+    have_bytes[plan$path] != plan$bytes
+  wrong_size[is.na(wrong_size)] <- FALSE
+  if (any(wrong_size)) {
+    reup <- tibble::tibble(
+      table = plan$table[wrong_size], partition_value = plan$partition_value[wrong_size],
+      path = plan$path[wrong_size], bytes_catalog_prev = plan$bytes[wrong_size],
+      bytes_in_bucket_before = unname(have_bytes[plan$path[wrong_size]]),
+      bytes_uploaded = plan$bytes_local[wrong_size])
+    readr::write_csv(reup, file.path(dir_frozen, "objects_reuploaded.csv"), na = "")
+    message(glue("  {sum(wrong_size)} object(s) marked `exists` differ in size from the previous ",
+                 "catalog — uploading the export over them (objects_reuploaded.csv): ",
+                 "{paste(head(reup$path, 3), collapse = ', ')}{if (nrow(reup) > 3) ', …' else ''}"))
   }
+  redo <- missing | wrong_size
+  if (any(missing))
+    message(glue("  {sum(missing)} object(s) marked `exists` are absent from {tables_prefix}/ — uploading them"))
+  plan$action[redo] <- "upload"
+  plan$bytes[redo]  <- plan$bytes_local[redo]
+  plan$sha256[redo] <- plan$sha256_local[redo]
 }
 plan |>
   dplyr::count(action, wt = bytes, name = "bytes") |>
