@@ -16,7 +16,11 @@ for the days and places of the November 2026 CTD casts.
   4. The SCCOOS automated shore station on Scripps Pier (temperature and salinity at the coast, 2013 to now), as daily
      means of the values that pass the station's own quality tests, from the IOOS sensors ERDDAP (Axiom).
        pier_daily.csv
-  5. sources.csv: every URL requested, and when.
+  5. The Southern California Temperature Index of the Scripps glider group (California Underwater Glider Network):
+     the temperature departure at 50 m on CalCOFI line 90, coast to 200 km offshore, three-month running mean,
+     monthly since 2007, from the group's ERDDAP.
+       glider_index.csv
+  6. sources.csv: every URL requested, and when.
 
 usage: temperature_anomaly_outside_sources.py <casts.csv> <cache_dir> <out_dir>
   casts.csv is written by the notebook from the release (site_key, cast_id, time_utc, lat, lon, ctd_t_top3m).
@@ -39,6 +43,7 @@ NDBC    = "https://www.ndbc.noaa.gov"
 ERDDAP  = "https://coastwatch.pfeg.noaa.gov/erddap/griddap/"
 ARGO    = "https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.csv"
 PIER    = "https://erddap.sensors.axds.co/erddap/tabledap/scripps-pier-automated-shore-sta-1.csv"
+GLIDER  = "https://spraydata.ucsd.edu/erddap/tabledap/socal_index_monthly_v1.csv?time,scti"
 SOURCES = []
 
 def fetch(url, cache_dir, name=None, tries=3, wait=4):
@@ -72,6 +77,13 @@ def write(path, rows, fields=None):
   with open(path, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=fields or list(rows[0].keys())); w.writeheader(); w.writerows(rows)
   print(f"wrote {path} ({len(rows)} rows)", flush=True)
+
+def glider_index(cache, out):
+  txt = fetch(GLIDER, cache, "glider_index_tabledap.csv")
+  if txt:
+    rows = list(csv.reader(txt.strip().splitlines()))
+    write(os.path.join(out, "glider_index.csv"),
+          [dict(month=r[0][:7], scti=round(float(r[1]), 3)) for r in rows[2:] if len(r) > 1 and r[1] not in ("", "NaN")])
 
 def main():
   casts_csv, cache, out = sys.argv[1:4]
@@ -143,6 +155,9 @@ def main():
       if v not in ("NaN", ""): day.setdefault(t[:10], {})[key] = round(float(v), 3)
   if day:
     write(os.path.join(out, "pier_daily.csv"), [dict(date=d, temp=v.get("temp", ""), sal=v.get("sal", "")) for d, v in sorted(day.items())])
+
+  # ---- 5. the glider group's temperature index: one small file, month (the centre of the three-month mean) and value ----
+  glider_index(cache, out)
 
   # ---- 2. satellite analyses ----
   # OISST: one gridded request per day over the cruise's box. MUR: one point request per cast and variable.

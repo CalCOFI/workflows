@@ -28,7 +28,7 @@ editor_options:
 ```{=html}
 <style>
   /* long paths and URLs wrap on a phone instead of widening the page */
-  main :not(pre) > code, main a.uri { overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
+  main :not(pre) > code, main a.uri, main .csl-entry a { overflow-wrap: anywhere; white-space: normal; word-break: break-word; }
 </style>
 ```
 
@@ -66,6 +66,8 @@ COL_NORM <- "#00629b"
 f1  <- function(x, d = 1) formatC(x, format = "f", digits = d)
 fs  <- function(x, d = 1) sub("-", "−", sprintf(paste0("%+.", d, "f"), x), fixed = T)
 fk  <- function(x) format(x, big.mark = ",", trim = T)
+fsa <- function(x, d = 0) ifelse(!is.na(x) & abs(x) < 0.5 * 10^-d, formatC(0, format = "f", digits = d), fs(x, d))   # axis labels: a bare 0
+nb  <- function(x) gsub("–", "\u2060–\u2060", gsub("-", "\u2011", x, fixed = T), fixed = T)   # no line break inside a key or a range
 dt_ <- function(d, ...) datatable(
   d, rownames = F, class = "compact stripe", extensions = "Buttons",
   options = list(dom = "Bfrtip", pageLength = 12, buttons = c("copy", "csv")), ...)
@@ -125,7 +127,7 @@ release_view("cruise")
 release_view("sample", cols = "* EXCLUDE (geom)")
 release_view("sample_measurement")
 release_view("measurement_type")
-release_view("obs_env",      parts = c("temperature_ave", "temperature", "salinity_ave_corr"))
+release_view("obs_env",      parts = c("temperature_ave", "temperature", "salinity_ave_corr", "salinity"))
 release_view("climatology",  parts = c("temperature_ave", "temperature", "salinity_ave_corr", "salinity", "mld_sigma_theta_0125"))
 release_view("obs_ctd_full", parts = CRUISE)
 ```
@@ -284,6 +286,13 @@ GROUP BY ALL
 #| include: false
 q <- function(sql, ...) dbGetQuery(con, glue_sql(sql, ..., .con = con)) |> as_tibble()
 
+# two casts hold bad values, not warm water (shown under "Single measurements"): left out where events are compared ----
+invisible(dbExecute(con, "
+  CREATE OR REPLACE VIEW cell_ok AS
+  SELECT * FROM cell
+  WHERE NOT (cruise_key = '1994-01-31JD' AND dataset_key = 'calcofi_ctd-cast' AND site_key = '093.3 028.0' AND depth_bin >= 510)
+    AND NOT (cruise_key = '1959-10-31OR' AND site_key = '093.3 035.0')"))
+
 # the record cell and the previous record ----
 d_cell26 <- q("SELECT * FROM cell WHERE cruise_key = {CRUISE} AND anom IS NOT NULL ORDER BY anom DESC")
 top      <- d_cell26[1, ]
@@ -297,6 +306,17 @@ d_share  <- q("
          min(substr(cruise_key, 1, 4)) AS yr0
   FROM r")
 n_cruises_all <- q("SELECT count(DISTINCT cruise_key) AS n FROM cell")$n
+
+# each earlier warm event's largest single departure, by the monthly normal and by the seasonal one ----
+d_evmax <- q("
+  WITH ev AS (SELECT * FROM (VALUES ('1957–59', 1957, 1959), ('1982–83', 1982, 1983), ('1997–98', 1997, 1998), ('2014–16', 2014, 2016)) t(event, y0, y1))
+  SELECT ev.event, max(c.anom) AS anom, arg_max(c.cruise_key, c.anom) AS cruise_key, arg_max(c.site_key, c.anom) AS site_key,
+         arg_max(c.depth_bin, c.anom) AS depth_bin, max(c.anom_season) AS anom_s, arg_max(c.cruise_key, c.anom_season) AS cruise_s,
+         arg_max(c.site_key, c.anom_season) AS site_s, arg_max(c.depth_bin, c.anom_season) AS bin_s
+  FROM cell_ok c JOIN ev ON c.cruise_year BETWEEN ev.y0 AND ev.y1 GROUP BY ev.event ORDER BY ev.event")
+evm <- function(e) d_evmax[d_evmax$event == e, ]
+sta <- function(site_key) sub("^0", "", gsub(" 0+", " ", site_key))      # "093.3 030.0" -> "93.3 30.0"
+stopifnot(abs(c(evm("1982–83")$anom, evm("1997–98")$anom, evm("1997–98")$anom_s) - 6) < 0.6)   # "near +6 °C" in the summary
 
 # layer means over the stations the cruise occupied ----
 d_layer <- q("SELECT * FROM cruise_layer WHERE covered") |>
@@ -351,6 +371,47 @@ k <- list(
 stopifnot(top$site_key == "093.3 030.0", top$depth_bin == 40, nrow(cr) == 1)
 ```
 
+```{r}
+#| label: ts-events
+#| include: false
+# temperature and salinity departures of every cruise over the inner-Bight stations, upper 50 m, against the BOTTLE
+# series' normals (quality-controlled; the CTD salinity normal carries unflagged spikes). Bottle casts through 2021;
+# the fall 2026 cruise from its CTD, whose salinity matches the bottles drawn on board (see "Bottles").
+# a station counts when at least three of its five 10 m bins have a value and a normal; a cruise when 8 stations do
+d_tsx_all <- q("
+  WITH o AS (
+    SELECT cruise_key, CASE WHEN measurement_type LIKE 'salinity%' THEN 'S' ELSE 'T' END AS var, site_key, depth_bin,
+           any_value(cruise_month) AS m, avg(value) AS v
+    FROM obs_env
+    WHERE qual_ok AND depth_bin <= 40 AND site_key IN ({inner$site_key*})
+      AND ((dataset_key = 'calcofi_bottle'   AND measurement_type IN ('temperature', 'salinity'))
+        OR (dataset_key = 'calcofi_ctd-cast' AND measurement_type IN ('temperature_ave', 'salinity_ave_corr') AND cruise_key = {CRUISE}))
+    GROUP BY ALL),
+  a AS (
+    SELECT o.cruise_key, o.var, o.site_key,
+           count(c.clim_mean)   AS bins,   avg(o.v - c.clim_mean)   AS anom,      -- against the monthly normal
+           count(c.season_mean) AS bins_s, avg(o.v - c.season_mean) AS anom_s     -- against the seasonal normal
+    FROM o JOIN climatology c
+      ON c.dataset_key = 'calcofi_bottle' AND c.measurement_type = CASE o.var WHEN 'S' THEN 'salinity' ELSE 'temperature' END
+     AND c.site_key = o.site_key AND c.depth_bin = o.depth_bin AND c.month = o.m
+    GROUP BY ALL)
+  SELECT a.cruise_key, r.year, r.cruise_month,
+         count(*) FILTER (WHERE var = 'T' AND bins >= 3) AS n_t, avg(anom) FILTER (WHERE var = 'T' AND bins >= 3) AS t_anom,
+         count(*) FILTER (WHERE var = 'S' AND bins >= 3) AS n_s, avg(anom) FILTER (WHERE var = 'S' AND bins >= 3) AS s_anom,
+         min(anom) FILTER (WHERE var = 'S' AND bins >= 3) AS s_min, max(anom) FILTER (WHERE var = 'S' AND bins >= 3) AS s_max,
+         count(*) FILTER (WHERE var = 'S' AND bins_s >= 3) AS n_ss, avg(anom_s) FILTER (WHERE var = 'S' AND bins_s >= 3) AS s_season
+  FROM a JOIN cruise_ref r USING (cruise_key) GROUP BY ALL")
+d_tss   <- d_tsx_all |> filter(n_ss >= 8) |> arrange(desc(s_season))        # by the seasonal normal: more cruises
+d_tsx   <- d_tsx_all |> filter(n_t >= 8, n_s >= 8)                          # by the monthly normal
+tsx     <- function(cruise) d_tsx |> filter(cruise_key == cruise)
+fs0     <- function(x, d = 2) if (abs(x) < 0.5 * 10^-d) f1(0, d) else fs(x, d)   # a departure that rounds to zero carries no sign
+ts26    <- tsx(CRUISE)
+ts_prev <- d_tsx |> filter(cruise_key != CRUISE) |> slice_max(s_anom, n = 1)
+stopifnot(
+  nrow(ts26) == 1, ts26$s_anom > ts_prev$s_anom, ts_prev$cruise_key == "1998-02-31JD", abs(tsx("2015-11-32OC")$s_anom) < 0.05,
+  d_tss$cruise_key[1:2] == c(CRUISE, "1998-02-31JD"), nrow(d_tss) > nrow(d_tsx), "1997-09-32NM" %in% d_tss$cruise_key)   # the seasonal normal gives the same order
+```
+
 ::: {.callout-important title="Preliminary data"}
 The measurements from this cruise are **preliminary**: processed at sea, before final calibration
 (`data_stage` `r cr$ctd_stage` in release `r VER`). This analysis has not been peer reviewed. The checks under
@@ -368,8 +429,12 @@ found the largest departure from normal temperature in that record.
   The 1993–2013 November average at that station and depth is **`r f1(k$top_clim)` °C**.
 - **The record.** That departure, **`r fs(k$top_anom)` °C**, is the largest among the `r fk(d_share$n_cells)`
   station-and-depth values from `r d_share$n_cruises` cruises (`r d_share$yr0`–2026) that have a baseline to
-  compare with. The previous largest was `r fs(k$prev_anom)` °C, on the same line in November 2015. The 1982–83 and
-  1997–98 El Niños peaked near +6 °C by the same measure.
+  compare with, which means the stations CalCOFI occupies today. The previous largest was `r fs(k$prev_anom)` °C, on
+  the same line in November 2015. The 1982–83 and 1997–98 El Niños peaked near +6 °C by the same measure. A cruder
+  yardstick that reaches every station CalCOFI has ever occupied, the old lines off Baja California included,
+  [gives the same answer](#sec-whole-record). The largest departure below the surface that a search of the
+  literature found for the California Current, 8 to 8.7 °C off Baja California in October 1997
+  [@lynn1998; @durazo2002], is smaller too.
 - **At the surface the departure is smaller.** The sea surface was `r f1(min(inner$anom), 0)` to
   `r f1(max(inner$anom), 0)` °C warmer than normal at the `r nrow(inner)` stations of the inner Southern California
   Bight and `r f1(min(outer$anom), 0)` to `r f1(max(outer$anom), 0)` °C warmer at the `r nrow(outer)` stations
@@ -381,7 +446,10 @@ found the largest departure from normal temperature in that record.
 - **It is different water.** The warm layer is also unusually salty (`r f1(k$sal[1], 2)`–`r f1(k$sal[2], 2)`, about
   `r f1(mean(k$sal_anom))` above normal): the mark of water from the subtropics, not of local water warmed in place.
   It is lighter than anything normally found at that station, and it has pressed the water beneath it about
-  100 m deeper than normal, which is what makes the departures at depth so large.
+  100 m deeper than normal, which is what makes the departures at depth so large. Over the inner Bight the upper
+  50 m is `r f1(ts26$s_anom, 2)` saltier than normal; the highest any earlier cruise found there is
+  `r f1(ts_prev$s_anom, 2)`, at the peak of the 1997–98 El Niño, and the warm water of 2014–15
+  [was not salty at all](#sec-salt).
 - **It has been checked.** The instrument's two temperature sensors agree within 0.01 °C through the warm layer,
   and its salinity matches water samples analysed on board. A buoy 2 km from one station read 25.1 °C when the
   instrument read 25.0 °C. The shore station on Scripps Pier recorded both the heat and the salt on its own
@@ -397,6 +465,8 @@ found the largest departure from normal temperature in that record.
 - For the region, the fair figure is the layer average: **about `r f1(k$l50, 0)` °C warmer than normal through the
   upper 50 m**, against a previous record of `r f1(k$l50_prev$anom)` °C.
 - "Normal" is the 1993–2013 average for November at the same station and depth.
+- "The largest in CalCOFI's record" means the largest departure from that normal at the stations CalCOFI occupies
+  today, in a record that begins in 1949. It is a statement about these stations, not about the Pacific.
 - The data are preliminary.
 :::
 
@@ -549,24 +619,29 @@ ggplot(mapping = aes(temp, depth_m)) +
 Both figures may be reproduced with credit to CalCOFI. Click a figure to enlarge it; the code that draws each one is
 folded above it, and everything on this page is computed from the public release when the page is rendered.
 
+### In thirty seconds {#sec-video .unnumbered}
+
+```{=html}
+<video controls playsinline preload="metadata" poster="figures/2026-11_temperature-anomaly/calcofi_elnino_2026_poster.png" style="width: 100%; border-radius: 6px;">
+  <source src="figures/2026-11_temperature-anomaly/calcofi_elnino_2026_30s.mp4" type="video/mp4">
+</video>
+```
+
 ```{r}
 #| label: video
-#| echo: false
-#| results: asis
-# the 30-second animation, when its file is in the repo (rendered in CalCOFI/explore, story/elnino-2026/)
+#| include: false
+# the animation is rendered in CalCOFI/explore (story/elnino-2026/render.sh); its file and last frame are kept here
 DIR_FIG <- "figures/2026-11_temperature-anomaly"
 f_vid   <- file.path(DIR_FIG, "calcofi_elnino_2026_30s.mp4")
 f_pos   <- file.path(DIR_FIG, "calcofi_elnino_2026_poster.png")
-if (file.exists(here(f_vid))) cat(glue(
-  "### In thirty seconds {{.unnumbered}}\n\n",
-  '<video controls playsinline preload="metadata" poster="{f_pos}" style="width: 100%; border-radius: 6px;">',
-  '<source src="{f_vid}" type="video/mp4">',
-  'This browser does not play the video: <a href="{f_vid}">download it</a>.</video>\n\n',
-  "The same data as an animation, without sound: the nine November cruises behind the normal, the normal itself, ",
-  "each November since 2014 as its difference from that normal on one fixed colour scale, and the section of line 93.3 ",
-  "under the sea surface. [Download the video]({f_vid}) ({f1(file.size(here(f_vid)) / 1e6)} MB) or its ",
-  "[last frame]({f_pos}). How it is made is under [Code](#sec-code).\n"))
+stopifnot(file.exists(here(f_vid)), file.exists(here(f_pos)))
 ```
+
+The same data as an animation, without sound: the nine November cruises behind the normal, the normal itself, each
+November since 2014 as its difference from that normal on one fixed colour scale, and the section of line 93.3 under
+the sea surface. It is also [on YouTube](https://www.youtube.com/watch?v=5ReTP7iafkc), and the file can be
+[downloaded](`r f_vid`) (`r f1(file.size(here(f_vid)) / 1e6)` MB, 1920 × 1080), as can its [last frame](`r f_pos`).
+How it is made is under [Code](#sec-code).
 
 ## What CalCOFI measures, and what "normal" means here {#sec-background}
 
@@ -1000,7 +1075,7 @@ write_csv(d_casts, file.path(DIR_DATA, "casts.csv"), na = "")
 
 # the outside sources are fetched once by scripts/temperature_anomaly_outside_sources.py (NDBC keeps 45 days only)
 # and kept in the repo; a missing file means that script has not been run
-f_out <- file.path(DIR_DATA, c("buoy_stations.csv", "buoys_at_casts.csv", "buoy_series.csv", "satellite_at_casts.csv", "argo_profiles.csv", "sources.csv", "pier_daily.csv"))
+f_out <- file.path(DIR_DATA, c("buoy_stations.csv", "buoys_at_casts.csv", "buoy_series.csv", "satellite_at_casts.csv", "argo_profiles.csv", "sources.csv", "pier_daily.csv", "glider_index.csv"))
 stopifnot("run scripts/temperature_anomaly_outside_sources.py first" = all(file.exists(f_out)))
 buoy_name <- function(x) str_remove(x, ",? CA\\b.*$") |> str_to_title()   # "Torrey Pines Outer, CA (100)" -> "Torrey Pines Outer"
 d_bstn  <- read_csv(f_out[1]) |> mutate(name = buoy_name(name))
@@ -1010,6 +1085,7 @@ d_sat   <- read_csv(f_out[4])
 d_argo  <- read_csv(f_out[5])
 d_osrc  <- read_csv(f_out[6])
 d_pier  <- read_csv(f_out[7]) |> mutate(yr = as.integer(format(date, "%Y")), md = format(date, "%m-%d"))
+d_gl    <- read_csv(f_out[8], col_types = "cd") |> mutate(date = as.Date(paste0(month, "-15")))
 ```
 
 Moored buoys report water temperature near the surface every half hour, through the National Data Buoy Center.
@@ -1187,13 +1263,17 @@ rng    <- function(x) glue("{f1(min(x))} to {f1(max(x))}")
 sat <- list(
   n = nrow(d_sat), n_oisst = sum(!is.na(d_sat$oisst_sst)), n_mur = sum(!is.na(d_sat$mur_sst)),
   d_oisst = mean(d_sat$oisst_sst - d_sat$ctd_t_top3m, na.rm = T), d_mur = mean(d_sat$mur_sst - d_sat$ctd_t_top3m, na.rm = T),
-  r_oisst = cor(d_sat$oisst_sst, d_sat$ctd_t_top3m, use = "complete.obs"))
-stopifnot(nrow(s_o) >= 3)
+  r_oisst = cor(d_sat$oisst_sst, d_sat$ctd_t_top3m, use = "complete.obs"),
+  r_mur   = if (sum(!is.na(d_sat$mur_sst)) >= 3) cor(d_sat$mur_sst, d_sat$ctd_t_top3m, use = "complete.obs") else NA_real_)
+# the summary says "about 5 °C above normal" for the satellite analyses at the two core stations: hold it to the data
+sat_core <- d_sat |> filter(site_key %in% core) |> select(oisst_anom, mur_anom) |> unlist()
+stopifnot(nrow(s_o) >= 3, abs(mean(sat_core, na.rm = T) - 5) < 1)
 ```
 
 Across the `r sat$n_oisst` casts with an OISST value, the analysis follows the CTD closely (correlation
 `r f1(sat$r_oisst, 2)`) and reads `r f1(abs(sat$d_oisst), 1)` °C `r if (sat$d_oisst < 0) "cooler" else "warmer"` on
 average, as a smoothed quarter-degree product does beside a point measurement in a warm pool with sharp edges.
+`r if (!is.na(sat$r_mur)) glue("MUR, at {sat$n_mur} casts, follows it as closely (correlation {f1(sat$r_mur, 2)}) and reads {f1(abs(sat$d_mur), 1)} °C {if (sat$d_mur < 0) 'cooler' else 'warmer'} on average.") else ""`
 
 At the `r nrow(s_o)` stations of the inner Bight that have one, OISST puts the surface **`r rng(s_o$oisst_anom)` °C
 above its own normal**, where the CTD reads `r rng(s_o$anom)` °C above the CalCOFI normal.
@@ -1330,7 +1410,7 @@ ggplot(d_l, aes(date, anom)) +
   scale_shape_manual(values = c(bottle = 1, CTD = 16)) +
   scale_colour_manual(values = c(bottle = INK, CTD = COL_NORM)) +
   scale_x_date(breaks = as.Date(paste0(seq(1950, 2020, 10), "-01-01")), date_labels = "%Y", expand = expansion(mult = c(0.01, 0.03))) +
-  scale_y_continuous(labels = \(x) fs(x, 0)) +
+  scale_y_continuous(labels = fsa) +
   labs(
     title    = "Every CalCOFI cruise since 1950, averaged over the stations the fall 2026 cruise occupied",
     subtitle = "Mean temperature departure (°C) from the 1993–2013 normal of the cruise's month. Open: bottle casts. Filled: CTD.",
@@ -1476,6 +1556,68 @@ now has its record on the fall 2026 cruise: by `r f1(d_warm$margin[d_warm$depth_
 `r f1(w_big$margin)` °C at `r w_big$depth_bin`–`r w_big$depth_bin + 10` m. Below `r max(z_rec) + 10` m, earlier
 cruises were warmer.
 
+### Every station ever occupied {#sec-whole-record}
+
+The release's normal exists only where the cruises of 1993–2013 went: the stations of today's grid. CalCOFI also
+worked lines far to the south, off Baja California, until the 1980s. None of the rankings above sees them, nor any
+month that has no normal. One yardstick does: each value against the mean of the *other* cruises, before fall 2026,
+of the same series at the same station, calendar month and depth bin, wherever at least five exist. It is a cruder
+normal than the release's. Its years differ from station to station, and at today's stations it includes the warm
+years since 2014, which makes recent departures read smaller.
+
+```{r}
+#| label: tbl-whole-record
+# every value against the mean of the OTHER cruises, before fall 2026, of the same series at the same station,
+# calendar month and 10 m bin (at least five of them, whatever their years)
+invisible(dbExecute(con, glue_sql("
+  CREATE OR REPLACE TEMP TABLE cell_others AS
+  WITH g AS (
+    SELECT dataset_key, site_key, cruise_month, depth_bin, count(*) AS n0, sum(v) AS s0
+    FROM cell_ok WHERE cruise_key <> {CRUISE} GROUP BY ALL)
+  SELECT c.dataset_key, c.cruise_key, c.cruise_year, c.cruise_month, c.site_key, c.line, c.station, c.depth_bin, c.latitude, c.v, c.anom,
+         CASE WHEN c.cruise_key = {CRUISE} THEN g.n0 ELSE g.n0 - 1 END AS n_others,
+         CASE WHEN c.cruise_key = {CRUISE} THEN g.s0 / g.n0 ELSE (g.s0 - c.v) / (g.n0 - 1) END AS mean_others
+  FROM cell_ok c JOIN g USING (dataset_key, site_key, cruise_month, depth_bin)
+  WHERE CASE WHEN c.cruise_key = {CRUISE} THEN g.n0 ELSE g.n0 - 1 END >= 5", .con = con)))
+wr <- q("
+  SELECT count(*) AS cells, count(DISTINCT cruise_key) AS cruises, count(*) FILTER (WHERE anom IS NULL) AS cells_no_normal,
+         count(*) FILTER (WHERE line >= 96) AS cells_south, count(DISTINCT cruise_key) FILTER (WHERE line >= 96) AS cruises_south,
+         max(v - mean_others) FILTER (WHERE cruise_key <> {CRUISE}) AS max_else,
+         max(v - mean_others) FILTER (WHERE cruise_key = {CRUISE})  AS max_2026
+  FROM cell_others")
+wr_all <- q("SELECT count(*) AS cells, count(DISTINCT cruise_key) AS cruises, max(cruise_year) AS y1, count(anom) AS with_normal FROM cell WHERE line >= 96")   # line 96.7 and beyond
+stopifnot(wr_all$with_normal == 0)
+wr$n_above <- q("SELECT count(*) AS n FROM cell_others WHERE cruise_key = {CRUISE} AND v - mean_others > {wr$max_else}")$n
+d_wr <- q("
+  (SELECT * FROM cell_others WHERE cruise_key = {CRUISE}  ORDER BY v - mean_others DESC LIMIT 3)
+  UNION ALL
+  (SELECT * FROM cell_others WHERE cruise_key <> {CRUISE} ORDER BY v - mean_others DESC LIMIT 12)") |>
+  mutate(dep = v - mean_others) |> arrange(cruise_key != CRUISE, desc(dep))
+w65 <- d_wr |> filter(cruise_key != CRUISE) |> slice(1)
+w58 <- d_wr |> filter(cruise_key != CRUISE) |> slice(2)
+stopifnot(w65$cruise_key == "1965-07-31AX", w58$cruise_key == "1958-10-31PT", wr$max_2026 > wr$max_else)
+d_wr |>
+  transmute(
+    cruise = nb(cruise_key), series = if_else(dataset_key == "calcofi_bottle", "bottle", "CTD"), station = sta(site_key),
+    `latitude (°N)` = round(latitude, 1), `depth (m)` = nb(glue("{depth_bin}–{depth_bin + 10}")), `observed (°C)` = round(v, 2),
+    `mean of the other cruises (°C)` = round(mean_others, 2), `other cruises` = n_others, `departure (°C)` = round(dep, 2),
+    `has a 1993–2013 normal` = if_else(is.na(anom), "no", "yes")) |>
+  kable(caption = "Departures from the mean of the other cruises at the same station, calendar month and depth: the three largest of fall 2026, then the twelve largest of every other cruise since 1950.")
+```
+
+Line 96.7 and the lines south of it hold `r fk(wr_all$cells)` values from `r wr_all$cruises` cruises (the last in
+`r wr_all$y1`), none with a normal, and this yardstick reaches `r fk(wr$cells_south)` of them. In all it covers
+`r fk(wr$cells)` values from `r wr$cruises` cruises, `r fk(wr$cells_no_normal)` of which have no 1993–2013 normal.
+
+By this yardstick too the largest departures in the record are fall 2026's: `r fs(wr$max_2026)` °C at the most, with
+`r wr$n_above` of its values above everything else. The largest earlier ones are on the southern lines:
+`r fs(w65$dep)` °C at `r w65$depth_bin`–`r w65$depth_bin + 10` m at station `r sta(w65$site_key)`, off Baja California
+at `r f1(w65$latitude)`°N, in July 1965, and `r fs(w58$dep)` °C at
+`r w58$depth_bin`–`r w58$depth_bin + 10` m at station `r sta(w58$site_key)` (`r f1(w58$latitude)`°N) in October 1958,
+during the 1957–59 El Niño. The second has the shape of fall 2026 at a smaller size: surface-layer water of
+`r f1(w58$v)` °C at a depth where that station averages `r f1(w58$mean_others)` °C. The same waters gave the largest
+value [published](#sec-literature) for the next great El Niño.
+
 ## Trends {#sec-trends}
 
 ### Every November cruise
@@ -1502,7 +1644,7 @@ ggplot(d_nov) +
   geom_point(aes(lon, lat, fill = anom), shape = 21, size = 1.9, colour = MUTED, stroke = 0.15) +
   facet_wrap(~ label, ncol = 4) +
   scale_fill_gradientn(
-    colours = cmocean("balance")(256), limits = c(-SFC_MAX, SFC_MAX), breaks = seq(-8, 8, 4), labels = \(x) fs(x, 0),
+    colours = cmocean("balance")(256), limits = c(-SFC_MAX, SFC_MAX), breaks = seq(-8, 8, 4), labels = fsa,
     name = "°C from the November normal",
     guide = guide_colourbar(direction = "horizontal", title.position = "top", barwidth = unit(170, "pt"), barheight = unit(8, "pt"), frame.colour = STONE)) +
   coord_sf(xlim = c(-124.9, -116.6), ylim = c(29.6, 35.3), expand = F) +
@@ -1522,6 +1664,32 @@ The years after the baseline do not warm steadily. The surface was warm in 2014 
 (`r fs(d_novm$mean[d_novm$year == 2014])` and `r fs(d_novm$mean[d_novm$year == 2015])` °C), near normal in 2021 and
 2022, below normal in 2024 (`r fs(d_novm$mean[d_novm$year == 2024])` °C), and then `r fs(d_novm$mean[d_novm$year == 2026])` °C
 in 2026, on a cruise that covered only the southern lines.
+
+```{r}
+#| label: tbl-novembers
+# each November cruise at the surface: over its own stations, and over the stations the fall 2026 cruise occupied
+d_novt <- q("
+  WITH own AS (
+    SELECT cruise_key, count(*) AS n_surface, count(anom) AS n_normal, avg(anom) AS anom_own
+    FROM cell WHERE dataset_key = 'calcofi_ctd-cast' AND cruise_month = 11 AND depth_bin = 0 GROUP BY cruise_key)
+  SELECT r.year, o.cruise_key, r.ship_name, r.ctd_stage, o.n_surface, o.n_normal, o.anom_own, l.n_sta AS n_2026, l.anom AS anom_2026
+  FROM own o JOIN cruise_ref r USING (cruise_key)
+  LEFT JOIN cruise_layer l ON l.cruise_key = o.cruise_key AND l.dataset_key = 'calcofi_ctd-cast' AND l.layer = 'surface (0-10 m)'
+  ORDER BY r.year")
+nov15 <- d_novt |> filter(year == 2015)
+stopifnot(nov15$anom_2026 == max(d_novt$anom_2026[d_novt$year < 2026]))
+d_novt |>
+  transmute(
+    year, cruise = nb(cruise_key), ship = str_to_title(ship_name), `stations with a surface value` = n_surface, `with a normal` = n_normal,
+    `mean over its own stations (°C)` = round(anom_own, 2), `of the fall 2026 stations` = n_2026,
+    `mean over those (°C)` = round(anom_2026, 2), `data stage` = ctd_stage) |>
+  kable(caption = "Every November cruise at the sea surface (0–10 m): its mean departure over its own stations, and over the stations the fall 2026 cruise occupied.")
+```
+
+A cruise's own stations change from year to year, so the last columns put every November on the stations of the
+fall 2026 cruise; these are the bars along the bottom of the [animation](#sec-video). On that footing the previous
+high is `r fs(nov15$anom_2026)` °C in 2015 (`r nov15$n_2026` of the `r nrow(sfc)` stations), against
+`r fs(d_novt$anom_2026[d_novt$year == 2026])` °C in 2026.
 
 ### Through 2026
 
@@ -1662,6 +1830,41 @@ holds about **`r f1(hc_top$gj)` GJ per square metre** more heat than normal
 supply it. Both the salt and the heat say this water was carried in, not warmed where it lies. The
 [Scripps Pier record](#fig-pier) shows it arriving at the coast: salinity there rose by `r f1(p_pk$s26 - p_c0$s26, 1)`
 within about ten days.
+
+### Warm and salty, or only warm? {#sec-salt}
+
+Salinity also separates this event from the last one. The table puts every cruise on one footing: its mean
+departure through the upper 50 m at the stations of the inner Bight, in temperature and in salinity, against the
+bottle series' normals. Earlier cruises are their bottle casts; fall 2026 is its CTD, whose salinity
+[matches the bottles drawn on board](#tbl-bottles).
+
+```{r}
+#| label: tbl-ts-events
+ts59 <- d_tsx |> filter(year %in% 1957:1959) |> slice_max(t_anom, n = 1)
+d_tsx |>
+  mutate(s_rank = rank(-s_anom)) |>
+  slice_max(t_anom, n = 8) |>
+  transmute(
+    cruise = nb(cruise_key), stations = n_s, `temperature (°C)` = round(t_anom, 2), `salinity` = round(s_anom, 2),
+    `salinity, station by station` = glue("{fs(s_min, 2)} to {fs(s_max, 2)}"), `salinity rank` = s_rank) |>
+  kable(caption = glue("The eight warmest cruises in the inner Southern California Bight, upper 50 m: mean departure of temperature and of salinity from the bottle series' normals, and where the salinity departure ranks among the {nrow(d_tsx)} cruises with at least 8 of these stations."))
+```
+
+The warm water of 2014–15 was warm only. November 2015 stands `r fs(tsx("2015-11-32OC")$t_anom)` °C above normal and
+`r fs0(tsx("2015-11-32OC")$s_anom)` in salinity; the State of the California Current report of the time found the
+upper ocean "unusually fresh during 2015 in most regions off southern California" [@mcclatchie2016]. The water of the
+1997–98 El Niño was warm and salty: `r fs(tsx("1998-02-31JD")$t_anom)` °C and `r fs(tsx("1998-02-31JD")$s_anom, 2)` in
+February 1998, when the inshore countercurrent carried "a salinity anomaly as much as +0.5" [@lynn1998]. The 1957–59
+warm period has the same sign: about 0.2 in the mixed layer of January 1958 [@reid1960], and
+`r fs(ts59$s_anom, 2)` here in `r month.name[ts59$cruise_month]` `r ts59$year`. The 1982–83 El Niño differed again:
+its subsurface water was fresher than normal [@simpson1984a].
+
+Fall 2026 is of the salty kind and beyond it: `r fs(ts26$s_anom, 2)`, the highest of the `r nrow(d_tsx)` cruises,
+where the cruise-to-cruise standard deviation is `r f1(sd(d_tsx$s_anom[d_tsx$cruise_key != CRUISE]), 2)`. The seasonal
+normal reaches more cruises (`r nrow(d_tss)`, September 1997 among them) and orders them the same way:
+`r fs(d_tss$s_season[1], 2)` for fall 2026, `r fs(d_tss$s_season[2], 2)` for February 1998. By its salt
+this water resembles what the 1997 El Niño brought to Baja California, 0.8 above normal on line 120 in October 1997
+[@lynn1998], more than anything measured before off Southern California.
 
 ### Displaced water, or different water? {#sec-isopycnals}
 
@@ -1851,6 +2054,162 @@ Read together: the water CalCOFI measured arrived on top of a marine heatwave th
 and a half, during a strong El Niño. The measurements on this page do not separate the two, and NOAA says it
 cannot yet either.
 
+### The glider index, not yet at its record in September
+
+```{r}
+#| label: fig-glider
+#| fig-cap: "The Southern California Temperature Index of the Scripps glider group: the temperature departure at 50 m along CalCOFI line 90 from the coast to 200 km offshore, as a three-month running mean, monthly from January 2007 to the latest value published when this page was rendered. Data: California Underwater Glider Network, doi:10.21238/S8SPRAY7292."
+#| fig-alt: "A time series from 2007 to 2026. The index stays within about 1.5 degrees of zero until 2014, peaks at 3.3 degrees in December 2015, and rises steeply through 2026 to 2.8 degrees in September."
+#| fig-width: 9
+#| fig-height: 3.6
+gl_last <- slice_tail(d_gl, n = 1)
+gl_top  <- slice_max(d_gl, scti, n = 1)
+gl_rank <- sum(d_gl$scti > gl_last$scti) + 1
+# CalCOFI's own casts on that stretch of line 90, at 50-60 m: the cruises whose six stations all have a normal
+d_l90 <- q("
+  SELECT cruise_key, count(*) AS n, avg(anom) AS anom, string_agg(CAST(CAST(station AS INTEGER) AS VARCHAR), ' ' ORDER BY station) AS stations
+  FROM cell WHERE dataset_key = 'calcofi_ctd-cast' AND line = 90 AND station BETWEEN 27 AND 54 AND depth_bin = 50 AND anom IS NOT NULL
+  GROUP BY cruise_key")
+l90 <- function(cruise) d_l90 |> filter(cruise_key == cruise)
+stopifnot(l90(CRUISE)$stations == l90("2015-11-32OC")$stations, l90(CRUISE)$n == 6, gl_top$date > as.Date("2015-10-01"), gl_top$date < as.Date("2016-02-01"))
+
+ggplot(d_gl, aes(date, scti)) +
+  geom_hline(yintercept = 0, colour = INK, linewidth = 0.3) +
+  geom_line(colour = COL_NORM, linewidth = 0.7) +
+  geom_point(data = gl_top, colour = COL_2015, size = 2.6) +
+  geom_point(data = gl_last, colour = COL_2026, size = 2.6) +
+  geom_text(data = gl_top, aes(label = glue("{format(date, '%b %Y')}  {fs(scti)} °C")), colour = INK, size = 3.3, hjust = 1, nudge_x = -200, nudge_y = 0.1) +
+  geom_text(data = gl_last, aes(label = glue("{format(date, '%b %Y')}  {fs(scti)} °C")), colour = INK, fontface = "bold", size = 3.3, hjust = 1, nudge_x = -200) +
+  scale_x_date(breaks = as.Date(paste0(seq(2008, 2026, 2), "-01-01")), date_labels = "%Y", expand = expansion(mult = c(0.01, 0.03))) +
+  scale_y_continuous(labels = fsa) +
+  labs(
+    title    = "At 50 m on line 90, the gliders' three-month mean was climbing toward its 2015 record",
+    subtitle = "Southern California Temperature Index (°C): coast to 200 km offshore, three-month running mean",
+    x = NULL, y = NULL,
+    caption  = "Scripps Instrument Development Group, California Underwater Glider Network (doi:10.21238/S8SPRAY7292).") +
+  theme_story()
+```
+
+The glider group publishes one number for line 90, the Southern California Temperature Index (@fig-glider): "the interannual
+temperature anomaly at 50m depth along the coastal section of Line 90 (coast to 200-km offshore) with a 3-month
+running mean applied" [@rudnick2017data]. Its latest value, centred on `r format(gl_last$date, "%B %Y")`, is
+`r fs(gl_last$scti)` °C, the `r c("highest", "second highest", "third highest")[gl_rank]` of `r nrow(d_gl)` months since
+2007; the record is `r fs(gl_top$scti)` °C, centred on `r format(gl_top$date, "%B %Y")`. The index ends six weeks before
+the cruise and averages three months, so it does not yet cover what the ship found, and it neither confirms nor
+contradicts it. CalCOFI's own casts on that stretch of the line say what to expect: its six stations averaged
+`r fs(l90(CRUISE)$anom)` °C at 50–60 m on the fall 2026 cruise, and `r fs(l90("2015-11-32OC")$anom)` °C in November
+2015, when the index centred on that month was `r fs(d_gl$scti[d_gl$month == "2015-11"])` °C. The index for
+November 2026 will be the independent check on a record at that depth.
+
+### How large earlier warm events were {#sec-literature}
+
+What their observers published about the earlier warm events, with the baseline each used. No study uses the
+1993–2013 normal of this page, and most report averages over a cruise, a section or a month, not single stations,
+so sizes compare only loosely. Words in quotation marks are the authors'.
+
+```{r}
+#| label: tbl-literature
+# published values, each read in the source named (or in its abstract, where the last column says so)
+d_lit <- read_csv(file.path(DIR_DATA, "literature_ranges.csv"))
+d_lit |>
+  transmute(
+    event, `where and what` = what, reported, `against` = baseline,
+    source = glue("[@{key}]{if_else(read == 'abstract', ' (abstract)', '')}")) |>
+  kable(caption = "Temperature departures published for earlier warm events off Southern California and Baja California, each against its own baseline.")
+```
+
+```{r}
+#| label: literature-numbers
+#| include: false
+e97   <- evm("1997–98")
+e83   <- evm("1982–83")
+n97   <- q("SELECT count(DISTINCT site_key) AS n FROM cell WHERE cruise_key = {e97$cruise_s}")$n
+a9060 <- q("SELECT max(anom_season) AS a FROM cell_ok WHERE cruise_key = {e97$cruise_s} AND site_key = '090.0 060.0'")$a
+o9060 <- q("SELECT max(v - mean_others) AS a FROM cell_others WHERE cruise_key = {e97$cruise_s} AND site_key = '090.0 060.0'")$a
+n9711 <- q("SELECT count(*) AS n FROM cell WHERE datetime >= TIMESTAMP '1997-11-10' AND datetime < TIMESTAMP '1997-12-01'")$n
+stopifnot(e97$cruise_s == "1997-12-32QU", n9711 == 0, a9060 > 5)
+```
+
+Three things follow from setting these beside the release.
+
+**The ranking sees the earlier events at the sizes their observers reported.** The largest value in the table for
+today's grid is the "greater than 6°" that @hayward1999 found in the thermocline at station 90.60 in December 1997.
+That cruise is in the release (`r e97$cruise_s`, `r n97` stations). Its largest value here is `r fs(e97$anom_s)` °C, at
+station `r sta(e97$site_s)`, `r e97$bin_s`–`r e97$bin_s + 10` m, against the seasonal normal because December has no
+monthly one. At station 90.60 itself the release gives `r fs(a9060)` °C against that normal, which is not the
+paper's 1950–92 baseline, and `r fs(o9060)` °C against the mean of the other December cruises. For 1982–83 the release's largest is `r fs(e83$anom)` °C
+(`r e83$cruise_key`, station `r sta(e83$site_key)`, `r e83$depth_bin`–`r e83$depth_bin + 10` m), where @mclain1985 give
+"+5° to +6°C at 100 m". For November 2015 the upper 50 m averages `r fs(k$l50_prev$anom)` °C over the fall 2026
+stations, where glider sections gave departures "frequently greater than 3 °C" for 10–100 m against 2007–2013
+[@ren2021]. One cruise the literature
+describes is not in the release: NOAA ship *McArthur*, 17–22 November 1997, the first of the extra cruises added
+that winter [@lynn1998], on which station 90.30 showed thermocline departures "greater than 4°" [@hayward1999].
+
+**The largest published value is from Baja California, and it is smaller.** On the first cruise of the Mexican
+IMECOCAL programme, in early October 1997, the water 30 to 40 m down off Punta Eugenia (line 120) was 8 °C above
+the 1950–78 October mean and 0.8 saltier [@lynn1998], "up to 8.7 °C" at 50 m [@durazo2002]. That cruise is not in
+the CalCOFI database. CalCOFI's own casts on those lines in the 1957–59 El Niño are, and the
+[whole-record ranking](#sec-whole-record) finds the same size there, `r fs(w58$dep)` °C in October 1958. It is the
+nearest published analogue to fall 2026: a warm, salty surface layer lying where the thermocline normally is, in
+the autumn of a very strong El Niño. Fall 2026 found that structure off San Diego, and larger.
+
+**At the sea surface fall 2026 is not beyond what 2014–16 produced; beneath it, it is.** The largest departures
+published for 2014–16 near the surface off Southern California are about 6 °C: 6.2 °C in satellite sea-surface
+temperature [@gentemann2017] and 5.8 °C in daily bottom temperature at 7–10 m in the Santa Barbara Channel
+[@reed2016]. That is the size of the `r f1(min(inner$anom), 0)` to `r f1(max(inner$anom), 0)` °C at the inner-Bight
+stations of this cruise. The difference is
+underneath. In 2015 the warming was "confined to the surface layer (upper ~50 m)" [@leising2015] and reached 0.5 to
+1.5 °C at 100 m [@mcclatchie2016]; in fall 2026 the 50–200 m layer averages `r fs(k$l200)` °C over `r k$l200_n`
+stations. That is why the record on this page rests on the values below the surface and on the layer averages, not
+on the sea surface.
+
+### Marine heatwaves, and why the largest numbers are below the surface {#sec-mhw}
+
+A marine heatwave has a standard definition: "a prolonged discrete anomalously warm water event" that "lasts for
+five or more days, with temperatures warmer than the 90th percentile based on a 30-year historical baseline
+period" [@hobday2016], graded from moderate to extreme by how many times the local gap between the mean and that
+percentile is exceeded [@hobday2018]. It is defined on daily sea-surface temperature, which a cruise cannot supply.
+NOAA's tracker identifies heatwaves in satellite sea-surface temperature by a rule of its own, on strength and
+area [@noaa_blobtracker_2026]; that is the heatwave named above.
+
+By that yardstick the well-known events are a few degrees. The regional mean on the peak day of the ten examples
+@hobday2018 tabulate runs from 1.92 to 5.10 °C against 1983–2012; the largest is the Santa Barbara Channel in
+October 2015, and the Northeast Pacific "Blob" is 2.56 °C. Eight prominent events reviewed by @smale2019 had maximum
+intensities of "3.5 to 9.5°C above climatological SST". The `r fs(k$l50)` °C mean of the upper 50 m over
+`r k$l50_n` stations is at the top of the first range, and it is a 50 m layer, not a skin temperature.
+
+Below the surface the numbers are larger, and the literature says why: "These subsurface anomalies are often larger
+than surface anomalies, due to the movement of the strong vertical temperature gradients around the thermocline"
+[@capotondi2024]. At moorings in the tropical western Pacific the mean intensity of subsurface heatwaves "shows a
+peak of about 5.2 °C at 150 m, and the maximal mean intensity reaches 8.9 °C" [@hu2021], and a model study finds
+that deep-reaching events "tend to reach deepest along the west coasts of the Americas, especially in the California
+Current System" [@kohn2024]. No published temperature departure found in the search behind this page, for California
+or anywhere else, reaches `r f1(k$top_anom)` °C. That is weak evidence by itself, because papers report averages far
+more often than single stations. The evidence for the record is the ranking above.
+
+### How El Niño warms these waters {#sec-mechanism}
+
+The review by @jacox2017clivar names three routes. The measurements on this page bear on two of them.
+
+- **Waves along the coast.** "During an El Niño, these waves tend to deepen the pycnocline and nutricline"
+  [@jacox2017clivar]: coastally trapped waves that travel poleward from the equator. Earlier events deepened the
+  thermocline off Southern California by tens of metres in cruise and winter means: the mixed layer by 10 to 30 m
+  in January 1958 [@reid1960], the 14 °C isotherm off San Diego by more than 40 m in winter 1982–83, and the
+  thermocline along the coast "by 50 to 100 m" [@mclain1985]. At the record station in fall 2026 the density
+  surfaces lay `r round(iso$dz[1])` to `r round(iso$dz[2])` m below their November depths ([above](#sec-isopycnals)).
+- **Water from the south.** "anomalous advection of surface waters from the south, as observed during the 1997-98
+  El Niño", which "may amplify surface warming and water column stratification" [@jacox2017clivar]. Its mark is
+  salt, and [fall 2026 is the saltiest cruise on record in the inner Bight](#sec-salt).
+- **Winds.** A changed atmosphere over the North Pacific weakens the winds that drive upwelling. A cruise does not
+  measure this.
+
+El Niños differ, and the same literature says so. The subsurface water of 1982–83 was fresher than normal, not
+saltier [@simpson1984a]. Gliders in the 2009–10 event found isopycnals "abnormally deep" but "no anomalous water
+masses in the region" [@todd2011]. In 2015–16 the effects on the California Current were "weaker than expected based
+on tropical sea surface temperature anomalies" [@jacox2016]. And the background has moved: "An overall warming trend
+of 1.3°C in the ocean surface, a deepening in the depth of the mean thermocline (18 m)" between 1950 and 1999
+[@dilorenzo2005], which a fixed 1993–2013 normal folds into any recent departure.
+
 ## What this does and does not show {#sec-caveats}
 
 ```{r}
@@ -1867,12 +2226,25 @@ kable(d_cov, col.names = c("series", "decade", "cruises", "with a monthly normal
       caption = "How much of the record has a normal to compare with.")
 ```
 
+```{r}
+#| label: chk-ctd-full
+#| include: false
+# the one-metre table is read for seven cruises: every cast `sample` lists for them must be in the published objects
+d_full <- q("
+  WITH f AS (SELECT cruise_key, sample_key FROM obs_ctd_full UNION ALL SELECT cruise_key, sample_key FROM obs_ctd_full_base),
+  a AS (SELECT cruise_key, count(DISTINCT sample_key) AS casts_1m FROM f GROUP BY cruise_key),
+  s AS (SELECT cruise_key, count(*) AS casts FROM sample WHERE dataset_key = 'calcofi_ctd-cast' AND sample_type = 'cast' GROUP BY cruise_key)
+  SELECT a.cruise_key, CAST(substr(a.cruise_key, 1, 4) AS INTEGER) AS year, a.casts_1m, s.casts FROM a JOIN s USING (cruise_key) ORDER BY 1")
+ctd_full <- list(n_twice = sum(table(cc_release_sources(CAT, "obs_ctd_full")$urls) > 1))
+stopifnot(nrow(d_full) == 7, d_full$casts_1m == d_full$casts)
+```
+
 - **"The record" is the part of the record with a baseline.** A normal exists for `r n_site$n` stations of the
   present grid (lines `r n_site$l0` to `r n_site$l1`) and for the months with at least five cruises in 1993–2013:
   `r paste(month.name[months], collapse = ", ")`. Earlier decades sampled other months and other stations far more
   often. "The largest on record" means the largest among `r d_share$n_cruises` of `r n_cruises_all` cruises.
-  The baseline-free comparisons ([shared stations](#tbl-paired), [record temperatures](#fig-warmest)) do not have
-  this limit and give the same answer.
+  The baseline-free comparisons ([shared stations](#tbl-paired), [record temperatures](#fig-warmest)) and the
+  [yardstick that reaches every station](#sec-whole-record) do not have this limit and give the same answer.
 - **The baseline is thin.** `r n_base[1]` to `r n_base[2]` November cruises per bin on line 93.3. The
   [baseline table](#tbl-baseline) bounds what that can change: the peak departure stays between
   `r f1(base_rng[1])` and `r f1(base_rng[2])` °C.
@@ -1885,6 +2257,18 @@ kable(d_cov, col.names = c("series", "decade", "cruises", "with a monthly normal
 - **Single values or layer averages.** A ranking of single values rewards the thermocline, where a displaced layer
   makes the largest numbers, and it is where bad values in old data surface. The layer average over fixed stations
   is the fairer claim. Both rank fall 2026 first.
+- **Peaks between cruises.** CalCOFI samples four times a year. The peak of the 1997–98 El Niño on line 90 was caught
+  because extra cruises were added that winter [@lynn1998], and one of them is not in the release
+  ([above](#sec-literature)). An earlier event's largest departure may have fallen between cruises; so may this one's.
+- **A defect in the published one-metre table does not reach this page.** In releases v2026.11.05 and v2026.11.09
+  the supplemental table `obs_ctd_full` is published with most casts missing for 22 cruises between April 2015 and
+  April 2026: a fault in the release export, found by the release's maintainers while this page was being written
+  and now being corrected, not a fault in the data. Its trace is in the catalog, which lists `r ctd_full$n_twice` of that table's
+  objects more than once. Every departure, ranking and layer mean on this page is computed from the thinned series
+  (`obs_env`) and the `climatology` table, which are complete. The one-metre table is read for seven cruises only,
+  fall 2026 and the six November cruises of the baseline (`r paste(sort(d_full$year[d_full$cruise_key != CRUISE]), collapse = ", ")`),
+  and for each of them the published object holds every cast the release's `sample` table lists
+  (`r fk(sum(d_full$casts))` casts in all, checked each time the page is rendered).
 - **Cause.** These measurements describe the water. They do not attribute it, and [neither, yet, does NOAA](#sec-context):
   a marine heatwave has been in place off California since 2025 and a strong El Niño arrived on top of it.
 
@@ -1910,7 +2294,15 @@ kable(d_cov, col.names = c("series", "decade", "cruises", "with a monthly normal
   "`r mt$description`" (`r mt$derivation`), with its own November normal. The release's headline criterion is
   stricter and stops at a thin warm skin on some casts; the looser one is used here because the question is how
   deep the warm layer reaches.
-- **Outside sources** (buoys, the Scripps Pier shore station, satellite analyses, Argo) are fetched by
+- **The whole-record yardstick** compares a cell with the mean of the other cruises, before fall 2026, of the same
+  series at the same station, calendar month and depth bin, where at least five exist. Two casts that hold bad
+  values ([shown above](#sec-rank)) are left out of it and of the per-event maxima.
+- **Salinity across events** uses the bottle series' values and normals (bottle casts end in 2021), and the fall
+  2026 CTD against the same bottle normals, because the CTD salinity normal carries unflagged spikes.
+- **Published values** quoted under [context](#sec-context) were each read in the source cited, or in its abstract
+  where the table says so; every quotation was checked against a saved copy of the text. Each entry of the
+  bibliography was built from its Crossref or DataCite record.
+- **Outside sources** (buoys, the Scripps Pier shore station, satellite analyses, Argo, the glider index) are fetched by
   `scripts/temperature_anomaly_outside_sources.py` and kept as small tables in
   `data/2026-11_temperature-anomaly/`, because the buoy files hold only the last 45 days.
 
@@ -1948,6 +2340,7 @@ d_osrc |>
       str_detect(url, "MUR")             ~ "JPL MUR SST v4.1 (CoastWatch ERDDAP)",
       str_detect(url, "ifremer")         ~ "Argo (Ifremer ERDDAP)",
       str_detect(url, "scripps-pier")    ~ "SCCOOS automated shore station, Scripps Pier (IOOS sensors ERDDAP)",
+      str_detect(url, "spraydata")       ~ "Southern California Temperature Index, Scripps glider group (Spray ERDDAP)",
       TRUE                               ~ "other"),
     url = glue("<a href='{url}'>{str_trunc(url, 110)}</a>")) |>
   select(source, accessed_utc, status, url) |>
@@ -1984,6 +2377,9 @@ The outside sources are credited as their providers ask:
 - Argo: "These data were collected and made freely available by the International Argo Program and the national
   programs that contribute to it. (https://argo.ucsd.edu, https://www.ocean-ops.org). The Argo Program is part of
   the Global Ocean Observing System." Argo (2000), <https://doi.org/10.17882/42182>.
+- The Southern California Temperature Index: Rudnick, D. L., K. D. Zaba, R. E. Todd, and R. E. Davis, 2017: A
+  climatology using data from the California Underwater Glider Network - Dataset. Scripps Institution of
+  Oceanography, Instrument Development Group. <https://doi.org/10.21238/S8SPRAY7292>, read 13 November 2026.
 - NOAA OISST v2.1 (NOAA National Centers for Environmental Information, <https://doi.org/10.25921/RE9P-PT57>) and
   JPL MUR SST v4.1 ("These data were provided by JPL under support by NASA MEaSUREs program";
   <https://doi.org/10.5067/GHGMR-4FJ04>), both through NOAA CoastWatch West Coast ERDDAP.
@@ -2074,12 +2470,49 @@ notebook is [`2026-11_temperature-anomaly.qmd`](https://github.com/CalCOFI/workf
 #| code-fold: true
 ```
 
+**Temperature and salinity of every cruise in the inner Bight**
+
+```{r}
+#| ref.label: ts-events
+#| eval: false
+#| code-fold: true
+```
+
 **Outside sources** (`scripts/temperature_anomaly_outside_sources.py`, run once)
 
 ```{python}
 #| file: scripts/temperature_anomaly_outside_sources.py
 #| eval: false
 #| code-fold: true
+```
+
+**The animation** is a page of its own in the Explorer's repository, driven by one clock and stepped frame by
+frame into the video: [`story/elnino-2026/`](https://github.com/CalCOFI/explore/tree/9a20f0150798eb579987b29650c767604634a7c1/story/elnino-2026)
+at the commit it was rendered from ([CalCOFI/explore#55](https://github.com/CalCOFI/explore/pull/55)).
+`render.sh` is the whole pipeline in one command: it derives the page's data from the analysis database
+(`build_data.sql`), builds the page, captures 900 frames in headless Chrome (`capture.mjs`) and encodes them with
+`ffmpeg`. Its files, read from that commit:
+
+```{r}
+#| label: video-code
+#| echo: false
+#| results: asis
+# the animation's source, read from the explore repository at the commit the video was rendered from (cached)
+EXPLORE_SHA <- "9a20f0150798eb579987b29650c767604634a7c1"
+STORY_FILES <- c("README.md", "render.sh", "build_data.sh", "build_data.sql", "capture.mjs", "page/index.html", "page/main.ts", "page/terrain.ts", "page/style.css")
+STORY_LANG  <- c(md = "markdown", sh = "bash", sql = "sql", mjs = "javascript", html = "html", ts = "typescript", css = "css")
+for (f in STORY_FILES) {
+  url  <- glue("https://raw.githubusercontent.com/CalCOFI/explore/{EXPLORE_SHA}/story/elnino-2026/{f}")
+  page <- glue("https://github.com/CalCOFI/explore/blob/{EXPLORE_SHA}/story/elnino-2026/{f}")
+  path <- file.path(DIR_CACHE, "explore", EXPLORE_SHA, f)
+  if (!file.exists(path)) {
+    dir.create(dirname(path), recursive = T, showWarnings = F)
+    try(curl::curl_download(url, path, quiet = T), silent = T)}
+  if (file.exists(path) && file.size(path) > 0) {
+    src <- readLines(path, warn = F)
+    cat(glue("<details><summary><a href='{page}'><code>story/elnino-2026/{f}</code></a> ({length(src)} lines)</summary>"), "\n\n", sep = "")
+    cat("`````", STORY_LANG[[tools::file_ext(f)]], "\n", sep = ""); cat(src, sep = "\n"); cat("\n`````\n\n</details>\n\n")
+  } else cat(glue("- [`story/elnino-2026/{f}`]({page})"), "\n\n", sep = "")}
 ```
 
 **Session**
