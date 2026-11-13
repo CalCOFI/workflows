@@ -117,7 +117,9 @@ stopifnot(
     "method" %in% names(formals(ctd_integrate)) && formals(ctd_chl_max)$window_m == 3,
   "calcofi4db >= 4.32.0 carries the threshold depths and N2 (profile_threshold_depth, ctd_hypoxic_depth, ctd_n2, ctd_pycnocline)" =
     all(vapply(c("profile_threshold_depth", "ctd_hypoxic_depth", "ctd_n2", "ctd_pycnocline"),
-               exists, logical(1), mode = "function")))
+               exists, logical(1), mode = "function")),
+  "calcofi4db >= 4.38.0 carries check_release_objects() (the release fallback's row check)" =
+    exists("check_release_objects", mode = "function"))
 
 source(here("libs/ingest.R"))
 cc <- read_calcofi_meta(here("ingest_calcofi_ctd-derived.qmd"))
@@ -188,7 +190,9 @@ staged output under `cc_stage_dir()` — the bytes the next release will be cut 
 used only if it is **current**: every partition's row count must equal what that
 ingest's committed `manifest.json` recorded (its `data_hash` starts with the row
 count). Otherwise the notebook reads the promoted release's `obs_ctd_full` through the
-resolver helpers (`cc_catalog()` / `cc_release_sources()`), never a hand-built path.
+resolver helpers (`cc_catalog()` / `cc_release_sources()`), never a hand-built path, and
+only after `check_release_objects()` finds it whole as published: one object per cruise,
+and the rows in their parquet footers equal to the catalog's.
 
 ```{r}
 #| label: input
@@ -228,6 +232,15 @@ if (stage_current) {
   cat_ <- calcofi4r::cc_catalog("latest")
   input_used <- glue("release {cat_$version} obs_ctd_full via cc_release_sources() (the stage was absent or not current)")
   invisible(dbExecute(con, "INSTALL httpfs; LOAD httpfs"))
+  # the published objects must be the whole table: v2026.11.05 and .09 listed 24 cruises 2-3
+  # times and published 22 of them short (47.2 M rows missing), which this fallback would have
+  # turned into derived products from partial casts. Same check as test_release.qmd.
+  chk <- calcofi4db::check_release_objects(cat_, con, tables = "obs_ctd_full")
+  print(chk[, c("check", "ok", "n", "expected")])
+  if (!all(chk$ok))
+    stop(glue("release {cat_$version} obs_ctd_full is not whole as published: ",
+              "{paste(stats::na.omit(chk$detail), collapse = '; ')}. ",
+              "Re-stage calcofi_ctd-cast instead of reading the release."), call. = FALSE)
   src_f <- calcofi4r::cc_release_sources(cat_, "obs_ctd_full")
   src_full_of <- function(ck) {
     u <- grep(glue("cruise_key={ck}/"), src_f$urls, fixed = TRUE, value = TRUE)

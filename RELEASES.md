@@ -13,6 +13,41 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## The 1 m CTD table is whole again: 22 cruises had been published with most of their casts missing
+
+`obs_ctd_full`, the supplemental table of 1 m CTD bins, was published short in v2026.11.05 and
+v2026.11.09: for 22 cruises between 2015-04 and 2026-04 it carried 2 to 68 casts where there are
+92 to 232 (`2015-11-32OC`: 2 of 140), so 47,189,291 of its 287,281,956 rows were missing. The
+release had built the table whole; the loss happened on the way to the bucket. DuckDB 2.0.0 starts
+another file for a partition once more than 100 are open, so 24 of the table's 143 cruises were
+written as two or three files. Each was given the cruise's one path, the uploads overwrote each
+other and the last, smallest file stayed. The catalog listed each of those 24 paths once per file
+(169 objects for 143 cruises), so the two whole cruises among them, `1994-03-31JD` and
+`2005-11-32NM`, were read twice. v2026.11.04 has the same repeated listings, but its objects are
+whole: every row is there, and those 24 cruises' rows are read two or three times. v2026.10.30 and
+earlier are right. No other table was affected (`obs_env` has 96 partitions, below the limit), and
+nothing upstream was lost: the staged ingest output matches the release export row for row.
+
+This release publishes one object per cruise again (calcofi4db 4.38.0: the export keeps every
+partition open for the write and stops unless each holds exactly one file; `release_objects()`
+and `freeze_plan()` stop on a second file or a repeated path). It replaces the 22 short objects in
+the shared store, where their content, and so their path, is unchanged: the upload step now
+re-uploads an object the plan would reuse when its size in the bucket differs from what the
+previous catalog recorded. Because v2026.11.05 and v2026.11.09 point at the same objects, they now
+read whole cruises too, though their catalogs still list those 24 paths two or three times.
+
+`test_release.qmd` now checks every table in the catalog, supplemental ones included, before
+promotion: the paths are unique, a partitioned table has one object per partition value, and the
+rows in the published objects' parquet footers equal the catalog's `rows`
+(`check_release_objects()`). Against v2026.11.09 as published it fails those three checks for
+`obs_ctd_full` and passes the other 75. The CTD derived-products ingest applies the same check
+before it falls back to the published table.
+
+**Consumers:** read `obs_ctd_full` from this release, or pass `refresh = TRUE` to
+`calcofi4r::cc_get_db()` if you opened v2026.11.05 or v2026.11.09 with `supplemental = TRUE`: the
+cached connection holds the repeated file list. calcofi4r, calcofi4py and db-query now drop a
+repeated path when they read a catalog.
+
 ## `sample_root` says which stage its data are at, so an app can label a preliminary cruise
 
 `sample_root` gains `data_stage` as its last column (calcofi4db 4.37.0, `build_sample_root()`):
