@@ -39,6 +39,7 @@ librarian::shelf(
   quiet = T)
 options(readr.show_col_types = F, knitr.kable.NA = "")
 
+# constants ----
 VER       <- "v2026.11.09"    # the release this page is pinned to (latest.txt on 2026-11-13)
 CRUISE    <- "2026-11-33P4"   # R/V Sally Ride, 31 October to 7 November 2026
 core      <- c("093.3 028.0", "093.3 030.0")   # the two stations at the heart of the warm layer
@@ -49,7 +50,7 @@ KM_PER_STATION <- 7.386       # +proj=calcofi: a line is equidistant, 7.386 km (
 ANOM_MAX  <- 13               # the top of the departure scale, shared by the map and the section (°C)
 dir.create(DIR_DATA, showWarnings = F, recursive = T)
 
-# brand v2 inks (https://calcofi.io/brand/v2/theme.css)
+# brand v2 inks (https://calcofi.io/brand/v2/theme.css) ----
 INK      <- "#182b49"
 MUTED    <- "#66686a"
 GRID     <- "#e4e4e4"
@@ -59,7 +60,7 @@ COL_2026 <- "#b3261e"
 COL_2015 <- "#c69214"
 COL_NORM <- "#00629b"
 
-# number formats: one decimal, a signed departure with a true minus, thousands
+# number formats: one decimal, a signed departure with a true minus, thousands ----
 f1  <- function(x, d = 1) formatC(x, format = "f", digits = d)
 fs  <- function(x, d = 1) sub("-", "−", sprintf(paste0("%+.", d, "f"), x), fixed = T)
 fk  <- function(x) format(x, big.mark = ",", trim = T)
@@ -67,6 +68,7 @@ dt_ <- function(d, ...) datatable(
   d, rownames = F, class = "compact stripe", extensions = "Buttons",
   options = list(dom = "Bfrtip", pageLength = 12, buttons = c("copy", "csv")), ...)
 
+# plot theme ----
 theme_story <- function(base_size = 12) {
   theme_minimal(base_size = base_size) +
     theme(
@@ -92,7 +94,7 @@ CAT   <- cc_catalog(VER)
 con   <- dbConnect(duckdb())
 d_src <- tibble()   # every object this page reads: the table under "Data sources"
 
-# a release object by its catalog URL, kept in a local cache (objects are content-addressed and immutable)
+# a release object by its catalog URL, kept in a local cache (objects are content-addressed and immutable) ----
 mirror <- function(url) {
   path <- file.path(DIR_CACHE, sub(paste0(BASE_URL, "/"), "", url, fixed = T))
   if (!file.exists(path)) {
@@ -101,7 +103,7 @@ mirror <- function(url) {
     file.rename(paste0(path, ".part"), path)}
   path}
 
-# a DuckDB view over one release table: all of its objects, or the partitions named in `parts`
+# a DuckDB view over one release table: all of its objects, or the partitions named in `parts` ----
 release_view <- function(table, parts = NULL, cols = "*", name = table) {
   src  <- cc_release_sources(CAT, table)
   urls <- src$urls
@@ -116,6 +118,7 @@ release_view <- function(table, parts = NULL, cols = "*", name = table) {
     table = table, partition = if (is.null(parts)) NA_character_ else parts, url = urls, mb = file.size(files) / 1e6))
   invisible(urls)}
 
+# the tables this page reads ----
 release_view("cruise")
 release_view("sample", cols = "* EXCLUDE (geom)")
 release_view("sample_measurement")
@@ -278,7 +281,7 @@ GROUP BY ALL
 #| include: false
 q <- function(sql, ...) dbGetQuery(con, glue_sql(sql, ..., .con = con)) |> as_tibble()
 
-# the record cell and the previous record
+# the record cell and the previous record ----
 d_cell26 <- q("SELECT * FROM cell WHERE cruise_key = {CRUISE} AND anom IS NOT NULL ORDER BY anom DESC")
 top      <- d_cell26[1, ]
 prev     <- q("SELECT * FROM cell WHERE cruise_key <> {CRUISE} AND anom IS NOT NULL ORDER BY anom DESC LIMIT 1")
@@ -292,14 +295,14 @@ d_share  <- q("
   FROM r")
 n_cruises_all <- q("SELECT count(DISTINCT cruise_key) AS n FROM cell")$n
 
-# layer means over the stations the cruise occupied
+# layer means over the stations the cruise occupied ----
 d_layer <- q("SELECT * FROM cruise_layer WHERE covered") |>
   mutate(series = if_else(dataset_key == "calcofi_bottle", "bottle", "CTD"))
 lay <- function(layer_, cruise_ = CRUISE, ds = "calcofi_ctd-cast") d_layer |>
   filter(layer == layer_, cruise_key == cruise_, dataset_key == ds)
 runner <- function(layer_) d_layer |> filter(layer == layer_, cruise_key != CRUISE) |> slice_max(anom, n = 1, with_ties = F)
 
-# the cruise, station by station
+# the cruise, station by station ----
 d_sta <- q("
   SELECT s.site_key, s.line, s.station, s.layer, s.anom, s.anom_season, s.temp, p.lat, p.lon, p.t0
   FROM station_layer s
@@ -313,7 +316,7 @@ inner <- sfc |> filter((line >= 88 & station <= 37) | (line < 88 & station <= 51
 outer <- sfc |> anti_join(inner, by = "site_key")
 stopifnot(min(inner$anom) > max(outer$anom))   # the two groups do not overlap: a front, not a gradient
 
-# salinity and mixed-layer depth on the inshore end of line 93.3
+# salinity and mixed-layer depth on the inshore end of line 93.3 ----
 d_sal <- q("
   SELECT o.site_key, o.depth_bin, avg(o.value) AS sal, any_value(c.clim_mean) AS clim, any_value(c.clim_sd) AS sd
   FROM obs_env o LEFT JOIN climatology c
@@ -422,6 +425,7 @@ r    <- cc_interpolate_rast(srf)[["value"]] |>
 d_r  <- as.data.frame(r, xy = T, na.rm = T) |>
   mutate(value = pmin(pmax(value, min(pts$z)), max(pts$z)))
 
+# labels and palette ----
 pal_warm <- cmocean("balance")(256)[129:256]   # the warm half of the diverging ramp: white at 0
 d_city <- tribble(
   ~name,           ~lon,     ~lat,  ~hjust,
@@ -434,6 +438,7 @@ d_line <- pts |>
   mutate(label = glue("line {format(line, nsmall = 1)}"))
 rec <- pts |> filter(site_key == k$top_site)
 
+# map ----
 ggplot() +
   geom_tile(data = d_r, aes(x, y, fill = value)) +
   geom_contour(data = d_r, aes(x, y, z = value), breaks = seq(2, 8, 2), colour = "white", linewidth = 0.25, alpha = 0.8) +
@@ -1832,6 +1837,9 @@ d_src |>
   [CTD transects](https://calcofi.io/ctd-transects/?line=93.3&cruise=2026-11-33P4&var=temperature_ave&mode=anomaly),
   the [Explorer's section](https://calcofi.io/explore/?lens=section&var=temperature&line=93.3&cruise=2026-11-33P4&anom=1)
   and its [3-D view](https://calcofi.io/explore/?lens=section&var=temperature&line=93.3&cruise=2026-11-33P4&anom=1&view=3d).
+
+To cite this page: CalCOFI (2026). *The November 2026 temperature anomaly off Southern California.*
+<https://calcofi.io/workflows/2026-11_temperature-anomaly.html>, with the release citation above for the data.
 
 Outside sources, with the URL of every request and when it was made:
 
