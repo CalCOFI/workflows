@@ -122,6 +122,7 @@ release_view <- function(table, parts = NULL, cols = "*", name = table) {
 release_view("cruise")
 release_view("sample", cols = "* EXCLUDE (geom)")
 release_view("sample_measurement")
+release_view("measurement_type")
 release_view("obs_env",      parts = c("temperature_ave", "temperature", "salinity_ave_corr"))
 release_view("climatology",  parts = c("temperature_ave", "temperature", "salinity_ave_corr", "salinity", "mld_sigma_theta_0125"))
 release_view("obs_ctd_full", parts = CRUISE)
@@ -332,6 +333,7 @@ d_mld <- q("
   WHERE s.cruise_key = {CRUISE} AND m.measurement_type = 'mld_sigma_theta_0125'
     AND s.site_key IN ('093.3 026.7', '093.3 028.0', '093.3 030.0')")
 
+mt   <- q("SELECT description, derivation FROM measurement_type WHERE measurement_type = 'mld_sigma_theta_0125'")
 cr   <- q("SELECT * FROM cruise_ref WHERE cruise_key = {CRUISE}")
 n_st <- n_distinct(d_sta$site_key)
 k <- list(
@@ -548,7 +550,7 @@ folded above it, and everything on this page is computed from the public release
 ## What CalCOFI measures, and what "normal" means here {#sec-background}
 
 The California Cooperative Oceanic Fisheries Investigations (CalCOFI) has occupied a fixed grid of stations off
-California since 1949, four times a year in recent decades. At each station a CTD (an instrument that records
+California since 1949, four times a year in recent decades [@bograd2003calcofi; @mcclatchie2014]. At each station a CTD (an instrument that records
 conductivity, temperature and depth) is lowered to about 500 m, and water is collected in bottles at about 20
 depths. The stations sit on numbered lines that run offshore from the coast: line 93.3 leaves the coast north of
 San Diego, line 90.0 at Dana Point and line 86.7 near Santa Monica Bay.
@@ -665,8 +667,9 @@ p_norm / p_obs / p_diff +
 ### What kind of anomaly this is
 
 Read the profiles before the numbers. At stations 26.7, 28 and 30 the cruise found a **mixed layer of about 25 °C
-reaching `r f1(min(k$mld), 0)`–`r f1(max(k$mld), 0)` m** (by the 0.125 kg m⁻³ density criterion; the November normal
-there is `r f1(min(k$mld_clim), 0)`–`r f1(max(k$mld_clim), 0)` m). Below it the temperature falls steeply. The
+reaching `r f1(min(k$mld), 0)`–`r f1(max(k$mld), 0)` m** (by a density criterion of 0.125 kg m⁻³, one of the
+standard thresholds [@levitus1982; @deboyermontegut2004]; the November normal there is
+`r f1(min(k$mld_clim), 0)`–`r f1(max(k$mld_clim), 0)` m). Below it the temperature falls steeply. The
 departure peaks at 40–60 m because that is where a normal November has already dropped into the cold water of the
 thermocline. The sea surface was about 7 °C above normal; the thickness of the layer adds the rest.
 
@@ -852,18 +855,23 @@ b_full <- q("
     AND f.depth_min_m >= {k$top_bin} AND f.depth_min_m < {k$top_bin + 10}
   GROUP BY f.cruise_key")
 stopifnot(nrow(b_full) == nrow(b_in))
+# fall 2026 from its own one-metre casts, for the row that uses one-metre normals (like with like)
+v26_full <- q("
+  SELECT avg(value) AS v FROM cast_1m
+  WHERE site_key = {k$top_site} AND measurement_type = 'temperature_ave' AND measurement_qual IS NULL
+    AND depth_m >= {k$top_bin} AND depth_m < {k$top_bin + 10}")$v
 d_base <- tribble(
-  ~`definition of normal`,                                                             ~cruises,                ~normal,
-  "the release's climatology: every 1993–2013 November value in the bin (used on this page)", top$n_cruises,     top$clim_mean,
-  "the same cruises, one value per cruise",                                            nrow(b_in),               mean(b_in$v),
-  "the same cruises from their full one-metre casts, not the thinned series",          nrow(b_full),             mean(b_full$v),
-  "leaving out each baseline cruise in turn: the lowest normal",                       nrow(b_in) - 1L,          min(b_loo),
-  "leaving out each baseline cruise in turn: the highest normal",                      nrow(b_in) - 1L,          max(b_loo),
-  "every earlier November cruise with a CTD cast, to 2025, one value per cruise",      nrow(b_cells),            mean(b_cells$v),
-  "the bottle series' own climatology for the cell",                                   b_btl$n_cruises,          b_btl$clim_mean,
-  "the release's seasonal normal (September to November)",                             top$season_n_cruises,     top$season_mean) |>
-  mutate(`normal (°C)` = round(normal, 2), `departure of 25.00 °C (°C)` = round(top$v - normal, 2)) |>
-  select(-normal)
+  ~`definition of normal`,                                                             ~cruises,                ~normal,          ~value,
+  "the release's climatology: every 1993–2013 November value in the bin (used on this page)", top$n_cruises,     top$clim_mean,    top$v,
+  "the same cruises, one value per cruise",                                            nrow(b_in),               mean(b_in$v),     top$v,
+  "the same cruises and fall 2026 from their full one-metre casts, not the thinned series", nrow(b_full),        mean(b_full$v),   v26_full,
+  "leaving out each baseline cruise in turn: the lowest normal",                       nrow(b_in) - 1L,          min(b_loo),       top$v,
+  "leaving out each baseline cruise in turn: the highest normal",                      nrow(b_in) - 1L,          max(b_loo),       top$v,
+  "every earlier November cruise with a CTD cast, to 2025, one value per cruise",      nrow(b_cells),            mean(b_cells$v),  top$v,
+  "the bottle series' own climatology for the cell",                                   b_btl$n_cruises,          b_btl$clim_mean,  top$v,
+  "the release's seasonal normal (September to November)",                             top$season_n_cruises,     top$season_mean,  top$v) |>
+  mutate(`normal (°C)` = round(normal, 2), `fall 2026 (°C)` = round(value, 2), `departure (°C)` = round(value - normal, 2)) |>
+  select(-normal, -value)
 kable(d_base, caption = glue("The departure at the record cell (station 93.3 30.0, 40–50 m) under {nrow(d_base)} definitions of normal."))
 ```
 
@@ -912,6 +920,28 @@ Over the `r thin$n` bins of the cruise above 200 m, the thinned bin mean differs
 `r fs(thin$mean, 2)` °C on average, and by less than `r f1(thin$p95, 2)` °C in 95 % of bins (the largest
 differences are in the thermocline, where a few points stand for a steep gradient). At the record cell the two
 are `r f1(thin_top$v, 2)` and `r f1(thin_top$v_full, 2)` °C.
+
+```{r}
+#| label: chk-thin-baseline
+# the same comparison on the six baseline cruises read at one metre, at the cruise's stations, bins 10 to 40 m
+d_thinb <- q("
+  WITH f AS (
+    SELECT o.cruise_key, s.site_key, CAST(floor(o.depth_min_m / 10) * 10 AS INTEGER) AS depth_bin, avg(o.measurement_value) AS v_full
+    FROM obs_ctd_full_base o JOIN sample s USING (sample_key)
+    WHERE o.measurement_type = 'temperature_ave' AND o.measurement_qual IS NULL AND o.depth_min_m < 50 GROUP BY ALL)
+  SELECT c.depth_bin, count(*) AS cells, avg(c.v - f.v_full) AS thinned_minus_1m, avg(c.depth_m - c.depth_bin) AS m_below_bin_top
+  FROM cell c JOIN f USING (cruise_key, site_key, depth_bin)
+  WHERE c.dataset_key = 'calcofi_ctd-cast' AND c.depth_bin BETWEEN 10 AND 40 AND c.site_key IN ({unique(d_sta$site_key)*})
+  GROUP BY c.depth_bin ORDER BY c.depth_bin")
+```
+
+In stratified water the thinned bin mean runs a little warm. In the six baseline cruises read at one metre, at these
+stations, it is `r f1(min(d_thinb$thinned_minus_1m), 2)` to `r f1(max(d_thinb$thinned_minus_1m), 2)` °C warmer than the
+one-metre bin mean in the bins between 10 and 50 m, because its points sit `r f1(mean(d_thinb$m_below_bin_top))` m below
+the top of the bin on average where a one-metre series sits 4.5 m. The normal is built from that same thinned
+series, so a departure on this page compares like with like. A departure computed from one-metre values against
+this normal reads low by that amount in ordinary, stratified years; in fall 2026, when the upper 50 m was mixed,
+the two agree.
 
 ### Are the stations where they should be?
 
@@ -962,8 +992,8 @@ d_pier  <- read_csv(f_out[7]) |> mutate(yr = as.integer(format(date, "%Y")), md 
 ```
 
 Moored buoys report water temperature near the surface every half hour, through the National Data Buoy Center.
-They are operated by other programs (most of these by the Coastal Data Information Program at Scripps) and share
-nothing with the ship's instruments. The table pairs each cast with every buoy within 15 km, at the buoy report
+They are operated by other programs (most of these by the Coastal Data Information Program at Scripps [@cdip]) and
+share nothing with the ship's instruments. The table pairs each cast with every buoy within 15 km, at the buoy report
 nearest in time.
 
 ```{r}
@@ -1022,7 +1052,7 @@ ggplot(d_b, aes(time, wtmp, colour = buoy)) +
     title    = "The warm water was there for weeks, and the cool water offshore stayed cool",
     subtitle = "Water temperature (°C), hourly means. White dots: the CTD's top 3 m at the nearest cast.",
     x = NULL, y = NULL,
-    caption  = "Buoys: Coastal Data Information Program and NOAA National Data Buoy Center, through NDBC realtime files, read 13 November 2026.") +
+    caption  = "Buoy data from CDIP, Scripps Institution of Oceanography (cdip.ucsd.edu), and NOAA National Data Buoy Center, through NDBC realtime files, read 13 November 2026.") +
   theme_story()
 ```
 
@@ -1030,7 +1060,8 @@ ggplot(d_b, aes(time, wtmp, colour = buoy)) +
 
 The shore station on Scripps Pier in La Jolla has its own instruments in the water at the coast and reports
 temperature and salinity every few minutes (the SCCOOS automated shore station, running since 2013). These are its
-daily means, of the values that pass the station's own quality tests.
+daily means, of the values that pass the station's own quality tests. The pier's much longer manual record, kept
+daily since 1916 [@shorestations_data; @rasmussen2020], is taken up under [context](#sec-context).
 
 ```{r}
 #| label: fig-pier
@@ -1111,8 +1142,9 @@ The salty water reached the pier during the week of the cruise.
 ### Satellites
 
 Two satellite analyses of sea-surface temperature, each read at every cast's position on the cast's day: NOAA's
-OISST (a 0.25° blend of satellite, ship and buoy data, with its own anomaly against 1971–2000) and JPL's MUR
-(0.01°, anomaly against its 2003–2014 climatology).
+OISST [@huang2021; @reynolds2007] (a 0.25° blend of satellite, ship and buoy data, here in its preliminary near-real-time version, with its
+own anomaly against 1971–2000) and JPL's MUR [@chin2017] (0.01°; the anomaly is NOAA CoastWatch's product against
+the MUR climatology of 2003–2014).
 
 ```{r}
 #| label: tbl-satellite
@@ -1177,7 +1209,7 @@ stopifnot(km_inner > 25)   # no float sampled the inner Bight
 kable(d_ap, digits = 2, caption = "Argo float profiles in and around the cruise's area, two weeks before it to a week after (temperature in °C at the pressure nearest each depth).")
 ```
 
-`r n_distinct(d_ap$float)` Argo floats surfaced in the area around the cruise. All were over the outer part of the
+`r n_distinct(d_ap$float)` Argo floats [@wong2020; @argo_gdac] surfaced in the area around the cruise. All were over the outer part of the
 grid or beyond it: none came closer than `r min(d_ap[["km to it"]])` km to a station, or than `r km_inner` km to a
 station of the inner Bight. They show the offshore structure the cruise found there (surface layers of `r f1(min(d_ap[["5 m"]], na.rm = T))`–`r f1(max(d_ap[["5 m"]], na.rm = T))` °C
 with salinity near `r f1(median(d_ap$salinity_5m, na.rm = T), 1)`), and so confirm the cool side of the front.
@@ -1703,9 +1735,48 @@ water on them had changed as well.** On the same surfaces it was `r f1(iso$dt[1]
 normal column holds at `r round(split$z_n)` m) and `r fs(split$water)` °C from the water itself being warmer on that
 surface.
 
+```{r}
+#| label: tbl-isopycnals-cruise
+# the same on every station of the cruise: the baseline is the median of the six cruises' down casts at the station
+d_ia <- q("
+  WITH f AS (SELECT * FROM obs_ctd_full_base UNION ALL BY NAME SELECT * FROM obs_ctd_full)
+  SELECT f.cruise_key, s.site_key, f.depth_min_m AS depth_m,
+         max(f.measurement_value) FILTER (WHERE f.measurement_type = 'temperature_ave')   AS temp,
+         max(f.measurement_value) FILTER (WHERE f.measurement_type = 'salinity_ave_corr') AS sal
+  FROM f JOIN sample s USING (sample_key)
+  WHERE right(f.sample_key, 1) = 'd' AND f.measurement_qual IS NULL AND f.depth_min_m <= 450
+    AND f.measurement_type IN ('temperature_ave', 'salinity_ave_corr') AND s.site_key IN ({unique(d_sta$site_key)*})
+  GROUP BY ALL") |>
+  filter(!is.na(temp), !is.na(sal)) |>
+  mutate(
+    sa    = gsw_SA_from_SP(sal, depth_m, -119, 33),
+    sigma = gsw_sigma0(sa, gsw_CT_from_t(sa, temp, depth_m)),
+    when  = if_else(cruise_key == CRUISE, "fall 2026", "normal"))
+SIG_ALL <- c(25.5, 26)
+d_oa <- d_ia |> group_by(site_key, cruise_key, when) |>
+  group_modify(\(d, ...) on_sigma(d) |> filter(sigma %in% SIG_ALL)) |> ungroup()
+d_dz <- d_oa |> filter(when == "normal") |> group_by(site_key, sigma) |>
+  summarize(n = sum(!is.na(depth)), depth_n = median(depth, na.rm = T), temp_n = median(temp, na.rm = T), .groups = "drop") |>
+  filter(n >= 4) |>
+  inner_join(d_oa |> filter(when == "fall 2026", !is.na(depth)) |> select(site_key, sigma, depth_26 = depth, temp_26 = temp), by = c("site_key", "sigma")) |>
+  mutate(group = if_else(site_key %in% inner$site_key, "inner Bight", "seaward"), dz = depth_26 - depth_n, dt = temp_26 - temp_n)
+d_dz |>
+  group_by(`density surface (σθ)` = f1(sigma), stations = group) |>
+  summarize(
+    `stations with a baseline` = n(), `median deeper by (m)` = round(median(dz)), `range (m)` = glue("{round(min(dz))} to {round(max(dz))}"),
+    `median warmer on the surface (°C)` = round(median(dt), 2), .groups = "drop") |>
+  kable(align = "r", caption = "Every station of the cruise deep enough to hold the surface: how far two density surfaces lay below their baseline depth (the median of the six November baseline casts at the station), and the temperature change on them.")
+```
+
+The displacement is not confined to the record station. Across the cruise the same surfaces lay deeper than their
+baseline at `r sum(d_dz$dz > 0)` of `r nrow(d_dz)` station-surface pairs: by a median of
+`r round(median(d_dz$dz[d_dz$group == "inner Bight"]))` m in the inner Bight and
+`r round(median(d_dz$dz[d_dz$group == "seaward"]))` m at the seaward stations.
+
 So the depressed pycnocline accounts for most of the departure below about `r round(iso$z_min)` m, as expected of a
 deep warm layer, and the layer itself is a different water mass. A baseline on density surfaces for every station,
-built from the one-metre casts, would make this routine; here it is one station, by hand.
+built from the one-metre casts of the whole baseline period, would make this routine; here it is done by hand, from
+six cruises.
 
 ::: {.callout-note title="A flaw in the salinity normal, found while drawing this figure"}
 The diagram draws the normal from the bottle series because the CTD salinity normal at this station is wrong at
@@ -1725,32 +1796,32 @@ These are other institutions' statements, quoted as published and read on 12–1
 for the measurements above, not part of them.
 
 - **A strong El Niño is in progress.** NOAA's Climate Prediction Center, in its
-  [ENSO Diagnostic Discussion of 12 November 2026](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_disc_nov2026/ensodisc.shtml),
-  keeps an El Niño Advisory in force: "El Niño continues to strengthen, with a strong-to-very strong El Niño likely
+  [ENSO Diagnostic Discussion of 12 November 2026](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_disc_nov2026/ensodisc.shtml)
+  [@cpc_ensodisc_2026_11], keeps an El Niño Advisory in force: "El Niño continues to strengthen, with a strong-to-very strong El Niño likely
   through January-March 2027". Its Niño-3.4 index for October was +2.5 °C. That is a *relative* index (the tropical
-  mean is subtracted), which NOAA has used officially since February 2026, so it is not comparable with the
+  mean is subtracted [@vanoldenborgh2021; @lheureux2024]), which NOAA has used officially since February 2026, so it is not comparable with the
   Niño-3.4 values quoted for earlier events without saying which index is meant. At the equator NOAA reports "a
   deeper-than-average thermocline and anomalies exceeding +10.0°C at depth in the eastern Pacific Ocean": large
   departures at thermocline depth are how this event looks at its source as well.
 - **A marine heatwave was already there.** NOAA Fisheries'
   [California Current Marine Heatwave Tracker](https://www.integratedecosystemassessment.noaa.gov/regions/california-current/california-current-marine-heatwave-tracker-blobtracker)
-  (updated 30 October 2026) has followed a heatwave off California, NEP25A, since May 2025, and says of the
+  (updated 30 October 2026) [@noaa_blobtracker_2026] has followed a heatwave off California, NEP25A, since May 2025, and says of the
   recent warming: "Although the current MHW off California preceded the El Niño, we now infer that we are seeing
   additional warming due to El Niño, primarily through the arrival of Kelvin waves, which act to further deepen the
   surface mixed layer, reduce upwelling, and therefore lead to surface layer warming. It is unclear if we can
   separate the warming that was already in place in California from the additional warming due to the El
   Niño-forced Kelvin waves."
 - **Scripps Pier's century-long record.** The Shore Stations Program has measured the sea surface at the pier by
-  hand every day since 1916. Its [plot for 2026](https://shorestations.ucsd.edu/plots/SST_This_Year.png) gives
+  hand every day since 1916. Its [plot for 2026](https://shorestations.ucsd.edu/plots/SST_This_Year.png) [@shorestations_plots_2026] gives
   24.0 °C for 12 November, counts 74 daily record highs in 2026 so far, and marks the days of early November as
   records for their dates. (This is the long manual record; the [automated station above](#fig-pier) is a separate
   instrument on the same pier.)
 - **Gliders.** Scripps's underwater gliders have repeated CalCOFI line 90 for twenty years. The group's
-  [El Niño page](https://spraydata.ucsd.edu/products/el-nino/) says of that line: "The warm water anomaly is now
+  [El Niño page](https://spraydata.ucsd.edu/products/el-nino/) [@spray_elnino_2026] says of that line: "The warm water anomaly is now
   extending the deepest we've seen in 20 years of monitoring."
 - **A published anomaly at thermocline depth, farther north.** In Monterey Bay, MBARI
   [reported on 29 October 2026](https://www.mbari.org/news/mbari-researchers-observe-the-arrival-of-el-nino-in-monterey-bay/)
-  that the temperature at 60 m "reached 18.18 degrees Celsius (64.72 degrees Fahrenheit), surpassing the time series
+  [@mbari_2026] that the temperature at 60 m "reached 18.18 degrees Celsius (64.72 degrees Fahrenheit), surpassing the time series
   record high set on November 19, 1997", with temperatures "more than seven degrees centigrade over the long-term
   average". That is the same kind of number as the one on this page, a departure at the depth of the thermocline,
   from an independent mooring about 600 km to the north-west, and a little over half as large.
@@ -1812,9 +1883,12 @@ kable(d_cov, col.names = c("series", "decade", "cruises", "with a monthly normal
   A cruise mean averages the stations.
 - **The map's shading** is ordinary kriging by `calcofi4r::cc_interpolate()`, the interpolator of the Explorer's
   contour maps, clipped to the hull of the stations (plus 15 km), masked over land and limited to the range of the
-  measured values.
-- **Mixed-layer depth** is the release's `mld_sigma_theta_0125` (the depth where density exceeds its 10 m value by
-  0.125 kg m⁻³), with its own November normal.
+  measured values. Colours are the cmocean maps [@thyng2016]. Density is TEOS-10 potential density anomaly, from the
+  `gsw` package.
+- **Mixed-layer depth** is the release's `mld_sigma_theta_0125`, in the registry's words
+  "`r mt$description`" (`r mt$derivation`), with its own November normal. The release's headline criterion is
+  stricter and stops at a thin warm skin on some casts; the looser one is used here because the question is how
+  deep the warm layer reaches.
 - **Outside sources** (buoys, the Scripps Pier shore station, satellite analyses, Argo) are fetched by
   `scripts/temperature_anomaly_outside_sources.py` and kept as small tables in
   `data/2026-11_temperature-anomaly/`, because the buoy files hold only the last 45 days.
@@ -1867,6 +1941,31 @@ d_bstn |>
     page = glue("<a href='{page}'>station page</a>"), data = glue("<a href='{url}'>realtime file</a>")) |>
   kable(escape = F, caption = "Buoys and the tide station read (NDBC keeps the last 45 days in these files).")
 ```
+
+## Acknowledgements {#sec-ack}
+
+The measurements are CalCOFI's: the data were obtained from the California Cooperative Oceanic Fisheries
+Investigations, are available at <https://calcofi.org/> and, as the integrated database used here, at
+<https://calcofi.io/>. CalCOFI data are licensed under the Creative Commons Attribution 4.0 International License.
+The November 2026 casts were collected aboard R/V *Sally Ride* and are preliminary.
+
+The outside sources are credited as their providers ask:
+
+- Buoy data from CDIP, Scripps Institution of Oceanography (<https://cdip.ucsd.edu/>): data were furnished by the
+  Coastal Data Information Program, Integrative Oceanography Division, operated by the Scripps Institution of
+  Oceanography. Other buoys and the La Jolla tide station: NOAA National Data Buoy Center,
+  <https://www.ndbc.noaa.gov/>, read 13 November 2026.
+- The Scripps Pier automated shore station is operated by the Southern California Coastal Ocean Observing System
+  (SCCOOS) and was read through the IOOS sensors ERDDAP. The century-long manual record cited under
+  [context](#sec-context) is the Shore Stations Program's: "Data provided by the Shore Stations Program sponsored at
+  Scripps Institution of Oceanography by California Department of Parks and Recreation, Natural Resources Division,
+  Award# C1670003."
+- Argo: "These data were collected and made freely available by the International Argo Program and the national
+  programs that contribute to it. (https://argo.ucsd.edu, https://www.ocean-ops.org). The Argo Program is part of
+  the Global Ocean Observing System." Argo (2000), <https://doi.org/10.17882/42182>.
+- NOAA OISST v2.1 (NOAA National Centers for Environmental Information, <https://doi.org/10.25921/RE9P-PT57>) and
+  JPL MUR SST v4.1 ("These data were provided by JPL under support by NASA MEaSUREs program";
+  <https://doi.org/10.5067/GHGMR-4FJ04>), both through NOAA CoastWatch West Coast ERDDAP.
 
 ## Code {#sec-code}
 
@@ -1970,3 +2069,8 @@ notebook is [`2026-11_temperature-anomaly.qmd`](https://github.com/CalCOFI/workf
 cat(glue("rendered {format(Sys.time(), '%Y-%m-%d %H:%M %Z')} from release {VER}; calcofi4r {packageVersion('calcofi4r')}, duckdb {packageVersion('duckdb')}, R {getRversion()}"), "\n")
 dbDisconnect(con, shutdown = T)
 ```
+
+## References {.unnumbered}
+
+::: {#refs}
+:::
