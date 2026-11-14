@@ -12,9 +12,10 @@ calcofi:
   questions_file: metadata/sio/cetacean-sightings/questions.csv
   # HELD (Ben, 2026-10-08): staged, never released or uploaded, until the
   # Scripps Whale Acoustics Lab reviews and signs off (Simone Baumann-Pickering,
-  # 2026-10-07). The source is Michaela Alksne's QA/QC'd on-effort product, the
-  # basis of a density-estimation manuscript still pending; the earlier
-  # marmam-app copy was exploratory and must not be used. `in_release: false`
+  # 2026-10-07). The source is Michaela Alksne's final QA/QC'd on-effort product
+  # (the lab's private GitHub repository, 2026-11-13), the basis of a
+  # density-estimation manuscript still pending; the earlier marmam-app copy was
+  # exploratory and must not be used. `in_release: false`
   # keeps it out of every release; the notebook also skips every GCS upload
   # while it is set (publish_to_gcs below).
   in_release: false
@@ -30,7 +31,7 @@ calcofi:
     - {table: sample, shared: true, note: "core event dimension (effort segment at its midpoint + sighting at the animal's position)"}
     - {table: sample_track, shared: true, note: "effort segment start/mid/end (x, y, t) + the observer's line of sight to each placed sighting"}
     - {table: obs, shared: true, note: "core occurrence headline (group_size per counted sighting)"}
-    - {table: obs_attribute, shared: true, note: "transect status, group size min/max, calves, perpendicular + radial distance, angle off the bow, Beaufort per counted sighting (behaviour held, Q03)"}
+    - {table: obs_attribute, shared: true, note: "transect status, group size min/max, calves, perpendicular + radial distance, angle off the bow, Beaufort and behaviour (the lab's codebook labels) per counted sighting"}
     - {table: sample_measurement, shared: true, note: "transect_length per on-transect effort segment"}
     - {table: taxon, shared: true, note: "shared taxa reference (cetaceans, worms:)"}
     - {table: dataset_taxon, shared: true, note: "species_code -> taxon_key crosswalk"}
@@ -48,59 +49,63 @@ editor_options:
 > nothing from it is uploaded, until the Scripps Whale Acoustics Lab reviews and
 > signs off (Simone Baumann-Pickering, 2026-10-07).
 
-**Source**: the QA/QC'd on-effort visual-survey product of the Scripps Whale
-Acoustics Lab (Hildebrand / Baumann-Pickering), worked up by Michaela Alksne for
-a density-estimation manuscript (pending), shared by Simone Baumann-Pickering on
-2026-10-07 and saved to the CalCOFI Data Folder
+**Source**: the final QA/QC'd on-effort visual-survey product of the Scripps
+Whale Acoustics Lab (Hildebrand / Baumann-Pickering), worked up by Michaela
+Alksne for a density-estimation manuscript (pending), published by her on
+2026-11-13 to the lab's **private** GitHub repository
+`MarineBioAcousticsRC/CalCOFI_visual_survey_data_2004_2025` and read at a pinned
+commit by `libs/download_sio_cetacean_sightings.R` into the CalCOFI Data Folder
 (`data-private/sio/cetacean-sightings/`, held while the lab reviews it):
 
-- `CalCOFI_sightings_on_effort.xlsx` — one row per on-effort sighting: the
-  ship's position and heading when it was seen, the sighting conditions
-  (Beaufort, swell, visibility, glare, cloud), the observer, the binocular
-  reticle reading or the recorded distance, the angle off the bow and side, and
-  the lab's perpendicular distance from the trackline.
-- `CalCOFI_segments_on_effort.xlsx` — the on-effort survey segments: start / end
-  position and time, the on/off-transect flag and the segment length.
+- `CalCOFI_cetacean_sightings_on_effort_2004-2025.csv` — one row per on-effort
+  sighting: the ship's position and heading when it was seen, the sighting
+  conditions (Beaufort, swell, visibility, glare, cloud), the observer, the
+  binocular reticle reading or the recorded distance, the signed angle off the
+  bow (`sight_brng`, negative to port) and side, and the lab's perpendicular
+  distance from the trackline, now computed in this file for every year.
+- `CalCOFI_cetacean_effort_segments_2004-2025.csv` — the on-effort survey
+  segments: start / end position and time, the on/off-transect flag and the
+  segment length.
+- `codes.csv` — the lab's code list: species, behaviour, cue, sighting quality,
+  precipitation and glare; `data_dictionary.csv` — what each column holds and its
+  units; `CountCOFI_Manual.docx` — the field data-logging manual.
 
-Both are published as **geometry**, not only as points (Ben, 2026-11-05, after
-the lab's review): each segment becomes a `sample_track` row from its start to
-its end (beginning, middle and end in x, y and t), and each sighting is placed
-at the **animal's position** by coordinate geometry (COGO) from the ship's
-position, the true bearing and the distance, with the observer's line of sight
-as its own `sample_track` row. See [Place sightings (COGO)].
-- `CalCOFI_sighting_codes.csv` — the lab's species-code list (Latin-1, with
-  non-breaking spaces).
+Both data files are published as **geometry**, not only as points (Ben,
+2026-11-05, after the lab's review): each segment becomes a `sample_track` row
+from its start to its end (beginning, middle and end in x, y and t), and each
+sighting is placed at the **animal's position** by coordinate geometry (COGO)
+from the ship's position, the true bearing and the distance, with the observer's
+line of sight as its own `sample_track` row. See [Place sightings (COGO)].
 
-The row counts are asserted in [Read Source Data]. The two workbooks are
+The row counts are reported in [Read Source Data]. The two files are
 **on-effort only**: every sighting carries a segment id, and the segment ids are
 unique across cruises, so a sighting joins its segment on the id alone.
 
-They replace the CSVs in the CalCOFI marine mammal Shiny app repository
-(CalCOFI/marmam-app) this ingest read until 2026-10-07: the lab calls the app's
-copy exploratory, and it is no longer read. The marmam-app copy also carried
-off-effort sightings, which this product does not; it adds 2022-2025 effort and
-2023-2025 sightings the app never had.
+They replace the lab's 2026-10-08 workbooks (`CalCOFI_sightings_on_effort.xlsx`,
+`CalCOFI_segments_on_effort.xlsx`, `CalCOFI_sighting_codes.csv`), read by the
+first two private previews, and before them the CSVs in the CalCOFI marine
+mammal Shiny app repository (CalCOFI/marmam-app), which the lab calls
+exploratory and which are no longer read.
 
-**Behaviour is held back.** The two behaviour columns are bare numeric codes
-(`1`, `34`, `2, 5, 8`) with no codebook, and the same `behavior` measurement type
-carries words (Flying, Feeding) for `farallon_bird-mammal`, so a consumer
-grouping by `behavior` would get codes beside labels. The code path stays below,
-gated by `publish_behavior <- FALSE`; it is switched on when the lab supplies
-the codebook (Q03; Ben, 2026-10-04).
+**Behaviour** is published from the lab's codebook (`codes.csv`, Q03): each
+code in `PrimaryBehaviour` / `OtherBehaviour1` becomes its label (`1` → Slow
+travel), the words the `behavior` measurement type also carries for
+`farallon_bird-mammal` (Flying, Feeding). A value outside the codebook (`4?`,
+`38`, `Tail lobbing`) is not published until the lab defines it (Q31).
 
 - **Provider**: `sio` (Scripps Whale Acoustics Lab, Hildebrand / Baumann-Pickering)
 - **Grain**: a sighting inside an on-effort segment (`segment_id`)
 - **Taxonomy**: species codes declared with `append_dataset_taxon()` from
   `metadata/sio/cetacean-sightings/species_codes.csv` (reconciled against the
-  lab's code list, whose common names it carries) and resolved against WoRMS;
+  lab's code list in `codes.csv`, whose common names it carries) and resolved against WoRMS;
   the unidentified classes and the two synonyms are keyed by
   `metadata/taxon_override.csv`.
 
 ```{mermaid}
 flowchart LR
-  E["Segments workbook"] --> SG["cetacean_segment: on-effort segment"]
-  S["Sightings workbook"] --> SI["cetacean_sighting: one row per sighting"]
-  C["lab code list + species_codes.csv"] --> SP["cetacean_species"]
+  E["Effort segments CSV"] --> SG["cetacean_segment: on-effort segment"]
+  S["Sightings CSV"] --> SI["cetacean_sighting: one row per sighting"]
+  C["codes.csv + species_codes.csv"] --> SP["cetacean_species"]
   SI -- segment_id --> SG
   SI -- species_code --> SP
   SG --> TR["sample (transect) + sample_track (effort_segment)"]
@@ -117,11 +122,12 @@ devtools::load_all(here::here("../calcofi4db"))
 devtools::load_all(here::here("../calcofi4r"))
 librarian::shelf(
   CalCOFI/calcofi4db, CalCOFI/calcofi4r,
-  DBI, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr, leaflet,
-  lubridate, purrr, readr, readxl, sf, stringr, tibble, tidyr, quiet = T)
+  DBI, digest, dplyr, DT, fs, glue, here, janitor, jsonlite, knitr, leaflet,
+  lubridate, purrr, readr, sf, stringr, tibble, tidyr, quiet = T)
 options(readr.show_col_types = F)
 options(DT.options = list(scrollX = TRUE))
 source(here("libs/ingest.R"))
+source(here("libs/download_sio_cetacean_sightings.R"))
 
 cc           <- read_calcofi_meta(here("ingest_sio_cetacean-sightings.qmd"))
 provider     <- cc$provider
@@ -168,12 +174,19 @@ load_duckdb_extension(con, "spatial")
 ```{r}
 #| label: read-source
 
-stopifnot("source dir not found" = dir_exists(dir_src))
-src_files <- c(
-  sightings = file.path(dir_src, "CalCOFI_sightings_on_effort.xlsx"),
-  segments  = file.path(dir_src, "CalCOFI_segments_on_effort.xlsx"),
-  species   = file.path(dir_src, "CalCOFI_sighting_codes.csv"))
+# the lab's final product (Michaela Alksne, 2026-11-13), read at this commit of
+# its private GitHub repository; a new delivery is a new sha here (and a diff
+# against the previous one before it is re-staged)
+src_ref   <- "2388e8f265dd2aa07d8ac82fbe1ad6b0c9e9df44"
+src_files <- download_sio_cetacean_sightings(dir_src, ref = src_ref)
 stopifnot("a source file is missing" = all(file_exists(src_files)))
+src_meta  <- read_json(file.path(dir_src, "_source.json"))
+stopifnot("the files on disk are the pinned commit's" =
+            identical(src_meta$ref, src_ref) &&
+            all(map_chr(names(src_files), \(k) digest(file = src_files[[k]], algo = "sha256")) ==
+                map_chr(names(src_files), \(k) src_meta$files[[k]]$sha256)))
+cat(glue("source: github.com/{src_meta$repo} @ {substr(src_ref, 1, 7)} ",
+         "({src_meta$commit_date}, \"{str_split_1(src_meta$commit_msg, '\\n')[1]}\")"), "\n")
 # when the bytes were saved (file mtime); recorded by their place in the Data
 # Folder, not by this machine's path to it
 src_stamp <- stamp_source_access(files = unname(src_files)) |>
@@ -184,31 +197,39 @@ src_stamp <- stamp_source_access(files = unname(src_files)) |>
 # preview build serves under src/ next to the notebook
 file_copy(src_files, file.path(dir_inspect, basename(src_files)), overwrite = TRUE)
 
-# every cell as text, so nothing is coerced before it is looked at; the
-# workbooks write the literal "NA" for a blank in several columns
-xlsx_na  <- c("", "NA")
-d_si_raw <- read_excel(src_files[["sightings"]], sheet = "Sheet1", col_types = "text", na = xlsx_na)
-d_sg_raw <- read_excel(src_files[["segments"]],  sheet = "Sheet1", col_types = "text", na = xlsx_na)
-# Latin-1, CR CR LF line ends, and a non-breaking space (0xA0) around one name
-d_sp_raw <- read_csv(src_files[["species"]], col_types = cols(.default = "c"),
-                     locale = locale(encoding = "latin1")) |>
-  setNames(c("lab_code", "lab_common_name")) |>
-  mutate(across(everything(), \(x) str_squish(str_replace_all(x, " ", " "))))
+# every cell as text, so nothing is coerced before it is looked at; a blank and
+# the literal "NA" are both missing
+csv_na   <- c("", "NA")
+d_si_raw <- read_csv(src_files[["sightings"]], col_types = cols(.default = "c"), na = csv_na)
+d_sg_raw <- read_csv(src_files[["segments"]],  col_types = cols(.default = "c"), na = csv_na)
+# the lab's code list, one row per (field, code): the species codes are the
+# `Species1` rows, the behaviour codes the `PrimaryBehaviour / OtherBehaviour1` rows
+d_codes  <- read_csv(src_files[["codes"]], col_types = cols(.default = "c"), na = csv_na) |>
+  mutate(across(everything(), str_squish))
+d_sp_raw <- d_codes |> filter(field == "Species1") |>
+  select(lab_code = code, lab_common_name = meaning)
+d_beh_codes <- d_codes |> filter(str_detect(field, "Behaviour")) |>
+  select(behavior_code = code, behavior_label = meaning)
+stopifnot(
+  "the CSVs parse without problems" = nrow(problems(d_si_raw)) == 0 && nrow(problems(d_sg_raw)) == 0,
+  "codes.csv has the species and behaviour lists" = nrow(d_sp_raw) > 0 && nrow(d_beh_codes) > 0,
+  "a code is listed once per field" = !anyDuplicated(select(d_codes, field, code)))
 
 # the columns read below must all be there; the row counts are reported, not
-# asserted (the lab's further-QC'd version is due, Michaela 2026-11-05): every
-# rule-level assertion further down still catches a changed file
+# asserted: every rule-level assertion further down still catches a changed file
 cols_si <- c("Cruise", "Season", "UniqueID", "SightingNo", "Date_Time_Local_", "Date_Local_",
-             "DecLat", "DecLong", "segID_ON_Effort_MNA", "ShipHeadingTru", "SightingBearingTru",
-             "BinoReticle", "Distance_m_", "ObsHeight_m_", "PortOrStarbord", "AngleFormula",
-             "dist_calc_m_", "perp_dist_m", "Bft", "Best", "Min", "Max", "Calf", "Species1")
+             "DecLat", "DecLong", "segID_ON_Effort", "ShipHeadingTru", "SightingBearingTru",
+             "BinoReticle", "Distance_m_", "ObsHeight_m_", "PortOrStarbord", "sight_brng",
+             "dist_calc_m_", "perp_dist_m", "Bft", "Best", "Min", "Max", "Calf", "Species1",
+             "PrimaryBehaviour", "OtherBehaviour1")
 cols_sg <- c("Cruise", "Season", "Year", "StartDateTimeLocal", "EndDateTimeLocal", "StartLat",
              "StartLon", "EndLat", "EndLon", "SegmentID", "TransectFlag", "SegmentLength_km")
 stopifnot(
   "a sightings column is missing" = all(cols_si %in% names(d_si_raw)),
   "a segments column is missing"  = all(cols_sg %in% names(d_sg_raw)))
 cat(glue("sightings {nrow(d_si_raw)} x {ncol(d_si_raw)}, segments {nrow(d_sg_raw)} x {ncol(d_sg_raw)}, ",
-         "lab species codes {nrow(d_sp_raw)} (2026-10-08 delivery: 4,961 x 53, 3,165 x 12, 34)"), "\n")
+         "lab species codes {nrow(d_sp_raw)}, behaviour codes {nrow(d_beh_codes)} ",
+         "(2026-10-08 workbooks: 4,961 x 53, 3,165 x 12, 34 species codes, no behaviour codebook)"), "\n")
 ```
 
 ### Source files
@@ -239,9 +260,9 @@ src_links(src_files) |>
 
 # species_codes.csv is the vocabulary: its `species_code` is the key the
 # taxon_override.csv rows and ingest_sio_cetacean-edna.qmd use (mixed case, as
-# the first delivery wrote it); `lab_code` is the code in the lab's list. The
-# 2026-10 sightings write the codes upper-case, so a sighting is matched to the
-# vocabulary case-insensitively (UBW, which the lab's list spells UWB, included).
+# the first delivery wrote it); `lab_code` is the code in the lab's list
+# (codes.csv, `Species1`), blank for a code the list no longer carries. A
+# sighting is matched on the lab code, else the vocabulary key, case-insensitively.
 # The lab's list is authoritative for the common name.
 d_species_meta <- read_csv(file.path(dir_meta, "species_codes.csv"), col_types = cols(.default = "c"))
 d_species <- d_species_meta |>
@@ -266,10 +287,9 @@ cat(glue("cetacean_species: {nrow(d_species)} codes ({sum(!is.na(d_species$lab_c
 ```{r}
 #| label: segment
 
-# Excel stores a date-time as days since 1899-12-30; the workbooks hold local
-# Pacific clock time (Q04), read here as a clock reading (tagged UTC, not yet
-# converted)
-xl_clock <- function(x) as.POSIXct(round(as.numeric(x) * 86400), origin = "1899-12-30", tz = "UTC")
+# the files write "YYYY-MM-DD hh:mm:ss" in local Pacific clock time (Q04), read
+# here as a clock reading (tagged UTC, not yet converted)
+clock_of <- function(x) ymd_hms(x, tz = "UTC")
 # clock time -> UTC (Q04). EDI knb-lter-cce.262.2 records each 2005-2015
 # cruise's own GMT offset: most kept Pacific standard time (UTC-8) all year, even
 # in summer; a few used PDT (UTC-7). Those cruises take their recorded offset
@@ -288,7 +308,7 @@ num <- function(x) suppressWarnings(as.numeric(x))
 fmt_clock <- function(x) format(x, "%Y-%m-%d %H:%M:%S")
 
 d_segment <- d_sg_raw |>
-  mutate(start_clock = xl_clock(StartDateTimeLocal), end_clock = xl_clock(EndDateTimeLocal)) |>
+  mutate(start_clock = clock_of(StartDateTimeLocal), end_clock = clock_of(EndDateTimeLocal)) |>
   transmute(
     segment_id           = as.integer(num(SegmentID)),
     # the effort file's cruise label (CCYYYY-MM) is the canonical one: the
@@ -310,9 +330,10 @@ d_segment <- d_sg_raw |>
     transect_flag        = str_to_upper(str_trim(TransectFlag)),
     segment_length_km    = num(SegmentLength_km))
 
-# a segment whose start is more than two months from its cruise label's month:
-# segment 2886 is labelled CC2022-04 and dated 2022-11-05 (the first day of
-# CC2022-11). Kept, but given no cruise_key below (it would take April's).
+# a segment whose start is more than two months from its cruise label's month
+# would take the wrong cruise_key: kept, but given none below. The 2026-10-08
+# workbook had one (2886, labelled CC2022-04 and dated 2022-11-05; Q18); the
+# lab's 2026-11-13 files have none.
 label_month <- ymd(paste0(str_sub(d_segment$cruise_label, 3, 9), "-01"))
 d_segment <- d_segment |>
   mutate(misdated = abs(as.numeric(difftime(as.Date(datetime_start_local), label_month, units = "days"))) > 62)
@@ -327,8 +348,8 @@ stopifnot(
   "Year is the start's year"                 = all(d_segment$year == year(ymd_hms(d_segment$datetime_start_local))),
   "transect_flag is ON or OFF"               = all(d_segment$transect_flag %in% c("ON", "OFF")),
   "every segment has a length"               = !anyNA(d_segment$segment_length_km),
-  "only segment 2886 may be dated away from its label (CC2022-04 on 2022-11-05; Q18)" =
-    all(d_segment$segment_id[d_segment$misdated] %in% 2886L))
+  "no segment is dated away from its cruise label (Q18, fixed in the 2026-11-13 files)" =
+    !any(d_segment$misdated))
 dbWriteTable(con, "cetacean_segment", d_segment, overwrite = TRUE)
 
 # the segment as a path: start -> end in x, y and t, its middle computed by
@@ -373,15 +394,15 @@ cat(glue("cetacean_segment: {nrow(d_segment)} segments over ",
 
 d_sighting <- d_si_raw |>
   mutate(sighting_id = row_number(),
-         clock       = xl_clock(Date_Time_Local_),
-         segment_id  = as.integer(num(segID_ON_Effort_MNA))) |>
+         clock       = clock_of(Date_Time_Local_),
+         segment_id  = as.integer(num(segID_ON_Effort))) |>
   left_join(d_segment |> select(segment_id, segment_label = cruise_label,
                                 effort_status = transect_flag), by = "segment_id") |>
   transmute(
     sighting_id,
-    # the sighting's own Cruise disagrees with its segment's on four cruises
-    # (202504SH / 202507SR / 202511SR for CC2025-03 / -07 / -11, and CC2007-04
-    # for CC2007-03): the segment's label wins, the sighting's is kept
+    # the segment's label wins where the sighting's own Cruise disagrees (four
+    # cruises in the 2026-10-08 workbooks, none in the 2026-11-13 files; Q17);
+    # the sighting's is kept
     cruise_label          = coalesce(segment_label, Cruise),
     cruise_label_source   = Cruise,
     unique_id             = str_squish(UniqueID),
@@ -393,7 +414,7 @@ d_sighting <- d_si_raw |>
     season                = str_to_lower(str_trim(Season)),
     datetime_local        = fmt_clock(clock),
     datetime_start_utc    = local_to_utc(clock, cruise_label),
-    date_local_check      = as.Date(xl_clock(Date_Local_)),
+    date_local_check      = ymd(Date_Local_),
     # the SHIP's position when the animal was seen (2026-11-05: unrelated to the
     # perpendicular distance, median 240 m from its segment's line); the
     # sighting's own position is placed from it in [Place sightings (COGO)]
@@ -421,21 +442,24 @@ d_sighting <- d_si_raw |>
     distance_m            = num(Distance_m_),
     obs_height_m          = num(ObsHeight_m_),
     port_or_starboard     = PortOrStarbord,
-    angle_formula         = num(AngleFormula),
+    # the lab's signed angle off the bow: negative to port, positive to
+    # starboard, 0 dead ahead (= SightingBearingTru - ShipHeadingTru)
+    sight_brng            = num(sight_brng),
     dist_calc_m           = num(dist_calc_m_),
     perp_dist_m           = num(perp_dist_m),
     group_size_best       = num(Best),
     group_size_min        = num(Min),
     group_size_max        = num(Max),
     calf_raw              = Calf,
-    # plain integers only ("001" included); ND / nd / 0NA / UD / O / DN / N /
-    # 1? / Juv stay NULL (Q09)
+    # plain integers only; ND (not determined, codes.csv) stays NULL (Q09)
     calf_count            = if_else(str_detect(str_trim(Calf), "^\\d+$"),
                                     suppressWarnings(as.integer(str_trim(Calf))), NA_integer_),
     species_code_source   = str_trim(Species1),
-    # case-insensitive: the vocabulary's DC is the source's DC, its Ubw the source's UBW
-    species_code          = d_species$species_code[match(toupper(species_code_source),
-                                                         toupper(d_species$species_code))],
+    # the lab code first (UWB is the vocabulary's Ubw), else the vocabulary key,
+    # case-insensitively (the vocabulary's Dc is the source's DC)
+    species_code          = coalesce(
+      d_species$species_code[match(toupper(species_code_source), toupper(d_species$lab_code))],
+      d_species$species_code[match(toupper(species_code_source), toupper(d_species$species_code))]),
     species2_raw          = Species2,
     sp1_percent           = num(sp1Percent),
     sp2_percent           = num(sp2Percent),
@@ -445,8 +469,7 @@ d_sighting <- d_si_raw |>
     effort_status,
     behavior_primary      = PrimaryBehaviour,
     behavior_other1       = OtherBehaviour1,
-    comments              = Comments,
-    time_diff_min         = num(Time_Diff_minutes))
+    comments              = Comments)
 n_seg_orphan <- sum(!d_sighting$segment_id %in% d_segment$segment_id)
 d_lbl_src <- d_sighting |> distinct(cruise_label_source, cruise_label)
 d_label   <- d_sighting |> distinct(cruise_label, survey_code6)
@@ -455,14 +478,22 @@ d_in_seg  <- d_sighting |>
                                  datetime_end_utc_seg = datetime_end_utc), by = "segment_id")
 stopifnot(
   "every sighting has a time"                       = !anyNA(d_sighting$datetime_start_utc),
-  "Date_Local_ is the day of Date_Time_Local_ (blank on 7 CC0911 / CC1008 rows; Q25)" =
-    all(is.na(d_sighting$date_local_check) | as.Date(ymd_hms(d_sighting$datetime_local)) == d_sighting$date_local_check) &&
-    sum(is.na(d_sighting$date_local_check)) <= 7L,
+  "Date_Local_ is filled and is the day of Date_Time_Local_ (Q25)" =
+    !anyNA(d_sighting$date_local_check) &&
+    all(as.Date(ymd_hms(d_sighting$datetime_local)) == d_sighting$date_local_check),
   "every sighting has a ship position"              = !anyNA(d_sighting$latitude_ship) && !anyNA(d_sighting$longitude_ship),
   "every ship position is off California (west of -117)" = all(d_sighting$longitude_ship < -117),
   "every sighting carries a segment id (on effort only)" = !anyNA(d_sighting$segment_id),
-  "only sightings on segment 419 (CC2006-07; Q19) may lack their segment" =
-    all(d_sighting$segment_id[!d_sighting$segment_id %in% d_segment$segment_id] %in% 419L),
+  "every sighting's segment is in the segments file (segment 419 was missing in 2026-10; Q19)" =
+    all(d_sighting$segment_id %in% d_segment$segment_id),
+  "the sighting's cruise label is its segment's (Q17)" =
+    all(d_sighting$cruise_label_source == d_sighting$cruise_label),
+  "the sighting's transect flag is its segment's (Q12)" =
+    all(d_sighting$transect_flag_original == d_sighting$effort_status),
+  "sight_brng is filled, within +-180, signed as the side (negative to port)" =
+    !anyNA(d_sighting$sight_brng) && all(abs(d_sighting$sight_brng) <= 180) &&
+    all(d_sighting$sight_brng < 0 | !str_detect(str_to_lower(coalesce(d_sighting$port_or_starboard, "")), "^p")) &&
+    all(d_sighting$sight_brng > 0 | !str_detect(str_to_lower(coalesce(d_sighting$port_or_starboard, "")), "^s")),
   "a sighting falls inside its segment's time span (+- 1 min)" =
     all(d_in_seg$datetime_start_utc >= d_in_seg$datetime_start_utc_seg - 60 &
         d_in_seg$datetime_start_utc <= d_in_seg$datetime_end_utc_seg + 60),
@@ -472,6 +503,12 @@ stopifnot(
   "every species code is in the vocabulary"         = !anyNA(d_sighting$species_code),
   "Species2 is always blank"                        = all(is.na(d_sighting$species2_raw)),
   "every sighting has a Best group size"            = !anyNA(d_sighting$group_size_best),
+  "Min <= Best <= Max wherever given (Q21)" =
+    all(is.na(d_sighting$group_size_min) | d_sighting$group_size_min <= d_sighting$group_size_best) &&
+    all(is.na(d_sighting$group_size_max) | d_sighting$group_size_max >= d_sighting$group_size_best),
+  "UniqueID is unique (mixed groups split as a / b; Q20)" = !anyDuplicated(d_sighting$unique_id),
+  "Calf is an integer, ND (not determined) or blank (Q09)" =
+    all(is.na(d_sighting$calf_raw) | d_sighting$calf_raw == "ND" | !is.na(d_sighting$calf_count)),
   "effort_status is ON or OFF wherever the segment exists" =
     all(d_sighting$effort_status %in% c("ON", "OFF") | !d_sighting$segment_id %in% d_segment$segment_id))
 d_sighting <- d_sighting |> select(-date_local_check)
@@ -487,33 +524,35 @@ d_lbl_src |> filter(cruise_label_source != cruise_label) |>
   datatable(caption = "Sighting cruise labels the segments spell differently", rownames = FALSE)
 ```
 
-Two sightings (CC2006-07) reference segment 419, which the segments file lacks.
-They keep their `segment_id` in the source table but get no parent `sample`, so
-the core never points at a sample that does not exist.
+Every sighting's segment is in the segments file (the 2026-10-08 workbook
+lacked segment 419, Q19). Were one missing, the sighting would keep its
+`segment_id` in the source table but get no parent `sample`, so the core never
+points at a sample that does not exist.
 
 ## Place sightings (COGO)
 
-The workbook gives the **ship's** position when each animal was seen, not the
+The file gives the **ship's** position when each animal was seen, not the
 animal's. The animal is placed by coordinate geometry from four of the lab's
-fields, profiled on 2026-11-05:
+fields (profiled on 2026-11-05 against the 2026-10-08 workbooks, re-checked on
+the lab's 2026-11-13 files):
 
-- **Angle off the bow** — `AngleFormula`, 0 (dead ahead) to 180 (astern), the
-  lab's own angle: `|SightingBearingTru − ShipHeadingTru|` on 84% of rows, and on
-  most of the rest `SightingBearingTru` was evidently written as a bearing
-  relative to the bow (`AngleFormula` = it, or 360 − it). So
-  `SightingBearingTru` is not used; the angle and the side are.
+- **Angle off the bow** — `sight_brng`, the lab's signed angle: negative to
+  port, positive to starboard, 0 dead ahead, ±180 astern. It is
+  `SightingBearingTru − ShipHeadingTru` wherever both are recorded (asserted
+  below), and from the 2026-11-13 files on it is filled for every year (the
+  2026-10-08 workbook's unsigned `AngleFormula` was 0 from 2022 on; Q30). The
+  published angle is its absolute value, the side its sign (or `PortOrStarbord`).
 - **True bearing** — `cogo_true_bearing()`: the ship's heading plus the angle to
-  starboard, minus it to port (`PortOrStarbord`). Where the side is blank, the
-  recorded `SightingBearingTru` is used only if it is a true bearing that agrees
-  with the heading and the angle (within 1°).
+  starboard, minus it to port. A sighting with no heading (51, all 2008-2009)
+  has no bearing.
 - **Radial distance** — the distance that reproduces the lab's `perp_dist_m`
-  (= distance × |sin angle|): `Distance_m_` (recorded) on 1,100 sightings, mostly
-  before 2016, and `dist_calc_m_` (from the binocular reticle and eye height, about
-  0.28° per division) on 3,048. Where both reproduce it, the reticle distance is used.
-  Where no perpendicular distance was computed (Q24, 2025), the reticle distance
-  is used if there is a reticle reading, else the recorded distance.
-  `dist_calc_m_` alone is never trusted: with no reticle reading it is the
-  distance to the horizon at the observer's eye height (11,827 m at 11 m).
+  (= distance × |sin angle|): `dist_calc_m_` (from the binocular reticle and the
+  observer's eye height, about 0.28° per division) or `Distance_m_` (recorded).
+  Where both reproduce it, the reticle distance is used; where the lab gives no
+  perpendicular distance, the reticle distance if there is a reticle reading,
+  else the recorded distance. A perpendicular distance computed from the horizon
+  distance (no reticle reading, no recorded distance; Q27) is withheld; the
+  2026-11-13 files leave `dist_calc_m_` blank there instead.
 - **Position** — `cogo_destination()` from the ship's position along the true
   bearing for the radial distance. A sighting with no bearing or no distance
   keeps the ship's position (`position_method` = `ship`) and has no sight line.
@@ -526,21 +565,24 @@ near <- function(a, b) !is.na(a) & !is.na(b) & abs(a - b) < 0.5
 d_cogo <- d_sighting |>
   transmute(
     sighting_id, datetime_start_utc, latitude_ship, longitude_ship, perp_dist_m,
-    angle_off_bow = if_else(angle_formula >= 0 & angle_formula <= 180, angle_formula, NA_real_),
+    sight_brng,
+    angle_off_bow = abs(sight_brng),
+    # the side as recorded, else the angle's sign; none dead ahead
     side          = case_when(str_detect(str_to_lower(port_or_starboard), "^p") ~ "port",
-                              str_detect(str_to_lower(port_or_starboard), "^s") ~ "starboard"),
+                              str_detect(str_to_lower(port_or_starboard), "^s") ~ "starboard",
+                              sight_brng < 0 ~ "port",
+                              sight_brng > 0 ~ "starboard"),
     rel_recorded  = ((sighting_bearing_true - ship_heading_true + 540) %% 360) - 180,
-    bearing_side  = cogo_true_bearing(ship_heading_true, angle_off_bow, side),
-    bearing_rec_ok = !is.na(sighting_bearing_true) & sighting_bearing_true >= 0 &
-                     sighting_bearing_true < 360 & abs(abs(rel_recorded) - angle_off_bow) < 1,
-    bearing_true  = coalesce(bearing_side, if_else(bearing_rec_ok, sighting_bearing_true, NA_real_)),
-    bearing_method = case_when(!is.na(bearing_side) ~ "heading + angle (side)",
-                               !is.na(bearing_true) ~ "recorded true bearing"),
+    # dead ahead needs no side
+    bearing_true  = if_else(angle_off_bow == 0, ship_heading_true %% 360,
+                            cogo_true_bearing(ship_heading_true, angle_off_bow, side)),
+    bearing_method = if_else(is.na(bearing_true), NA_character_, "heading + angle off the bow"),
     # which distance reproduces the lab's perpendicular distance
     fit_recorded  = near(perp_dist_m, distance_m * sn(angle_off_bow)),
     fit_reticle   = !is.na(bino_reticle) & near(perp_dist_m, dist_calc_m * sn(angle_off_bow)),
     fit_horizon   = is.na(bino_reticle) & is.na(distance_m) &
                     near(perp_dist_m, dist_calc_m * sn(angle_off_bow)),
+    no_distance   = is.na(bino_reticle) & is.na(distance_m) & is.na(dist_calc_m),
     distance_source = case_when(
       fit_reticle                                  ~ "reticle",
       fit_recorded                                 ~ "recorded",
@@ -561,9 +603,14 @@ d_cogo <- d_cogo |>
 n_perp     <- sum(!is.na(d_cogo$perp_dist_m))
 n_explain  <- with(d_cogo, sum(!is.na(perp_dist_m) & (fit_recorded | fit_reticle | fit_horizon)))
 n_horizon  <- sum(d_cogo$fit_horizon)
+n_perp_nodist <- with(d_cogo, sum(!is.na(perp_dist_m) & no_distance))
 stopifnot(
-  "every lab perpendicular distance is reproduced by the recorded, the reticle or the horizon distance" =
-    n_explain == n_perp - sum(!is.na(d_cogo$perp_dist_m) & is.na(d_cogo$angle_off_bow)),
+  "sight_brng is SightingBearingTru - ShipHeadingTru wherever both are recorded (within 1 degree)" =
+    with(filter(d_cogo, !is.na(rel_recorded)), all(abs(sight_brng - rel_recorded) < 1)),
+  "a reticle reading always has a reticle distance above 0 m (the 2026-10-08 file had 0 for 2022-2025; Q30)" =
+    with(d_sighting, all(is.na(bino_reticle) | (!is.na(dist_calc_m) & dist_calc_m > 0))),
+  "every lab perpendicular distance is reproduced by the recorded, the reticle or the horizon distance, unless no distance was recorded" =
+    n_explain == n_perp - n_perp_nodist,
   "a placed sighting's perpendicular distance from the ship's heading is the radial distance x |sin angle|" =
     with(filter(d_cogo, position_method == "cogo", !is.na(perp_distance_m)),
          all(abs(radial_distance_m * sn(angle_off_bow) - perp_distance_m) < 0.5)),
@@ -585,8 +632,10 @@ d_cogo |>
   datatable(caption = "How each sighting was placed", rownames = FALSE, options = list(dom = "t"))
 cat(glue("{sum(d_cogo$position_method == 'cogo')} of {nrow(d_cogo)} sightings placed at the animal; ",
          "{n_explain} of {n_perp} lab perpendicular distances reproduced; ",
+         "{n_perp_nodist} given with no distance recorded; ",
          "{n_horizon} computed from the horizon distance (withheld, Q27); ",
-         "{sum(is.na(d_cogo$side))} with no side recorded"), "\n")
+         "{sum(is.na(d_cogo$side))} dead ahead (no side); ",
+         "{sum(is.na(d_cogo$bearing_true))} with no heading"), "\n")
 ```
 
 ### Inspection files
@@ -637,7 +686,7 @@ st_write(sf_line,  file.path(dir_inspect, "sight_lines.geojson"), quiet = TRUE)
 write_csv(st_drop_geometry(sf_sight), file.path(dir_inspect, "sightings_placed.csv"), na = "")
 
 src_links(dir_ls(dir_inspect, regexp = "\\.(geojson|csv)$")) |>
-  filter(file != basename(src_files[["species"]])) |>
+  filter(!file %in% basename(src_files)) |>
   datatable(escape = FALSE, rownames = FALSE, options = list(dom = "t"),
             caption = "Inspection files (private, as the sources)")
 
@@ -713,8 +762,8 @@ cruise_match <- match_cruise_by_track(
   ref_datetime_col = "datetime", group_col = "cruise_label", window_days = 1)
 
 # the effort segments vote on the same labels from the ship's own positions (the
-# misdated segment 2886 is one vote of 25 on CC2022-04; no ichthyo station was
-# occupied within a day of it, so it casts none)
+# 2026-10-08 workbook's misdated segment 2886 was one vote of 25 on CC2022-04;
+# no ichthyo station was occupied within a day of it, so it cast none)
 seg_match <- match_cruise_by_track(
   con, "cetacean_segment", "cruise_track",
   datetime_col = "datetime_start_utc", lon_col = "longitude", lat_col = "latitude",
@@ -875,6 +924,9 @@ d_meas_type <- declare_measurement_bounds(
   new_types |> select(measurement_type, valid_min, valid_max) |>
     add_row(measurement_type = "effort_status", valid_min = 0, valid_max = 1),
   meas_type_csv, overwrite = TRUE, quiet = TRUE)
+# behaviour (Q03, the lab's codebook since 2026-11-13): farallon_bird-mammal
+# defines the type; this ingest publishes it too
+d_meas_type <- add_measurement_source_dataset("behavior", ds_key, meas_type_csv, quiet = TRUE)
 my_types <- c("group_size", "group_size_min", "group_size_max", "calf_count",
               "behavior", "effort_status", "transect_length",
               "perp_distance", "radial_distance", "sighting_angle", "beaufort")
@@ -918,24 +970,26 @@ What the source becomes, and what it does not:
 | `cetacean_segment` start / end | `sample_track` `effort_segment` | the segment as a path: beginning, middle and end in x, y and t, `length_km` = the lab's `SegmentLength_km`, a start-to-end `LINESTRING` (`sample_key` = the transect's) |
 | `cetacean_sighting` row | `sample` (`sighting`) | every sighting, at the **animal's** position where it could be placed ([Place sightings (COGO)]; `position_method` cogo), else the ship's; parent = its segment when `segment_id` resolves, else none |
 | `cetacean_sighting` ship → animal | `sample_track` `sight_line` | placed sightings only: the observer's line of sight from the ship's position (beginning) to the animal's (end), `length_km` = the radial distance, one instant for both times |
-| `cetacean_sighting.group_size_best` | `obs` `group_size` | only where Best > 0: a Best of 0 keeps its `sample` row and publishes no obs or attribute (Q13); `measurement_qual` NULL |
+| `cetacean_sighting.group_size_best` | `obs` `group_size` | only where Best > 0: a Best of 0 would keep its `sample` row and publish no obs or attribute (Q13; none since 2026-11-13); `measurement_qual` NULL |
 | `effort_status` (the segment's `transect_flag`) | `obs_attribute` `effort_status` | `bin_label` ON / OFF, `bin_value` 1 / 0; none where the segment is missing |
 | `group_size_min` / `_max` | `obs_attribute` `group_size_min` / `_max` | value in `count` |
-| `calf_count` | `obs_attribute` `calf_count`, `life_stage = calf` | plain integers only (Q09) |
+| `calf_count` | `obs_attribute` `calf_count`, `life_stage = calf` | plain integers only; ND (not determined) publishes none (Q09) |
 | `perp_distance_m` | `obs_attribute` `perp_distance` | m in `bin_value`: the lab's perpendicular distance from the trackline, except where it was computed from the horizon distance (Q27) |
 | `radial_distance_m` | `obs_attribute` `radial_distance` | m in `bin_value`: the reticle distance or the recorded distance, whichever reproduces the lab's perpendicular distance |
 | `angle_off_bow`, `side` | `obs_attribute` `sighting_angle` | degrees off the bow in `bin_value` (0 ahead, 180 astern), `port` / `starboard` in `bin_label` |
 | `beaufort` | `obs_attribute` `beaufort` | Beaufort sea state at the sighting in `bin_value` |
-| `behavior_primary` / `_other1` | `obs_attribute` `behavior` | **held** (Q03): no rows until the lab supplies the codebook (`publish_behavior <- FALSE`); when enabled, one row per code token, `bin_label` = the code, `bin_value` = 1 / 2 for primary / other1 |
-| `species_code` | `obs.taxon_key` via `dataset_taxon` | `Oth`, `EL` and `UNID_OBJCT` keep a NULL taxon |
+| `behavior_primary` / `_other1` | `obs_attribute` `behavior` | one row per distinct codebook label (`codes.csv`, Q03) per sighting, `bin_label` = the label, `bin_value` NULL (as `farallon_bird-mammal`); values outside the codebook are not published (Q31) |
+| `species_code` | `obs.taxon_key` via `dataset_taxon` | `Oth` and `UNID_OBJCT` keep a NULL taxon; `EL` is the sea otter (Q16) |
 
 **Not published** (they stay in the source table and the lab's files, which
-are archived and linked in [Source files]): the behaviour codes (Q03), the
-other sighting conditions (swell, visibility, precipitation, cloud, glare, wind;
-units and codes asked in Q23), observer initials and positions, cue, the raw
-reticle reading, eye height and recorded bearing (what [Place sightings (COGO)]
-derives the published geometry from), the original effort/transect flags, the
-mixed-group percentages, comments, `time_diff_min` (Q22) and `calf_raw`.
+are archived and linked in [Source files]): behaviour values outside the
+codebook (Q31), the other sighting conditions (swell, visibility,
+precipitation, cloud, glare, wind; defined in `codes.csv` and the data
+dictionary since 2026-11-13, with the residue asked in Q23), observer initials
+and positions, cue, the raw reticle reading, eye height and recorded bearing
+(what [Place sightings (COGO)] derives the published geometry from), the
+original effort/transect flags, the mixed-group percentages, comments and
+`calf_raw`. (`Time_Diff_minutes`, Q22, is no longer in the lab's files.)
 
 ### Taxon vocabulary
 
@@ -949,11 +1003,11 @@ mt_taxon <- read_csv(here("metadata/measurement_taxon.csv"),
 tx_over  <- read_csv(here("metadata/taxon_override.csv"), show_col_types = FALSE)
 
 obs_codes      <- unique(d_sighting$species_code)
-# not a taxon: "Other", an unidentified object, and EL (not in the lab's list,
-# meaning unknown); their sightings keep a NULL taxon_key
+# not a taxon: "Other" and an unidentified object; their sightings keep a NULL
+# taxon_key (EL, unknown until the lab's 2026-11-13 code list, is the sea otter; Q16)
 excluded_codes <- intersect(obs_codes, d_species$species_code[is.na(d_species$scientific_name)])
-stopifnot("Oth, EL and UNID_OBJCT are the only codes without a taxon" =
-            setequal(excluded_codes, c("Oth", "EL", "UNID_OBJCT")))
+stopifnot("Oth and UNID_OBJCT are the only codes without a taxon" =
+            setequal(excluded_codes, c("Oth", "UNID_OBJCT")))
 
 # the declaration: code, the name the code is resolved from, and the common name.
 # The source supplied no ids, so none ride along as ds_source_json.
@@ -980,13 +1034,14 @@ dt <- dbGetQuery(con, "
 key_of <- function(code) dt$taxon_key[dt$ds_taxa_code == code]
 stopifnot(
   "every staged code has a taxon_key"   = !anyNA(dt$taxon_key),
-  "Bbo keys Berardius bairdii"          = identical(dt$scientific_name[dt$ds_taxa_code == "Bbo"], "Berardius bairdii"),
+  "Beba keys Berardius bairdii"         = identical(dt$scientific_name[dt$ds_taxa_code == "Beba"], "Berardius bairdii"),
+  "EL keys the sea otter (Q16)"         = identical(dt$scientific_name[dt$ds_taxa_code == "EL"], "Enhydra lutris"),
   "Mesoplodon spp keys the genus"       = identical(dt$scientific_name[dt$ds_taxa_code == "Mesoplodon spp"], "Mesoplodon") &&
                                           identical(dt$rank[dt$ds_taxa_code == "Mesoplodon spp"], "Genus"),
   "Dc keys Delphinus capensis (Q10)"    = identical(key_of("Dc"), "worms:383816"),
   "Dc and Dd are distinct taxa (Q10)"   = !identical(key_of("Dc"), key_of("Dd")),
   "Lo keys Sagmatias obliquidens (Q10)" = identical(key_of("Lo"), "worms:1571909"))
-cat(glue("vocabulary: {n_staged} codes staged, {length(excluded_codes)} excluded (Oth, EL, UNID_OBJCT); ",
+cat(glue("vocabulary: {n_staged} codes staged, {length(excluded_codes)} excluded (Oth, UNID_OBJCT); ",
          "taxon {n_taxon}, dataset_taxon {n_ds_taxon}, taxon_group {n_tx_group}"), "\n")
 dt |> datatable(caption = "species_code -> taxon", rownames = FALSE, filter = "top")
 ```
@@ -1093,35 +1148,41 @@ append_obs_attribute(con, attr_sel("sighting_angle", "NULL::VARCHAR", "s.angle_o
 append_obs_attribute(con, attr_sel("beaufort", "NULL::VARCHAR", "s.beaufort", "NULL::VARCHAR",
                                    "NULL::INTEGER", "s.beaufort IS NOT NULL"))
 
-# behaviour: HELD (Q03, Ben 2026-10-04). The two columns hold bare numeric codes
-# ("1", "1, 34", "2, 5, 8") with no codebook, in the same `behavior` type that
-# farallon_bird-mammal fills with words, so no rows are emitted until the lab
-# supplies the codebook. Flip `publish_behavior` then, map code -> label here (or
-# emit under a dataset-specific type), and add the behavior assertions back.
-# When on, each token is its own row, labelled with the code as recorded.
-publish_behavior <- FALSE
-if (publish_behavior) {
-  d_behavior <- d_sighting |>
-    select(sighting_id, behavior_primary, behavior_other1) |>
-    pivot_longer(-sighting_id, names_to = "slot", values_to = "code") |>
-    filter(!is.na(code)) |>
-    mutate(slot = match(slot, c("behavior_primary", "behavior_other1")),
-           # split lists of numeric codes; free text ("Slow Travel") stays whole
-           code = map(code, \(x) if (str_detect(x, "^[0-9?,/&\\s]+$"))
-                                     str_split_1(x, "[,/&\\s]+") else x)) |>
-    unnest(code) |>
-    mutate(code = str_trim(code)) |>
-    filter(code != "")
-  dbWriteTable(con, "_behavior", d_behavior, overwrite = TRUE)
-  append_obs_attribute(con, glue("
-    SELECT '{ds_key}', {si_key('b.sighting_id')}, dt.taxon_key, NULL::VARCHAR, 'behavior',
-           CAST(b.slot AS DOUBLE), b.code, NULL::INTEGER, NULL::VARCHAR
-    FROM _behavior b JOIN cetacean_sighting s USING (sighting_id)
-    LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
-                              AND dt.ds_taxa_code = s.species_code
-    WHERE {counted}"))
-  dbExecute(con, "DROP TABLE _behavior")
-}
+# behaviour, from the lab's codebook (codes.csv, Q03; Michaela, 2026-11-13). A
+# sighting's PrimaryBehaviour / OtherBehaviour1 each hold one code or a list
+# ("2, 5, 8"); each code becomes its label ("Slow travel"). One row per distinct
+# label per counted sighting: the label in bin_label, bin_value NULL, as
+# farallon_bird-mammal writes the same type (a category, not a number). Which
+# column a code came from stays in the source table. A value outside the
+# codebook ("4?", "38", "Tail lobbing", "diving") is not published until the lab
+# defines it (Q31).
+d_behavior_tok <- d_sighting |>
+  select(sighting_id, behavior_primary, behavior_other1) |>
+  pivot_longer(-sighting_id, names_to = "slot", values_to = "value") |>
+  filter(!is.na(value)) |>
+  # split lists of numeric codes; free text ("Tail lobbing") stays whole
+  mutate(token = map(value, \(x) if (str_detect(x, "^[0-9?,/&\\s]+$"))
+                                    str_split_1(x, "[,/&\\s]+") else x)) |>
+  unnest(token) |>
+  mutate(token = str_trim(token)) |>
+  filter(token != "") |>
+  left_join(d_beh_codes, by = c("token" = "behavior_code"))
+d_behavior <- d_behavior_tok |>
+  filter(!is.na(behavior_label), sighting_id %in% d_sighting$sighting_id[d_sighting$group_size_best > 0]) |>
+  distinct(sighting_id, behavior_label)
+d_behavior_out <- d_behavior_tok |> filter(is.na(behavior_label)) |> count(token, sort = TRUE)
+dbWriteTable(con, "_behavior", d_behavior, overwrite = TRUE)
+append_obs_attribute(con, glue("
+  SELECT '{ds_key}', {si_key('b.sighting_id')}, dt.taxon_key, NULL::VARCHAR, 'behavior',
+         NULL::DOUBLE, b.behavior_label, NULL::INTEGER, NULL::VARCHAR
+  FROM _behavior b JOIN cetacean_sighting s USING (sighting_id)
+  LEFT JOIN dataset_taxon dt ON dt.dataset_key = '{ds_key}'
+                            AND dt.ds_taxa_code = s.species_code
+  WHERE {counted}"))
+dbExecute(con, "DROP TABLE _behavior")
+cat(glue("behaviour: {nrow(d_behavior)} labels on {n_distinct(d_behavior$sighting_id)} sightings; ",
+         "outside the codebook, not published (Q31): ",
+         "{paste0(d_behavior_out$token, ' (', d_behavior_out$n, ')', collapse = ', ')}"), "\n")
 
 q1 <- function(sql) dbGetQuery(con, sql)[[1]]
 d_counted  <- d_sighting |> filter(group_size_best > 0)
@@ -1144,8 +1205,8 @@ cat(glue("core projection -- ", paste(names(core), unlist(core), sep = "=", coll
 stopifnot(
   "one transect sample per segment"  = core$sample_transect == nrow(d_segment),
   "one sighting sample per sighting, counted or not" = core$sample_sighting == nrow(d_sighting),
-  "the uncounted sightings are the 2 zeros (Q13: MN on 202504SH, UD on 202511SR)" =
-    n_uncounted == 2L && sum(d_sighting$group_size_best %in% 0) == 2L,
+  "the uncounted sightings are the Best = 0 rows (none in the 2026-11-13 files; Q13)" =
+    n_uncounted == sum(d_sighting$group_size_best %in% 0),
   "one obs per counted sighting"     = core$obs == nrow(d_counted),
   "no obs has a group size of 0 or NULL (Q13)" =
     q1("SELECT COUNT(*) FROM obs WHERE measurement_value IS NULL OR measurement_value <= 0") == 0,
@@ -1163,8 +1224,12 @@ stopifnot(
   "calf_count total = source total on counted sightings" =
     q1("SELECT COALESCE(SUM(count), 0) FROM obs_attribute WHERE measurement_type = 'calf_count'") ==
     sum(d_counted$calf_count, na.rm = TRUE),
-  "no behavior rows while the codes are held (Q03)" =
-    publish_behavior || q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'behavior'") == 0,
+  "behavior rows = distinct codebook labels on counted sightings (Q03)" =
+    q1("SELECT COUNT(*) FROM obs_attribute WHERE measurement_type = 'behavior'") == nrow(d_behavior),
+  "every behavior label is a codebook label" =
+    all(d_behavior$behavior_label %in% d_beh_codes$behavior_label),
+  "every behavior value is a codebook code or is listed as outside it (Q31)" =
+    nrow(d_behavior_tok) == sum(!is.na(d_behavior_tok$behavior_label)) + sum(d_behavior_out$n),
   "every obs_attribute row sits on a sighting that has an obs" =
     q1("SELECT COUNT(*) FROM obs_attribute a WHERE a.sample_key NOT IN (SELECT sample_key FROM obs)") == 0,
   "transect_length rows and total = the on-transect segments'" =
@@ -1181,7 +1246,7 @@ stopifnot(
   "every obs.taxon_key RESOLVES in taxon" =
     q1("SELECT COUNT(*) FROM obs o LEFT JOIN taxon t USING (taxon_key)
        WHERE o.taxon_key IS NOT NULL AND t.taxon_key IS NULL") == 0,
-  "a NULL obs.taxon_key is an Oth, EL or UNID_OBJCT sighting and nothing else" =
+  "a NULL obs.taxon_key is an Oth or UNID_OBJCT sighting and nothing else" =
     q1("SELECT COUNT(*) FROM obs WHERE taxon_key IS NULL") == sum(d_counted$species_code %in% excluded_codes),
   "every obs / obs_attribute / sample_measurement type is registered" =
     q1("SELECT COUNT(*) FROM (SELECT measurement_type FROM obs UNION
@@ -1241,9 +1306,9 @@ lbl_sql <- paste0("'", c(unresolved_labels, "_"), "'", collapse = ", ")
 nullable <- tribble(
   ~table,   ~column,             ~n,                                              ~reason,
   "sample", "cruise_key",        q1("SELECT COUNT(*) FROM sample WHERE cruise_key IS NULL"),
-    glue("labels resolved by neither the ichthyo track nor the crosswalk ({paste(unresolved_labels, collapse = ', ')}), their segments, and the misdated segment 2886"),
+    glue("labels resolved by neither the ichthyo track nor the crosswalk ({paste(unresolved_labels, collapse = ', ')}) and their segments"),
   "sample", "parent_sample_key", n_seg_orphan + nrow(d_segment),
-    "transects are roots; the sightings whose segment_id is not in the segments file (419) have no parent",
+    "transects are roots; a sighting whose segment_id is not in the segments file (none since 2026-11-13) has no parent",
   "sample", "site_key",          nrow(d_segment) + nrow(d_sighting),
     "underway survey: no event sits on a CalCOFI station",
   "sample", "grid_key",          q1("SELECT COUNT(*) FROM sample WHERE grid_key IS NULL"),
@@ -1251,7 +1316,7 @@ nullable <- tribble(
   "sample", "datetime",          0L,
     "none: every sighting and segment has a time",
   "obs",    "taxon_key",         sum(d_counted$species_code %in% excluded_codes),
-    "'Oth' (Other) and 'UNID_OBJCT' are not taxa; 'EL' is not in the lab's list (meaning unknown)")
+    "'Oth' (Other) and 'UNID_OBJCT' (Unidentified object) are not taxa")
 # the counts above that are measured rather than derived from the source must
 # still be explained: every NULL cruise_key belongs to an unresolved label
 stopifnot(

@@ -13,6 +13,20 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## `sio_cetacean-sightings` (held): the third preview reads the lab's final 2004–2025 files
+
+No public table changes. The Scripps Whale Acoustics Lab published its final QA/QC'd visual-survey
+product on 2026-11-13 (Michaela Alksne, a private GitHub repository the ingest reads at a pinned
+commit through `libs/download_sio_cetacean_sightings.R`): 5,090 on-effort sightings on 3,241
+segments over 78 cruises, with the lab's code list, data dictionary and field manual. The signed
+angle off the bow (`sight_brng`) and the perpendicular distances are now computed for every year,
+so 4,996 sightings are placed at the animal (4,150 in the second preview, where 2022–2025 stayed at
+the ship; Q30). Behaviour is published from the lab's codebook as `obs_attribute` `behavior`
+labels (Q03), the sea otter (`EL`) is keyed, and fifteen provider questions are settled by the
+files. The held dataset's NULL-`cruise_key` ratchet goes from 66 to 64 segments (no segment is
+misdated any more). The private candidate (root `ducklake-preview-sightings`) is rebuilt from
+these files with the Farallon cut, under a new preview token.
+
 # v2026.11.14
 
 ## Conditions on density surfaces: a new `isopycnal` table and its baseline in `climatology`
