@@ -33,6 +33,8 @@ calcofi:
     obs_env:            "#e8e8e8"
     # the one baseline every anomaly subtracts (chunk browser_objects; calcofi4db >= 3.26.0)
     climatology:        "#cfe8ea"
+    # conditions on density surfaces, one row per cast x surface x type (chunk browser_objects; calcofi4db >= 4.39.0)
+    isopycnal:          "#e8e8e8"
 execute:
   echo: true
   message: true
@@ -2113,17 +2115,65 @@ clim_cast_types <- c(
   # hypoxic_depth_05 is left out because few 1993-2013 casts reach the 0.5 mL/L core on a
   # station-month floor of 5 cruises; a type listed here must have at least one monthly cell
   "hypoxic_depth_24", "hypoxic_depth_14", "nitracline_depth", "pycnocline_depth", "buoyancy_n2_max")
+# --- conditions on density surfaces: the `isopycnal` table and its baseline (calcofi4db 4.39.0) ----
+# Rasmus Swalethorp (emails 2026-11-12 and -13) asked for conditions and their anomalies on
+# sigma-theta surfaces at the 1 m resolution: 24.0 to 27.0 by 0.2 plus 25.5 and 26.5, the shallowest
+# crossing, depth / temperature / salinity / oxygen / estimated nitrate / spice, down casts, monthly
+# and seasonal baselines. build_isopycnal() calls calcofi4r::cc_isopycnal() (its defaults are those
+# answers) over every CTD down cast of obs_ctd_full here, after the ingests' fixes are assembled, and
+# names each type iso_* (cc_isopycnal_type()) so a value on a surface is never an obs series. It is
+# built here, not in ingest_calcofi_ctd-derived.qmd, because this is where obs_ctd_full, sample and
+# cruise.month_median are all assembled, as for the climatology. build_climatology(isopycnal_tbl =)
+# then pools it into the one climatology, rows keyed by `sigma_theta` with depth_bin NULL, by the same
+# rules as the depth bins: every cast's value enters its cell's mean, as every obs row does in a bin.
+# A fast structural run without the supplemental tables (BUILD_OBS_CTD_FULL=FALSE) builds neither.
+has_iso <- "obs_ctd_full" %in% dbListTables(con_wdl)
+if (has_iso) {
+  stopifnot("build_isopycnal() needs calcofi4db >= 4.39.0 and calcofi4r >= 1.34.0; pull and install both" =
+    packageVersion("calcofi4db") >= "4.39.0" && packageVersion("calcofi4r") >= "1.34.0")
+  n_iso <- build_isopycnal(con_wdl)
+  d_iso <- dbGetQuery(con_wdl, "
+    SELECT sigma_theta, count(DISTINCT sample_key) AS n_casts,
+           count(*) FILTER (WHERE measurement_type = 'iso_depth_m' AND status = 'ok') AS n_ok,
+           count(*) FILTER (WHERE measurement_type = 'iso_depth_m' AND status = 'at_surface') AS n_at_surface,
+           count(*) FILTER (WHERE measurement_type = 'iso_depth_m' AND status = 'no_bracket') AS n_no_bracket,
+           count(*) FILTER (WHERE measurement_type = 'iso_depth_m' AND status = 'not_reached') AS n_not_reached,
+           count(*) FILTER (WHERE measurement_type = 'iso_depth_m' AND status = 'no_data') AS n_no_data,
+           round(median(measurement_value) FILTER (WHERE measurement_type = 'iso_depth_m'), 1) AS depth_median_m
+    FROM isopycnal GROUP BY 1 ORDER BY 1")
+  datatable(d_iso, caption = paste(
+    "isopycnal — per density surface: the down casts, and why a surface has a depth or not",
+    "(ok, at_surface: outcrops, no_bracket, not_reached, no_data); the median depth where ok"))
+  stopifnot(
+    "isopycnal: every cast carries every surface" = length(unique(d_iso$n_casts)) == 1,
+    "isopycnal: only calcofi_ctd-cast casts" = dbGetQuery(con_wdl, "
+      SELECT count(*) AS n FROM isopycnal i LEFT JOIN sample s USING (sample_key)
+      WHERE s.dataset_key IS DISTINCT FROM 'calcofi_ctd-cast' OR s.sample_type IS DISTINCT FROM 'cast'")$n == 0,
+    "isopycnal: one cast per station occupation (the down cast where there is one)" = dbGetQuery(con_wdl, "
+      SELECT count(*) AS n FROM (SELECT regexp_replace(sample_key, '[du]$', '') AS occ
+                                 FROM isopycnal GROUP BY ALL HAVING count(DISTINCT sample_key) > 1)")$n == 0)
+  cat(glue("isopycnal: {format(n_iso, big.mark = ',')} rows, {d_iso$n_casts[1]} down casts x ",
+           "{nrow(d_iso)} surfaces\n"))
+}
 n_clim <- build_climatology(con_wdl, qual_ok_sql = qual_sql, min_cruises = 5L,
-                            cast_types = clim_cast_types, season = TRUE)
+                            cast_types = clim_cast_types, season = TRUE,
+                            isopycnal_tbl = if (has_iso) "isopycnal" else NULL)
 cat(glue("sample_root {n_root} · obs_bio {n_bio} · obs_env {n_env} · climatology {n_clim} rows\n"))
 datatable(dbGetQuery(con_wdl, "
   SELECT dataset_key,
          count(*) FILTER (WHERE clim_mean IS NOT NULL) AS n_cells_month,
          count(*) FILTER (WHERE season_mean IS NOT NULL) AS n_cells_season,
-         count(*) FILTER (WHERE depth_bin IS NULL) AS n_cells_per_cast,
+         count(*) FILTER (WHERE depth_bin IS NULL AND sigma_theta IS NULL) AS n_cells_per_cast,
+         count(*) FILTER (WHERE sigma_theta IS NOT NULL) AS n_cells_isopycnal,
          count(DISTINCT measurement_type) AS n_types, count(DISTINCT site_key) AS n_stations, count(DISTINCT grid_key) AS n_cells_grid,
          min(n_cruises) AS min_cruises, round(avg(n_cruises), 1) AS mean_cruises, any_value(clim_yr_min) AS yr_min, any_value(clim_yr_max) AS yr_max
-  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — rows per dataset: monthly cells (≥ 5 cruises in the cruise's median month), seasonal cells (≥ 5 in the season DJF/MAM/JJA/SON, on each of its months) and per-cast cells (depth_bin NULL); the window is on every row")
+  FROM climatology GROUP BY 1 ORDER BY 1"), caption = "climatology — rows per dataset: monthly cells (≥ 5 cruises in the cruise's median month), seasonal cells (≥ 5 in the season DJF/MAM/JJA/SON, on each of its months), per-cast cells (depth_bin NULL) and isopycnal cells (depth_bin NULL, the surface in sigma_theta); the window is on every row")
+# a surface cell is an iso_* type and only an iso_* type carries a surface: no reader of a depth bin or a
+# per-cast cell can meet one (test_release.qmd repeats this against the published bytes)
+stopifnot("climatology: sigma_theta is set exactly on the iso_* types, with depth_bin NULL" = dbGetQuery(con_wdl, "
+  SELECT count(*) AS n FROM climatology
+  WHERE (sigma_theta IS NOT NULL) <> starts_with(measurement_type, 'iso_')
+     OR (sigma_theta IS NOT NULL AND depth_bin IS NOT NULL)")$n == 0)
 stopifnot(n_clim > 0, nrow(dbGetQuery(con_wdl, "SELECT DISTINCT clim_yr_min, clim_yr_max FROM climatology")) == 1)
 # every per-cast type the release asked for has a baseline somewhere (a typo or a renamed key would be silent)
 clim_cast_missing <- setdiff(clim_cast_types, dbGetQuery(con_wdl,
@@ -2196,7 +2246,8 @@ cat(glue("coverage.json {round(file.size(coverage_path) / 1e3)} KB · coverage_s
 # default set (obs is the deprecated table + the view over them; see the parity gate above). Only
 # sample_root stays supplemental — hosted and catalogued, hidden from cc_get_db() by default.
 core_keep         <- c(core_keep, "sample_spatial", "climatology",   # climatology: default table, in the ERD (FKs to grid, dataset, measurement_type)
-                       "obs_bio", "obs_env")
+                       "obs_bio", "obs_env",
+                       "isopycnal")   # conditions on density surfaces (calcofi4db 4.39.0): a default table, served by cc_get_db()
 supplemental_keep <- c(supplemental_keep, "sample_root")
 ```
 
@@ -2430,6 +2481,8 @@ core_spec <- dplyr::bind_rows(
   # browser-shaped objects built in [browser_objects]; obs_env and climatology are one object per variable
   tibble(table       = c("sample_spatial", "sample_root", "obs_bio", "obs_env", "climatology"),
          partitioned = c(FALSE,            FALSE,         FALSE,     TRUE,      TRUE)),
+  # built in [browser_objects] by build_isopycnal() from the assembled obs_ctd_full: no ingest writes it
+  tibble(table = "isopycnal", partitioned = FALSE),
   # built in [grid_crosswalk] from the assembled grid: no ingest writes it, so it must be exported here
   tibble(table = "grid_crosswalk", partitioned = FALSE),
   tibble(table = supp_tbls, partitioned = TRUE))

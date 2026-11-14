@@ -580,6 +580,37 @@ contract <- tibble::tribble(
   "consumer: nitracline_depth is published per cast by the CTD-derived dataset", "nonzero", glue(
     "SELECT count(*) n FROM {rp('sample_measurement')}
      WHERE measurement_type = 'nitracline_depth' AND dataset_key = 'calcofi_ctd-derived'"),
+  # conditions on density surfaces (calcofi4db 4.39.0; Rasmus Swalethorp 2026-11-12/13): the isopycnal
+  # table is a default table, its baseline lives in the one climatology under its own iso_* types with
+  # the surface in sigma_theta, read the way calcofi4r::cc_isopycnal_anomaly() does
+  "consumer: isopycnal surface 26.0 at station 093.3 030.0 (depth, temperature)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('isopycnal')}
+     WHERE site_key = '093.3 030.0' AND sigma_theta = 26.0 AND status = 'ok'
+       AND measurement_type IN ('iso_depth_m', 'iso_temperature_ave') AND measurement_value IS NOT NULL"),
+  "integrity: isopycnal keeps a depth row for every cast and surface (status says why one has no value)", "zero", glue(
+    "SELECT count(*) n FROM (
+       SELECT sample_key, sigma_theta FROM {rp('isopycnal')} GROUP BY ALL
+       HAVING count(*) FILTER (WHERE measurement_type = 'iso_depth_m') <> 1)"),
+  "integrity: an isopycnal value only where the surface is ok", "zero", glue(
+    "SELECT count(*) n FROM {rp('isopycnal')} WHERE status <> 'ok' AND measurement_value IS NOT NULL"),
+  "integrity: no (sample_key, sigma_theta, measurement_type) twice in isopycnal", "zero", glue(
+    "SELECT count(*) n FROM (SELECT sample_key, sigma_theta, measurement_type FROM {rp('isopycnal')}
+                             GROUP BY ALL HAVING count(*) > 1)"),
+  "consumer: isopycnal monthly baseline cell (093.3 030.0, sigma-theta 26.0, iso_depth_m)", "nonzero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE site_key = '093.3 030.0' AND sigma_theta = 26.0 AND measurement_type = 'iso_depth_m'
+       AND depth_bin IS NULL AND clim_mean IS NOT NULL AND n_cruises >= 5"),
+  "integrity: climatology sigma_theta is set exactly on the iso_* types, with depth_bin NULL", "zero", glue(
+    "SELECT count(*) n FROM {rp('climatology')}
+     WHERE (sigma_theta IS NOT NULL) <> starts_with(measurement_type, 'iso_')
+        OR (sigma_theta IS NOT NULL AND depth_bin IS NOT NULL)"),
+  "integrity: no iso_* type is an obs_env series", "zero", glue(
+    "SELECT count(*) n FROM (SELECT DISTINCT measurement_type FROM {rp('obs_env')})
+     WHERE starts_with(measurement_type, 'iso_')"),
+  # Q47 (CalCOFI/workflows#134): a CTD cast holds one value per depth and type, in both grains
+  "integrity: no (sample_key, depth, type) twice in the CTD thinned series (obs_env)", "zero", glue(
+    "SELECT count(*) n FROM (SELECT sample_key, depth_min_m, measurement_type FROM {rp('obs_env')}
+                             WHERE dataset_key = 'calcofi_ctd-cast' GROUP BY ALL HAVING count(*) > 1)"),
   "integrity: a NULL depth_bin is a per-cast cell, never a per-bin type", "zero", glue(
     "SELECT count(*) n FROM {rp('climatology')} c
      WHERE c.depth_bin IS NULL

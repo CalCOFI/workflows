@@ -395,7 +395,25 @@ fd <- tribble(
   "grid_frac", "DOUBLE", "", "spatial",
   paste0("overlap_km2 as a fraction of the CURRENT cell's whole area. Sums over a current cell to one, less the ",
          "part no previous cell covered; slightly over one where previous cells overlap each other (line 93.3 / line 100)."),
-  "", "", FALSE, "on grid_crosswalk; release-derived."
+  "", "", FALSE, "on grid_crosswalk; release-derived.",
+
+  # -- conditions on density surfaces (calcofi4db 4.39.0; Rasmus Swalethorp 2026-11-12/13) ----------
+  "sigma_theta", "DOUBLE", "kg/m3", "measurement",
+  paste0("The density surface a value is on: potential density anomaly sigma-theta, kg/m3 above 1000. ",
+         "In isopycnal, the surface a CTD down cast reaches (24.0 to 27.0 by 0.2, plus 25.5 and 26.5, ",
+         "calcofi4r::cc_isopycnal()); in climatology, the surface of an isopycnal baseline cell (iso_* types, ",
+         "depth_bin NULL), NULL on every depth-bin and per-cast cell. Not the bottle series of the same name, ",
+         "which is a measurement_type."),
+  "", "", FALSE,
+  paste0("on isopycnal (part of its key) and climatology (part of its key, nullable); release-derived by ",
+         "calcofi4db::build_isopycnal() and build_climatology(isopycnal_tbl =)."),
+
+  "status", "VARCHAR", "", "quality",
+  paste0("Whether a cast reaches a density surface, on every isopycnal row: ok (crossed; the surface has a ",
+         "depth and values), at_surface (the cast's first bin, within 20 m of the surface, is already as dense: ",
+         "the surface outcrops), no_bracket (the same, but the first bin is deeper), not_reached (the cast never ",
+         "gets this dense), no_data (fewer than two good bins). Only ok carries a measurement_value."),
+  "", "", FALSE, "on isopycnal; calcofi4r::cc_isopycnal()."
 )
 
 # -- Darwin Core terms (WS-H2, pre-release decision D-S2) -----------------------
