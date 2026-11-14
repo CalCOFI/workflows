@@ -13,7 +13,8 @@
 # as recorded, and the lab is asked to confirm they cover 2004 and 2016-2022.
 #
 # HELD since 2026-10-08 (Ben): the ingest reads Michaela Alksne's QA/QC'd
-# on-effort product (shared by Simone Baumann-Pickering, 2026-10-07; the
+# on-effort product (shared by Simone Baumann-Pickering, 2026-10-07; the final
+# 2004-2025 files from the lab's private GitHub repository since 2026-11-13; the
 # marmam-app copy is exploratory and no longer read) and is `in_release: false`
 # until the Scripps Whale Acoustics Lab reviews and signs off. `visibility:
 # internal` keeps it off every public surface meanwhile; set both back together.
@@ -35,10 +36,9 @@
     (farallon_bird-mammal), run by an independent observer team: from the
     release that includes this dataset, Farallon's marine-mammal observations
     on the cruises this survey covers are left out of farallon_bird-mammal, so
-    a cetacean group is counted once. The behaviour codes
-    (primary and other behaviour) are held back: they are bare numeric codes
-    with no codebook yet (Q03), so no behaviour rows are published until the
-    lab supplies one; they remain in the lab's files.
+    a cetacean group is counted once. Behaviour (primary and other) is
+    published as the labels of the lab's codebook (Slow travel, Feeding,
+    Bowriding, ...); a value outside the codebook is not published.
   # source: caloos-sheet row 23, 2026-09-05; the span reads 2004 to 2025 here
   # (2026-10-08), the years the ingest stages, where the sheet said 2004 to 2015
   abstract: >
@@ -64,9 +64,10 @@
   # citation for it is still asked in Q02.
   citation_main: "CalCOFI - Scripps Institution of Oceanography and J. Hildebrand. 2017. Index of visual monitoring, location, species behavior, and identification of cetaceans from CalCOFI cruises in the California Current System, 2005-2015 (ongoing). ver 2. Environmental Data Initiative. https://doi.org/10.6073/pasta/9ee6ca9b4a316708ca3d17ddc92debfb"
   link_calcofi_org: ""
-  # empty: the ingest's source is the lab's unpublished product, shared to the
-  # CalCOFI Data Folder (data-private/sio/cetacean-sightings/), which has no
-  # public URL (2026-10-08)
+  # empty: the ingest's source is the lab's unpublished product, read from its
+  # PRIVATE GitHub repository (MarineBioAcousticsRC/CalCOFI_visual_survey_data_2004_2025,
+  # 2026-11-13) into the CalCOFI Data Folder (data-private/sio/cetacean-sightings/);
+  # neither has a public URL. Set it when the lab makes the repository or a DOI public.
   link_data_source: ""
   link_others:
     - https://oceaninformatics.ucsd.edu/datazoo/catalogs/ccelter/datasets/284
@@ -100,7 +101,7 @@
   # split on its commas into three broken entries; rejoined 2026-09-27)
   keywords:
     - "Marine Turtles, Birds, and Mammals"
-  quality_control_md: 'QC flags present: No. The sightings and segments were quality-controlled by Michaela Alksne (Scripps Whale Acoustics Lab) and are on effort only. Each counted sighting carries its segment''s on/off-transect flag as obs_attribute effort_status (ON/OFF); line-transect density uses ON only. A sighting with a Best group size of 0 (animals seen but not counted) keeps its sample row and publishes no obs.'
+  quality_control_md: 'QC flags present: No. The sightings and segments were quality-controlled by Michaela Alksne (Scripps Whale Acoustics Lab) and are on effort only. Each counted sighting carries its segment''s on/off-transect flag as obs_attribute effort_status (ON/OFF); line-transect density uses ON only. The lab''s perpendicular distances are reproduced from the reticle or recorded distance and the angle off the bow before a sighting is placed at the animal. A sighting with a Best group size of 0 (animals seen but not counted) would keep its sample row and publish no obs (none in the 2026-11-13 files).'
   maintenance: ongoing
   # blank 2026-10-04: marmam-app's info page names ONR award N00014-22-1-2719,
   # an FY22 award that cannot have funded the 2004-2012 data; asked in Q02
