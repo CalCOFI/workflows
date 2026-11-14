@@ -13,6 +13,63 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## Conditions on density surfaces: a new `isopycnal` table and its baseline in `climatology`
+
+Rasmus Swalethorp asked (2026-11-12 and -13) for conditions and their anomalies on sigma-theta
+surfaces at the 1 m resolution: below the mixed layer an anomaly at a fixed depth is mostly the
+pycnocline moving up or down, and on a density surface that displacement is the surface's depth,
+while what is left in temperature, salinity, oxygen or nitrate is a change in the water itself. The
+new core table **`isopycnal`** holds, for every CTD down cast and each of his 18 surfaces (24.0 to
+27.0 kg/m³ by 0.2, plus 25.5 and 26.5, near the cores of the California Current and Undercurrent),
+the depth of the shallowest crossing and the temperature, salinity, oxygen, estimated nitrate and
+spice there, one row per cast × surface × type. Every cast and surface keeps its depth row with a
+`status`, so a surface that outcrops (`at_surface`) or is never reached (`not_reached`) is not
+mistaken for a missing cast. The types are `iso_*` (`iso_depth_m`, `iso_temperature_ave`, …), never
+an `obs` series. The table is built at release by `calcofi4db::build_isopycnal()`, which calls
+`calcofi4r::cc_isopycnal()`, the one implementation of the rule, on the assembled `obs_ctd_full`.
+
+Its baseline is in the one **`climatology`**, by the depth bins' rules (station, the cruise's month
+and season, 1993–2013, at least 5 cruises; every cast's value enters the mean): cells with
+`depth_bin` NULL and the surface in a new column **`sigma_theta`**, appended last and NULL on every
+other row. No existing row changed, and no reader of a depth bin or a per-cast cell can meet a
+surface cell, since only the `iso_*` types carry one (gated in the release and its tests).
+`calcofi4r::cc_isopycnal_anomaly()` (1.34.0) subtracts it when it is the baseline asked for.
+
+**Consumers:** `climatology` has one more column (`sigma_theta`) and six more measurement types;
+its key is now `dataset_key, site_key, month, depth_bin, measurement_type, sigma_theta`.
+
+## A CTD cast holds one value per depth again: 46,447 doubled cast-depths in 11 cruises resolved
+
+v2026.11.09 and v2026.11.12 carried 46,447 cast-depths in 11 cruises of `calcofi_ctd-cast` with two
+rows for one measurement type, in `obs_ctd_full` and in the thinned series of `obs_env` (ctd-cast
+question Q47, CalCOFI/workflows#134). The doubling was inside the source archives, and each case is
+now read by Rasmus Swalethorp's answer (2026-11-13):
+
+- **2015-01 (1501NH), 43,253 cast-depths of 112 casts.** calcofi.org's archive keeps the
+  dual-sensor casts in `db_csv/dualTCO/`, the single-sensor casts in `db_csv/singleTCO/`, and their
+  union in a top-level file whose times are written to the minute, so the two copies of a
+  dual-sensor cast were never matched. The ingest reads every cast of `dualTCO/` and, from
+  `singleTCO/`, the casts `dualTCO/` lacks; the top-level file is not read. The values are the
+  same, except 113 PAR bins where the top-level file wrote three significant figures (largest
+  change 2.0 µE/m²/s at 1,540), and the dual-sensor casts' times now carry their seconds.
+- **1995-04 (9504NH) and 1995-10 (9510NH), 807 and 2,189 cast-depths.** The extra shallow casts in
+  `RalfCasts/` (4) and `GoerickeExtraCasts/` (8), about two hours after the regular cast at the same
+  station, were filed under the regular cast's number and merged into its sample. They stay, each a
+  cast with its own key: the cast number takes a `b` before the direction letter
+  (`calcofi_ctd-cast:cast:9504_010bd`), so 1995-04 has 130 casts and 1995-10 has 148 (122 and 132
+  before). Their comparison with the regular cast at the same depths went to the provider.
+- **A depth bin written twice within one cast** (2020-07 cast 004d, 177 bins; 2003-02 095u, 11;
+  2002-04 013u, 4; 1995-07 064u, 2; one bin each in 1997-12, 2005-01, 2006-04 and 2023-07) is now
+  averaged by the provider's flags: a value flagged 8 or 9 never enters an average with a good one.
+
+Against v2026.11.12, every other cruise is unchanged, row for row. In the 11 cruises `obs_ctd_full`
+loses 1,829,778 rows (the repeated copies) and gains 81,178 (the extra casts' bins under their own
+keys), and `obs_env`'s CTD series loses 124,689 and gains 12,622. `ingest_calcofi_ctd-cast.qmd` now
+stops on any repeated (sample, depth, type) in either table, in place of the per-cruise allowance it
+had carried since v2026.10.01, and `test_release.qmd` checks `obs_env` for it.
+
+**Consumers:** 24 new CTD `sample_key`s (12 extra casts, each direction) in 1995-04 and 1995-10.
+
 # v2026.11.12
 
 ## The 1 m CTD table is whole again: 22 cruises had been published with most of their casts missing

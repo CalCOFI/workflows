@@ -477,6 +477,20 @@ fingerprint_path <- here(glue("data/wrangling/{dir_label}_inputs.json"))
 
 # kept OUT of dir_parquet on purpose: sync_to_gcs() mirrors that directory to a
 # world-readable bucket, and this is local state about one machine's outputs.
+# the rules that decide WHICH rows are read are inputs too, and they live in this notebook
+# ([cast_source_prefer], the extra-cast keys in [d_bind], [dedup_ctd_raw]): change this
+# stamp with them, or a checkpoint and a complete parquet built under the old rules are
+# kept as though nothing changed
+CTD_READ_RULES <- "2026-11-14 Q47: 1501NH dualTCO+singleTCO, extra casts keyed apart"
+
+# extra casts filed under the regular cast's number, keyed apart in [d_bind] (Q47)
+CTD_EXTRA_CAST_FOLDERS <- tibble::tribble(
+  ~cruise_key, ~folder,              ~reason,
+  "9504NH",    "RalfCasts",          "Ralf Goericke's extra shallow casts, filed under the regular cast numbers",
+  "9510NH",    "GoerickeExtraCasts", "Ralf Goericke's extra shallow casts, filed under the regular cast numbers")
+CTD_EXTRA_CAST_SUFFIX <- "b"
+extra_cast_key <- \(cast_id) sub("([dDuU])$", paste0(CTD_EXTRA_CAST_SUFFIX, "\\1"), cast_id)
+
 fp <- input_fingerprint(
   # ONLY inputs that can change the OUTPUTS belong here. measurement_qual.csv is
   # deliberately absent: it is a vocabulary the diagnostics decode against, never
@@ -505,7 +519,8 @@ fp <- input_fingerprint(
   # as "inputs unchanged" and never be ingested (CalCOFI/workflows#104)
   values = c(sort(paste(d_zips$source, d_zips$file_zip,
                         file.size(file.path(dir_dl, d_zips$file_zip)))),
-             paste0("calcofi4db ", as.character(packageVersion("calcofi4db")))))
+             paste0("calcofi4db ", as.character(packageVersion("calcofi4db"))),
+             paste0("read rules ", CTD_READ_RULES)))
 fp_prior <- read_input_fingerprint(fingerprint_path)
 fp_same  <- !is.null(fp_prior) && identical(fp_prior$hash, fp$hash)
 
@@ -567,7 +582,8 @@ if (overwrite && !parquet_complete) {
 # read, so a replaced archive must not be answered from the old copy of it
 fp_zips <- input_fingerprint(
   files  = file.path(dir_meta, "flds_redefine.csv"),
-  values = sort(paste(d_zips$file_zip, file.size(file.path(dir_dl, d_zips$file_zip)))))
+  values = c(sort(paste(d_zips$file_zip, file.size(file.path(dir_dl, d_zips$file_zip)))),
+             paste0("read rules ", CTD_READ_RULES)))
 checkpoint_fp_path <- paste0(db_checkpoint, ".inputs.json")
 fp_ckpt <- read_input_fingerprint(checkpoint_fp_path)
 if (file_exists(db_checkpoint) &&
@@ -1368,6 +1384,78 @@ if (nrow(d_csv_empty) > 0)
     "[download_and_unzip] re-extracts from the archive in {dir_dl}."))
 ```
 
+### One source per cast where an archive holds two processings {#cast-source-prefer}
+
+calcofi.org's `20-1501NH_CTDFinalQC.zip` carries the cruise three times over in `db_csv/`: the
+dual-sensor casts processed with both temperature and conductivity sensors in `dualTCO/`, the
+single-sensor casts in `singleTCO/`, and a top-level `001-100` file that is exactly their union.
+`dualTCO/` writes times to the second where the top-level file writes minutes, so
+[dedup_ctd_raw] never matched the two copies of a dual-sensor cast, and v2026.11.09 to
+v2026.11.12 published 43,253 cast-depths of 112 casts twice (ctd-cast Q47, CalCOFI/workflows#134).
+Rasmus Swalethorp's answer (2026-11-13): "we can mix and match grabbing casts that are not in the
+dualTCO from the singleTCO". So a cruise declared in `CTD_CAST_FOLDER_PREFER` reads every cast of
+the `prefer` folder and, from the `fallback` folder, only the casts the `prefer` folder lacks; any
+other file of that cruise is not read, and the render stops if that would lose a cast. The copy read
+is calcofi.org's: Jim Wilkinson's Drive copy of 1501NH carries `TempAve` and `SaltAve_Corr` halved on
+its 88 single-sensor casts, and which archive is authoritative is a separate question (Q20).
+
+```{r}
+#| label: cast_source_prefer
+
+CTD_CAST_FOLDER_PREFER <- tibble::tribble(
+  ~cruise_key, ~prefer,   ~fallback,   ~reason,
+  "1501NH",    "dualTCO", "singleTCO", paste(
+    "db_csv/ = dualTCO/ + singleTCO/; dualTCO/ for the dual-sensor casts, singleTCO/ for",
+    "the rest (Rasmus Swalethorp, 2026-11-13; ctd-cast Q47, CalCOFI/workflows#134)"))
+
+d_csv <- d_csv |>
+  mutate(folder = str_extract(path_unzip, "[^/]+(?=/[^/]+$)"))
+d_prefer_rpt <- list()
+for (i in seq_len(nrow(CTD_CAST_FOLDER_PREFER))) {
+  pr    <- CTD_CAST_FOLDER_PREFER[i, ]
+  i_cr  <- which(d_csv$cruise_key == pr$cruise_key)
+  if (length(i_cr) == 0) {
+    say(glue("CTD_CAST_FOLDER_PREFER: {pr$cruise_key} is not read this render"))
+    next
+  }
+  casts_of <- \(ii) unique(unlist(map(d_csv$data[ii], \(x) unique(x$cast_id))))
+  i_pref <- i_cr[d_csv$folder[i_cr] == pr$prefer]
+  i_fall <- i_cr[d_csv$folder[i_cr] == pr$fallback]
+  i_drop <- setdiff(i_cr, c(i_pref, i_fall))
+  stopifnot(
+    "CTD_CAST_FOLDER_PREFER: the preferred folder holds no file" = length(i_pref) > 0)
+  c_pref <- casts_of(i_pref)
+  c_fall <- setdiff(casts_of(i_fall), c_pref)
+  c_lost <- setdiff(casts_of(i_drop), c(c_pref, c_fall))
+  if (length(c_lost) > 0)
+    stop(glue(
+      "CTD_CAST_FOLDER_PREFER {pr$cruise_key}: {length(c_lost)} cast(s) exist only in a file ",
+      "outside {pr$prefer}/ and {pr$fallback}/ and would be lost: ",
+      "{paste(head(sort(c_lost), 10), collapse = ', ')}"))
+  d_prefer_rpt[[i]] <- tibble(
+    cruise_key = pr$cruise_key, path_unzip = d_csv$path_unzip[c(i_pref, i_fall, i_drop)],
+    role = c(rep("prefer", length(i_pref)), rep("fallback", length(i_fall)),
+             rep("not read", length(i_drop))),
+    n_casts_read = c(
+      map_int(i_pref, \(ii) n_distinct(d_csv$data[[ii]]$cast_id)),
+      map_int(i_fall, \(ii) sum(unique(d_csv$data[[ii]]$cast_id) %in% c_fall)),
+      rep(0L, length(i_drop))),
+    reason = pr$reason)
+  for (ii in i_fall)
+    d_csv$data[[ii]] <- d_csv$data[[ii]] |> filter(cast_id %in% c_fall)
+  if (length(i_drop) > 0) d_csv <- d_csv[-i_drop, ]
+}
+d_csv <- d_csv |>
+  mutate(nrows = map_int(data, nrow)) |>
+  select(-folder)
+if (length(d_prefer_rpt) > 0)
+  bind_rows(d_prefer_rpt) |>
+    dt(caption = paste(
+      "One source per cast: the casts read from each folder of a cruise declared in",
+      "CTD_CAST_FOLDER_PREFER"),
+      fname = "ctd_cast_source_prefer")
+```
+
 ## Detect and Correct Column Type Mismatches
 
 ```{r}
@@ -1550,6 +1638,59 @@ if (length(i_misdir) > 0) {
   rm(d_misdir, ok_dir, has_twin, i_same)
 }
 rm(id_dir, i_misdir)
+
+# --- an extra cast at an occupation gets its own key (ctd-cast Q47) -------------
+# Two calcofi.org finals carry extra casts in a folder of their own, filed under the
+# regular cast's number: 19-9504NH db_csvs/RalfCasts/ (4 casts, 52-124 m) and 19-9510NH
+# db_csvs/GoerickeExtraCasts/ (8 casts, 62-201 m), each about two hours after the
+# regular cast at the same station. Sharing `Cast_ID` with the regular cast, both
+# casts became one `sample` whose shallow bins held two values (2,996 cast-depths in
+# v2026.11.12; CalCOFI/workflows#134). They are real casts and stay (Rasmus Swalethorp,
+# 2026-11-13: "We can keep Ralf's casts in there unless there are compatibility or data
+# discrepancy issues"), each under its own key: the cast number takes a `b`, the second
+# cast of that occupation, before the direction letter (`9504_010d` -> `9504_010bd`,
+# sample_key `calcofi_ctd-cast:cast:9504_010bd`). The key still ends in the direction
+# letter, which is all a consumer strips to pair a cast's two directions, and `ord_occ`
+# stays the occupation's. The flag ledger keys a scan by the source's own Cast_ID, so
+# [apply_accepted_flags] maps these back through the same table.
+# CTD_EXTRA_CAST_FOLDERS, extra_cast_key(): declared in [check_resume], because
+# [apply_accepted_flags] needs them on a render that resumes past this chunk
+
+# matched per file, then by row: d_bind is ~30M scans
+src_extra <- d_bind |>
+  distinct(cruise_key, `_source_file`) |>
+  inner_join(CTD_EXTRA_CAST_FOLDERS, by = "cruise_key") |>
+  filter(str_detect(`_source_file`, fixed(paste0("/", folder, "/")))) |>
+  pull(`_source_file`)
+i_extra   <- which(d_bind$`_source_file` %in% src_extra)
+i_regular <- setdiff(which(d_bind$cruise_key %in% CTD_EXTRA_CAST_FOLDERS$cruise_key), i_extra)
+d_extra <- d_bind[i_extra, ] |>
+  distinct(cruise_key, `_source_file`, cast_id, sta_id) |>
+  mutate(cast_key_new = extra_cast_key(cast_id))
+d_regular <- d_bind[i_regular, ] |>
+  filter(cast_id %in% d_extra$cast_id) |>
+  distinct(cruise_key, cast_id, sta_id_regular = sta_id)
+d_extra <- d_extra |> left_join(d_regular, by = c("cruise_key", "cast_id"))
+stopifnot(
+  "an extra-cast folder declared in CTD_EXTRA_CAST_FOLDERS is not read" =
+    all(CTD_EXTRA_CAST_FOLDERS$cruise_key %in% d_extra$cruise_key |
+          !CTD_EXTRA_CAST_FOLDERS$cruise_key %in% d_bind$cruise_key),
+  "an extra cast's new key is already a cast of the cruise" =
+    !any(d_extra$cast_key_new %in% d_bind$cast_id[i_regular]),
+  "an extra cast must sit at the station of the regular cast whose number it reuses" =
+    all(!is.na(d_extra$sta_id_regular) & d_extra$sta_id == d_extra$sta_id_regular))
+d_bind$cast_id[i_extra] <- extra_cast_key(d_bind$cast_id[i_extra])
+d_extra |>
+  transmute(cruise_key, file = `_source_file`, cast_id_source = cast_id,
+            cast_key = cast_key_new, sta_id) |>
+  arrange(cruise_key, cast_key) |>
+  dt(caption = paste(
+    "Extra casts at an occupation, each under its own key: the source's Cast_ID with",
+    "`b` before the direction letter (CTD_EXTRA_CAST_FOLDERS)"),
+    fname = "ctd_extra_cast_keys")
+say(glue("extra casts keyed apart: {nrow(d_extra)} cast-directions in ",
+         "{n_distinct(d_extra$cruise_key)} cruise(s), {length(i_extra)} rows"))
+rm(i_extra, i_regular, src_extra, d_regular)
 
 # normalize raw coordinate column names (CalCOFI CTD CSV ships Lon_Dec/Lat_Dec ->
 # clean_names lon_dec/lat_dec) to the canonical dictionary names used downstream
@@ -2335,32 +2476,42 @@ cat(glue(
   "({round(100 * (n_before - n_after) / max(n_before, 1), 1)}%); ",
   "{format(n_after, big.mark = ',')} rows remain"), "\n")
 
-# --- no (cast, depth) twice after reading -------------------------------------
+# --- no (cast, depth) twice after reading, beyond a bin written twice --------------
 # A scan is one (cast, depth): two rows there become two values of every type under
 # one obs key. dedup above only collapses rows that agree on cast_dir AND time, so
 # a second copy that writes either differently survives it (2204SH's two exports,
-# the mis-filed upcasts of 1604SH/2105SH: CalCOFI/workflows#131). Those are fixed in
-# [d_csv] and [d_bind]; these cruises still hold a cast twice for reasons not yet
-# resolved, each a separate defect counted in [emit_core]'s ratchet
-# (CTD_DUP_SCAN_MAX). Any other cruise with a twice-read scan stops the render.
-CTD_DUP_SCAN_CRUISES <- c(
-  "1501NH",  # db_csv/dualTCO/ re-processes casts 001-064 beside the 001-100 file
-  "9510NH",  # db_csvs/GoerickeExtraCasts/ reuses cast numbers 005-061 for other casts
-  "9504NH",  # db_csvs/RalfCasts/ reuses cast numbers 010-032 for other casts
-  "2007SR", "0302JD", "0204JD", "9507JD", "2307SR", "0501NH", "0604NH",
-  "9712SP")  # 19-9712SP_CTDFinalDB cast 005d writes 521 m twice, 9 s apart (Q46)
+# the mis-filed upcasts of 1604SH/2105SH: CalCOFI/workflows#131; 1501NH's dualTCO/
+# beside the top-level file and the extra casts of 9504NH / 9510NH filed under the
+# regular cast numbers: #134). Those are resolved upstream ([d_csv], [cast_source_prefer],
+# [d_bind]). What is left is a depth bin the source writes twice within one cast, which
+# [average_repeated_bins] averages by the provider's flags (Rasmus Swalethorp,
+# 2026-11-13: "Average"). That is a bin or a few, never a cast: a cast with more than
+# CTD_BIN_TWICE_MAX_PER_CAST bins written twice is a second copy of the cast, which
+# averaging would hide, so it stops the render unless CTD_CAST_WRITTEN_TWICE names it.
+CTD_BIN_TWICE_MAX_PER_CAST <- 20L
+CTD_CAST_WRITTEN_TWICE <- tibble::tribble(
+  ~cruise_key, ~cast_key,    ~reason,
+  "2007SR",    "2007_004d",  paste(
+    "20-2007SR_CTDBTL_001-075D.csv writes cast 004d's 2-178 m twice: the same values,",
+    "the second copy under one fixed time (ctd-cast Q47)"))
 d_dup_scan <- dbGetQuery(con, "
-  SELECT cruise_key, COUNT(*) AS n_dup_scans, COUNT(DISTINCT cast_key) AS n_casts
+  SELECT cruise_key, cast_key, COUNT(*) AS n_bins_twice
   FROM (SELECT cruise_key, cast_key, depth_m FROM ctd_raw GROUP BY ALL HAVING COUNT(*) > 1)
-  GROUP BY 1 ORDER BY 2 DESC")
+  GROUP BY ALL ORDER BY 3 DESC, 1, 2")
 if (nrow(d_dup_scan) > 0)
-  dt(d_dup_scan, caption = "Scans read twice: (cruise, cast, depth) on more than one row",
+  dt(d_dup_scan, caption = paste(
+    "Depth bins written twice within one cast: (cruise, cast, depth) on more than one row,",
+    "averaged in [average_repeated_bins]"),
      fname = "ctd_dup_scans")
-dup_new <- setdiff(d_dup_scan$cruise_key, CTD_DUP_SCAN_CRUISES)
-if (length(dup_new) > 0)
+dup_copy <- d_dup_scan |>
+  filter(n_bins_twice > CTD_BIN_TWICE_MAX_PER_CAST) |>
+  anti_join(CTD_CAST_WRITTEN_TWICE, by = c("cruise_key", "cast_key"))
+if (nrow(dup_copy) > 0)
   stop(glue(
-    "(cast, depth) read twice in {paste(dup_new, collapse = ', ')}: a second copy of ",
-    "these casts reached ctd_raw. Resolve it in [d_csv] (CTD_COPY_PREFER) or [d_bind]."))
+    "a second copy of these casts reached ctd_raw (more than {CTD_BIN_TWICE_MAX_PER_CAST} ",
+    "depth bins written twice): ",
+    paste(glue("{dup_copy$cruise_key} {dup_copy$cast_key} ({dup_copy$n_bins_twice})"), collapse = "; "),
+    ". Resolve it in [d_csv] (CTD_COPY_PREFER), [cast_source_prefer] or [d_bind]."))
 ```
 
 ```{r}
@@ -2907,6 +3058,124 @@ stopifnot(
   "ctd_measurement must hold no value outside a declared bound" =
     sum(bounds_post$status == "out_of_range") == 0)
 
+```
+
+### A depth bin written twice is averaged, by the provider's flags {#average-repeated-bins}
+
+Eight casts write a depth bin twice within one cast: 2020-07 cast 004d (177 bins, the cast's
+upper part repeated under one fixed time, same values), 2003-02 095u (11), 2002-04 013u (4),
+1995-07 064u (2) and one bin each in 1997-12 005d, 2005-01 052d, 2006-04 014u and 2023-07 032u
+(ctd-cast Q47, CalCOFI/workflows#134). Each copy is a scan of its own (its own time, so its own
+`ctd_cast_uuid`), and both reached `obs` and `obs_ctd_full` under one sample key and depth.
+Rasmus Swalethorp's answer (2026-11-13): average them. Here, before any later flag step or the
+sensor-pair averages, every row of such a bin moves to the bin's earliest scan, and each series
+becomes one value by the flag rule: the values its provider does not flag 8 or 9 are averaged and
+keep their flag, and only where every copy is flagged is the mean of the flagged copies kept, with
+the worse flag (9 over 8), so a flagged value never enters an average with a good one. Copies that
+disagree on a good flag (a 1 against a 2) stop the render, since the sensor-pair rule reads those.
+A scan left with no rows leaves `ctd_cast`. The guard against a whole second copy of a cast is in
+[dedup_ctd_raw].
+
+```{r}
+#| label: average_repeated_bins
+
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _bin_scan AS
+  SELECT DISTINCT c.cruise_key, c.cast_key, c.cast_dir, m.depth_m, m.ctd_cast_uuid,
+         c.datetime_start_utc
+  FROM ctd_measurement m JOIN ctd_cast c USING (ctd_cast_uuid)")
+dbExecute(con, "
+  CREATE OR REPLACE TEMP TABLE _bin_twice AS
+  SELECT cruise_key, cast_key, cast_dir, depth_m, COUNT(*) AS n_scans,
+         first(ctd_cast_uuid ORDER BY datetime_start_utc, ctd_cast_uuid) AS keep_uuid
+  FROM _bin_scan GROUP BY ALL HAVING COUNT(*) > 1")
+n_bins_twice <- dbGetQuery(con, "SELECT COUNT(*) FROM _bin_twice")[[1]]
+
+if (n_bins_twice > 0) {
+  dbExecute(con, "
+    CREATE OR REPLACE TEMP TABLE _bin_avg AS
+    WITH r AS (
+      SELECT b.keep_uuid AS ctd_cast_uuid, m.depth_m, m.measurement_type,
+             m.measurement_value AS v, m.measurement_qual AS q,
+             COALESCE(m.measurement_qual, '') NOT IN ('8', '9') AS ok
+      FROM ctd_measurement m
+      JOIN _bin_scan s USING (ctd_cast_uuid, depth_m)
+      JOIN _bin_twice b USING (cruise_key, cast_key, cast_dir, depth_m))
+    SELECT ctd_cast_uuid, depth_m, measurement_type,
+      CASE WHEN bool_or(ok) THEN avg(v) FILTER (WHERE ok) ELSE avg(v) END AS measurement_value,
+      CASE WHEN bool_or(ok) THEN any_value(q) FILTER (WHERE ok)
+           ELSE max(q) END                                             AS measurement_qual,
+      COUNT(*) AS n_rows, COUNT(*) FILTER (WHERE ok) AS n_ok,
+      COUNT(DISTINCT COALESCE(q, '')) FILTER (WHERE ok) AS n_ok_quals,
+      max(v) - min(v) AS v_range
+    FROM r GROUP BY ALL")
+  d_mixed <- dbGetQuery(con, "SELECT * FROM _bin_avg WHERE n_ok_quals > 1")
+  if (nrow(d_mixed) > 0)
+    stop(glue(
+      "{nrow(d_mixed)} repeated bin(s) whose copies carry different good flags ",
+      "(e.g. {d_mixed$measurement_type[1]} at {d_mixed$depth_m[1]} m): decide which copy's flag holds"))
+
+  n_meas_before <- dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement")[[1]]
+  n_rows_in     <- dbGetQuery(con, "SELECT SUM(n_rows) FROM _bin_avg")[[1]]
+  dbExecute(con, "
+    DELETE FROM ctd_measurement m USING _bin_scan s, _bin_twice b
+    WHERE m.ctd_cast_uuid = s.ctd_cast_uuid AND m.depth_m = s.depth_m
+      AND s.cruise_key = b.cruise_key AND s.cast_key = b.cast_key
+      AND s.cast_dir = b.cast_dir AND s.depth_m = b.depth_m")
+  dbExecute(con, "
+    INSERT INTO ctd_measurement (ctd_cast_uuid, depth_m, measurement_type, measurement_value, measurement_qual)
+    SELECT ctd_cast_uuid, depth_m, measurement_type, measurement_value, measurement_qual FROM _bin_avg")
+  n_meas_after <- dbGetQuery(con, "SELECT COUNT(*) FROM ctd_measurement")[[1]]
+  n_avg        <- dbGetQuery(con, "SELECT COUNT(*) FROM _bin_avg")[[1]]
+  stopifnot("averaging accounting" = n_meas_before - n_rows_in + n_avg == n_meas_after)
+
+  # the scan rows of ctd_raw follow, so the flag ledger's (file, cast, depth) key finds the kept scan
+  dbExecute(con, "
+    UPDATE ctd_raw AS r SET ctd_cast_uuid = b.keep_uuid
+    FROM _bin_scan s, _bin_twice b
+    WHERE r.ctd_cast_uuid = s.ctd_cast_uuid AND r.depth_m = s.depth_m
+      AND s.cruise_key = b.cruise_key AND s.cast_key = b.cast_key
+      AND s.cast_dir = b.cast_dir AND s.depth_m = b.depth_m")
+  # a scan left with nothing under it leaves ctd_cast
+  n_cast_drop <- dbExecute(con, "
+    DELETE FROM ctd_cast WHERE ctd_cast_uuid IN (
+      SELECT s.ctd_cast_uuid FROM _bin_scan s JOIN _bin_twice b USING (cruise_key, cast_key, cast_dir, depth_m)
+      WHERE s.ctd_cast_uuid <> b.keep_uuid)
+      AND ctd_cast_uuid NOT IN (SELECT DISTINCT ctd_cast_uuid FROM ctd_measurement)
+      AND ctd_cast_uuid NOT IN (SELECT DISTINCT ctd_cast_uuid FROM ctd_raw WHERE ctd_cast_uuid IS NOT NULL)")
+
+  d_bin_rpt <- dbGetQuery(con, "
+    SELECT b.cruise_key, b.cast_key, COUNT(DISTINCT b.depth_m) AS n_bins,
+           min(b.depth_m) AS depth_min_m, max(b.depth_m) AS depth_max_m,
+           SUM(a.n_rows) AS n_rows_in, COUNT(*) AS n_rows_out,
+           SUM(CASE WHEN a.n_ok < a.n_rows THEN 1 ELSE 0 END) AS n_flagged_copy_left_out,
+           max(a.v_range) AS largest_difference
+    FROM _bin_twice b JOIN _bin_avg a ON a.ctd_cast_uuid = b.keep_uuid AND a.depth_m = b.depth_m
+    GROUP BY ALL ORDER BY 1, 2")
+  dt(d_bin_rpt, caption = paste(
+    "Depth bins written twice, averaged by the provider's flags: rows in and out per cast,",
+    "and the largest difference between the copies of one series"),
+    fname = "ctd_bins_averaged")
+  say(glue("repeated depth bins averaged: {n_bins_twice} bin(s) in {nrow(d_bin_rpt)} cast(s), ",
+           "{format(n_rows_in, big.mark = ',')} rows -> {format(n_avg, big.mark = ',')}; ",
+           "{n_cast_drop} scan(s) left ctd_cast"))
+  dbExecute(con, "DROP TABLE IF EXISTS _bin_avg")
+}
+dbExecute(con, "DROP TABLE IF EXISTS _bin_scan")
+dbExecute(con, "DROP TABLE IF EXISTS _bin_twice")
+
+stopifnot(
+  "no (cast, direction, depth, type) twice in ctd_measurement" =
+    dbGetQuery(con, "
+      SELECT COUNT(*) FROM (
+        SELECT c.cruise_key, c.cast_key, c.cast_dir, m.depth_m, m.measurement_type
+        FROM ctd_measurement m JOIN ctd_cast c USING (ctd_cast_uuid)
+        GROUP BY ALL HAVING COUNT(*) > 1)")[[1]] == 0)
+```
+
+```{r}
+#| label: ctd_measurement_keys
+
 # assign deterministic UUID (md5-based, DuckDB-native — single SQL, no R data transfer)
 assign_deterministic_uuids_md5(
   con = con,
@@ -3023,11 +3292,18 @@ if (n_flags == 0) {
 
   # the same (archive, _source_file, cast_key, depth_m) identity as ctd.file /
   # ctd.scan (see the section prose above), one row per physical scan
-  dbExecute(con, "
+  # cast_key is the ledger's cast_id (the source's Cast_ID) except for an extra cast keyed
+  # apart in [d_bind]: its file still says the regular cast's number, so map it back
+  extra_pat <- paste0("/(", paste(CTD_EXTRA_CAST_FOLDERS$folder, collapse = "|"), ")/")
+  dbExecute(con, glue("
     CREATE OR REPLACE TABLE _ctd_raw_keys AS
-    SELECT DISTINCT ctd_cast_uuid, depth_m, cast_key, \"_source_file\",
+    SELECT DISTINCT ctd_cast_uuid, depth_m,
+           CASE WHEN regexp_matches(\"_source_file\", '{extra_pat}')
+                THEN regexp_replace(cast_key, '{CTD_EXTRA_CAST_SUFFIX}([dDuU])$', '\\1')
+                ELSE cast_key END AS cast_key,
+           \"_source_file\",
            regexp_extract(\"_source_file\", '^([^/]+)', 1) || '.zip' AS archive
-    FROM ctd_raw")
+    FROM ctd_raw"))
   stopifnot("(archive, _source_file, cast_key, depth_m) is not a unique scan key in ctd_raw" =
     dbGetQuery(con, "
       SELECT COUNT(*) - COUNT(DISTINCT archive || '|' || \"_source_file\" || '|' || cast_key || '|' || depth_m) AS n
@@ -4814,6 +5090,12 @@ stopifnot(
 cat(glue("obs parity: {format(n_obs, big.mark=',')} thinned rows across ",
          "{format(n_cast, big.mark=',')} casts"), "\n")
 
+# the thinned series takes the same hard stop as obs_ctd_full below (CalCOFI/workflows#134)
+n_obs_twice <- dbGetQuery(con, "
+  SELECT COUNT(*) FROM (SELECT sample_key, depth_min_m, measurement_type FROM obs
+                        GROUP BY ALL HAVING COUNT(*) > 1)")[[1]]
+stopifnot("obs holds a (sample_key, depth, measurement_type) twice" = n_obs_twice == 0)
+
 # --- data_stage is classified by FILENAME; verify it against CONTENT ----------
 # The `_CTDBTL_` / `_CTD_` token is a convention, not a guarantee, and 2111SR is
 # classified by a hardcoded cruise rule that no token supports at all. What
@@ -4894,36 +5176,24 @@ if (build_obs_ctd_full) {
     "obs_ctd_full must inherit the bounds guard applied to ctd_measurement" =
       sum(b_full$status == "out_of_range") == 0)
 
-  # --- duplicated keys: a ratchet that only goes down (CalCOFI/workflows#131) ---
-  # A (sample, depth) holding more rows than measurement types is a scan read twice,
-  # which a consumer sees as two values under one key. v2026.10.01 had 78,344 such
-  # scans in 2022-04 (two exports), 1,756 in 2016-04 / 2021-05 (mis-filed upcasts),
-  # all fixed upstream, and the cruises below for reasons still open (see
-  # CTD_DUP_SCAN_CRUISES in [dedup_ctd_raw]). Counts measured on v2026.10.01's
-  # obs_ctd_full; lower them as each is resolved, never raise them.
-  CTD_DUP_SCAN_MAX <- c(
-    "2015-01-32NM" = 43253, "1995-10-32NM" = 2189, "1995-04-32NM" = 807,
-    "2020-07-33P4" =   177, "2003-02-31JD" =   11, "2002-04-31JD" =   4,
-    "1995-07-31JD" =     2, "2023-07-33P4" =    1, "2005-01-32NM" =   1,
-    "2006-04-32NM" =     1,
-    # new coverage 2026-10-20, not a raised count: the cruise had no CTD in any
-    # earlier release (Q46)
-    "1997-12-32QU" =     1)
+  # --- no (sample, depth, type) twice: a hard stop (CalCOFI/workflows#131, #134) ---
+  # Two rows under one (sample_key, depth, measurement_type) are two values a consumer
+  # cannot tell apart. v2026.10.01 had 78,344 such scans in 2022-04 (two exports) and
+  # 1,756 in 2016-04 / 2021-05 (mis-filed upcasts); v2026.11.12 still had 46,447 in 11
+  # cruises under a ratchet (CTD_DUP_SCAN_MAX), each resolved upstream on 2026-11-14 by
+  # Rasmus Swalethorp's answers to ctd-cast Q47 ([cast_source_prefer], the extra-cast keys
+  # in [d_bind], [average_repeated_bins]). The ratchet reached zero and is gone: any
+  # repeated key now stops the render.
   d_dup_full <- dbGetQuery(con, "
-    SELECT cruise_key, COUNT(*) AS n_dup_scans
-    FROM (SELECT cruise_key, sample_key, depth_min_m FROM obs_ctd_full GROUP BY ALL
-          HAVING COUNT(*) > COUNT(DISTINCT measurement_type))
-    GROUP BY 1 ORDER BY 2 DESC") |>
-    mutate(n_max = coalesce(unname(CTD_DUP_SCAN_MAX[cruise_key]), 0))
-  cat(glue("obs_ctd_full scans held twice: ",
-           "{format(sum(d_dup_full$n_dup_scans), big.mark = ',')} in ",
-           "{nrow(d_dup_full)} cruise(s)"), "\n")
-  d_dup_over <- d_dup_full |> filter(n_dup_scans > n_max)
-  if (nrow(d_dup_over) > 0)
+    SELECT cruise_key, COUNT(*) AS n_keys_twice, COUNT(DISTINCT sample_key) AS n_casts
+    FROM (SELECT cruise_key, sample_key, depth_min_m, measurement_type FROM obs_ctd_full
+          GROUP BY ALL HAVING COUNT(*) > 1)
+    GROUP BY 1 ORDER BY 2 DESC")
+  if (nrow(d_dup_full) > 0)
     stop(glue(
-      "obs_ctd_full holds a scan twice beyond CTD_DUP_SCAN_MAX: ",
-      paste(glue("{d_dup_over$cruise_key} {d_dup_over$n_dup_scans} > {d_dup_over$n_max}"),
-            collapse = "; ")))
+      "obs_ctd_full holds a (sample_key, depth, measurement_type) twice: ",
+      paste(glue("{d_dup_full$cruise_key} {d_dup_full$n_keys_twice}"), collapse = "; ")))
+  cat("obs_ctd_full: no (sample_key, depth, measurement_type) twice\n")
 } else {
   cat("obs_ctd_full skipped (BUILD_OBS_CTD_FULL=FALSE)\n")
 }
