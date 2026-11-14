@@ -101,7 +101,7 @@ had carried since v2026.10.01, and `test_release.qmd` checks `obs_env` for it.
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.14 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.11.14
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.14 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.24223907
 
 Cite the source datasets you use alongside the release:
 
