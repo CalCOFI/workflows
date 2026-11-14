@@ -22,8 +22,8 @@ segments over 78 cruises, with the lab's code list, data dictionary and field ma
 angle off the bow (`sight_brng`) and the perpendicular distances are now computed for every year,
 so 4,996 sightings are placed at the animal (4,150 in the second preview, where 2022–2025 stayed at
 the ship; Q30). Behaviour is published from the lab's codebook as `obs_attribute` `behavior`
-labels (Q03), the sea otter (`EL`) is keyed, and fifteen provider questions are settled by the
-files. The held dataset's NULL-`cruise_key` ratchet goes from 66 to 64 segments (no segment is
+labels (Q03), the sea otter (`EL`) is keyed, and nineteen provider questions are settled by the
+files and Michaela's note of 2026-11-09. The held dataset's NULL-`cruise_key` ratchet goes from 66 to 64 segments (no segment is
 misdated any more). The private candidate (root `ducklake-preview-sightings`) is rebuilt from
 these files with the Farallon cut, under a new preview token.
 
