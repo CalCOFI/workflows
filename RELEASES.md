@@ -13,6 +13,8 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+# v2026.11.14
+
 ## Conditions on density surfaces: a new `isopycnal` table and its baseline in `climatology`
 
 Rasmus Swalethorp asked (2026-11-12 and -13) for conditions and their anomalies on sigma-theta
