@@ -2938,6 +2938,9 @@ if (file.exists(meta_json_path)) {
   probe_ok   <- net_ok && release_bucket == "calcofi-db"
   erddap_now <- if (net_ok) fetch_erddap_datasets() else NULL
   netcdf_now <- if (net_ok) fetch_netcdf_manifests(c(names(ingest_yaml), paste0(names(ingest_yaml), "_full"))) else list()
+  # the download bundles publish_to-zip.qmd staged (gs://calcofi-db/publish/zip/manifest.json): it runs
+  # after this release, so each dataset's newest built entry is the one carried (calcofi4db >= 4.40.0)
+  bundles_now <- if (net_ok) fetch_bundle_manifest() else NULL
   # since_version is a fact about the PROMOTED history, so it is always derived from the
   # production prefix — a staging run's own versions.json holds three throwaway versions and
   # would date every dataset to the oldest of them (measured 2026-09-05: ichthyo "since v2026.08.25")
@@ -2952,7 +2955,7 @@ if (file.exists(meta_json_path)) {
                                        simplifyVector = FALSE), error = function(e) NULL)
   datasets_rec <- build_dataset_catalog(
     meta_json_path, coverage_path, catalog, cat_registries, version = release_version,
-    erddap = erddap_now, netcdf = netcdf_now, since = since, source_accessed = src_acc,
+    erddap = erddap_now, netcdf = netcdf_now, bundles = bundles_now, since = since, source_accessed = src_acc,
     spatial_layers = spatial_layers_path, bathymetry = bathy, release_prefix = release_prefix)
   # a dataset in no earlier release first appears in this one
   for (i in seq_along(datasets_rec$datasets))

@@ -13,6 +13,17 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## Download bundles: every dataset as zips a researcher can open
+
+No table changes. A new publisher, `publish_to-zip.qmd`, writes for every dataset one zip per
+format (CSV for every dataset, an Excel workbook where every table has at most 250,000 rows,
+Parquet), each holding the dataset's own rows of every table it needs to be used alone, with
+`site_key`, `line`, `station`, `scientific_name`, `common_name` and `units` beside their keys,
+and a README, the dataset's and the release's citation, its licence and a column dictionary. They
+stage at `gs://calcofi-db/publish/zip/{dataset_key}/` with a manifest beside them, and from this
+release on `datasets.json` carries each as a `kind = "bundle"` distribution (calcofi4db 4.40.0):
+the newest built, since the publisher runs after the release.
+
 ## `sio_cetacean-sightings` (held): the third preview reads the lab's final 2004–2025 files
 
 No public table changes. The Scripps Whale Acoustics Lab published its final QA/QC'd visual-survey
