@@ -22,9 +22,11 @@ calcofi:
     open without programming: one zip per format (CSV for every dataset, an Excel
     workbook where every table fits, Parquet), each holding the dataset's own rows
     of every table it needs to be used alone, with readable names beside keys, and
-    its README, citation, licence and column dictionary. Rebuilds a dataset only
-    when its rows, record or this code changed, writes byte-reproducible zips and a
-    manifest the website reads, and uploads only under an explicit flag.
+    its README, citation, licence and column dictionary. Content-addressed as the
+    release's own Parquet tables are: a package is written and uploaded once per
+    distinct content (data, its metadata record, the pinned format), under a path
+    named by its content_hash, and every later release with the same content only
+    lists it in its manifest. Uploads only under an explicit flag; never deletes.
 editor_options:
   chunk_output_type: console
 ---
@@ -39,9 +41,10 @@ makes it, for every dataset in the promoted release, generic over `dataset_key` 
 `publish_to-netcdf.qmd` and `publish_to-edi.qmd`.
 
 **One zip per format, named so it is recognisable in Downloads:**
-`calcofi_{dataset_key}_{version}_{format}.zip` (`calcofi_bottle_v2026.11.14_csv.zip`,
-`calcofi_swfsc_ichthyo_v2026.11.14_xlsx.zip`; the `calcofi_` prefix is not doubled). Each unzips
-to one folder of the same name holding:
+`calcofi_{dataset_key}_{since}_{format}.zip` (`calcofi_bottle_v2026.11.14_csv.zip`,
+`calcofi_swfsc_ichthyo_v2026.11.14_xlsx.zip`; the `calcofi_` prefix is not doubled), where `since`
+is the release in which the package's content last changed (never merely the release being
+published). Each unzips to one folder of the same name holding:
 
 | file | what |
 |---|---|
@@ -72,19 +75,29 @@ every table fits an Excel sheet: at most 1,048,575 rows of data below the header
 2026-11-16); otherwise the manifest says why in plain words, and a CSV too long for a
 spreadsheet says so in its README.
 
-**Rebuilt only when the dataset changed.** Every release re-renders every publisher, so each
-dataset's bundle carries an input fingerprint (`publish_fingerprint()`): the row signatures of
-exactly the tables it writes, so a vocabulary row another dataset added changes nothing here; its
-catalog record and the metadata its documents read; and this code. An unchanged fingerprint with
-the zips still on disk is reused under the release it was built from (its name keeps that version;
-`checked_version` records this run). The zips are byte-reproducible (`bundle_zip()`: fixed member
-order, timestamp, mode and time zone; the workbook's own timestamp fixed too), so the same rows
-always give the same sha256.
+**Content-addressed, the release tables' scheme** (`R/release.R` in calcofi4db: one object per
+distinct content, `content_hash` its identity, `since` the release that first carried it,
+`upload` or `exists`, nothing deleted). Every release re-renders every publisher; for each
+dataset the identity is decided **before anything is written**: `publish_fingerprint()`'s
+`content_hash` over the row signatures of exactly the tables the package holds (the release's
+own order-independent signatures, so a vocabulary row another dataset added changes nothing
+here), the metadata its documents carry (the dataset record minus what a release re-measures,
+the column and table descriptions) and the pinned `CC_PUBLISH_FORMAT[["zip"]]`; never the code
+and never the release version. A content the previous manifest already lists **exists**: nothing
+is built or uploaded and only the manifest's `checked_version` moves. A new content is built at
+`{dataset_key}/{content_hash[1:24]}/` and named for its `since`, so its README and citation name
+the release it was built from (whose DOI holds exactly these data) and say the data are
+identical in every later release that lists it. `data_hash` (the data alone) is recorded beside
+`content_hash`, so a package rebuilt for a metadata change reads as "same data, new file". The
+zips are byte-reproducible (`bundle_zip()`: fixed member order, timestamp, mode and time zone;
+the workbook's timestamp fixed too).
 
 **Upload gated, and the website's contract.** Everything is written under
 `cc_stage_path("publish", "zip")`; nothing leaves the machine unless `CALCOFI_PUBLISH_ZIP=true`
-(and never in a staging run). The upload puts each zip at
-`gs://calcofi-db/publish/zip/{dataset_key}/{file}` and the manifest at
+(and never in a staging run). The upload puts each new zip at
+`gs://calcofi-db/publish/zip/{dataset_key}/{hash24}/{file}`, this release's manifest at
+`publish/zip/releases/{version}/manifest.json` (the chain of them is the history) and the current
+one at
 `gs://calcofi-db/publish/zip/manifest.json`, which calcofi.io reads at build time, and which
 `release_database.qmd` passes to `build_dataset_catalog(bundles = )` so the next release's
 `datasets.json` carries a `kind = "bundle"` distribution per file (the newest built, as the
@@ -228,10 +241,12 @@ kable(plan_tbl |> filter(!included | source == "record") |> select(dataset_key, 
 #| label: build
 #| results: asis
 
+# the previous manifest: this machine's last run, else what the bucket serves (a staging run
+# never reads the bucket's). A schema-1.0 entry has no content_hash, so every dataset it lists
+# is new content to this scheme once.
 read_prior <- function() {
   p <- file.path(OUT_DIR, "manifest.json")
-  if (!file.exists(p)) return(list())
-  m <- tryCatch(read_j(p), error = function(e) NULL)
+  m <- if (file.exists(p)) tryCatch(read_j(p), error = function(e) NULL) else if (!STAGING) fetch_bundle_manifest()
   setNames(m$datasets %||% list(), vapply(m$datasets %||% list(), `[[`, "", "dataset_key"))
 }
 prior_all  <- read_prior()
@@ -245,46 +260,55 @@ for (k in keys) {
   rec  <- records[[k]]
   plan <- plans[[k]]
   built <- bundle_build_tables(con, plan, k, from_sql)
+  # the identity, decided BEFORE anything is written: the bundle's own rows (the release's
+  # row signatures), the metadata its documents carry and the pinned format, never the code
+  # or the release version (calcofi4db::publish_fingerprint(), the release tables' scheme)
   fp <- publish_fingerprint(
     data     = bundle_table_signatures(con, built$table),
     metadata = list(
-      record  = publish_record_digest(rec),
+      record  = publish_record_digest(rec),   # minus what a release re-measures
       columns = cols_meta[sub("\\..*$", "", names(cols_meta)) %in% built$table],
       tables  = tbls_meta[intersect(built$table, names(tbls_meta))],
       plan    = plan[, c("table", "included", "rule", "link", "reason")],
       built   = built[, c("table", "dropped", "added")]),
-    code     = code_parts)
+    code     = code_parts,
+    format   = CC_PUBLISH_FORMAT[["zip"]])
   prior <- prior_all[[k]]
-  files <- vapply(Filter(function(b) isTRUE(b$written), prior$bundles %||% list()), `[[`, "", "file")
-  dec <- publish_decide(fp, prior$input_fingerprint, file.path(STAGE_DIR, k, files))
-  if (dec$action == "reuse") {
+  same  <- identical(prior$content_hash %||% "", fp$content_hash)
+  if (same) {
+    # exists: the object (and its since) is the previous one; only the manifest's release moves
     e <- prior
     e$checked_version <- RELEASE_VERSION
-    cat(glue("- `{k}`: unchanged since {e$version} — reused ({length(files)} zip(s))"), "\n")
+    action <- "exists"
+    cat(glue("- `{k}`: content {substr(fp$content_hash, 1, 12)} unchanged since {e$since %||% e$version} — ",
+             "nothing written"), "\n")
   } else {
-    w <- write_bundle(con, rec, release, built, plan, file.path(STAGE_DIR, k),
+    obj_dir <- file.path(STAGE_DIR, k, substr(fp$content_hash, 1, 24))   # publish/zip/{key}/{hash24}/
+    w <- write_bundle(con, rec, release, built, plan, obj_dir,
                       meta_columns = cols_meta, meta_tables = tbls_meta, licenses_dir = LIC_DIR)
     lic <- bundle_license(rec, LIC_DIR); cit <- bundle_citation(rec, release)
     e <- bundle_manifest_entry(rec, RELEASE_VERSION, release$release_date, RELEASE_VERSION, fp, built, plan, w,
                                license_kind = lic$kind, has_provider_citation = cit$has_provider_citation)
-    # a superseded build's zips go; it is reproducible from its frozen release
-    old <- setdiff(list.files(file.path(STAGE_DIR, k), pattern = "\\.zip$"), w$file[w$written])
-    unlink(file.path(STAGE_DIR, k, old))
-    cat(glue("- `{k}`: built — {dec$reason}; ",
-             "{paste(sprintf('%s %s MB', w$format[w$written], format(round(w$bytes[w$written] / 1e6, 1), nsmall = 1)), collapse = ', ')}",
-             "{if (length(old)) paste0('; removed ', paste(old, collapse = ', ')) else ''}"), "\n")
+    action <- "upload"
+    why <- if (is.null(prior)) "no previous package" else if (is.null(prior$content_hash))
+      "first content-addressed build" else if (identical(prior$data_hash %||% "", fp$data_hash))
+      "same data, its metadata or format changed" else "the data changed"
+    cat(glue("- `{k}`: new content {substr(fp$content_hash, 1, 12)} ({why}); ",
+             "{paste(sprintf('%s %s MB', w$format[w$written], format(round(w$bytes[w$written] / 1e6, 1), nsmall = 1)), collapse = ', ')}"), "\n")
   }
   for (tb in built$table) dbExecute(con, glue('DROP TABLE IF EXISTS "bundle_{tb}"'))
   entries[[k]] <- e
-  runs[[k]] <- tibble(dataset_key = k, action = dec$action, changed = paste(dec$changed, collapse = ","),
+  runs[[k]] <- tibble(dataset_key = k, action = action,
+                      changed = if (same) "" else paste(changed_inputs(fp, list(parts = as.list(unlist(prior$input_fingerprint$parts)))), collapse = ","),
                       secs = round(as.numeric(difftime(Sys.time(), t0, units = "secs"))))
 }
 ```
 
 ## The manifest: what the website reads
 
-`data/zip/manifest.json` (and the same file beside the zips) is the contract with calcofi.io:
-one entry per dataset with the release its bundles were built from and last confirmed against,
+`data/zip/manifest.json` (and the same file beside the zips) is the contract with calcofi.io
+(schema 1.1): one entry per dataset with its `since` (also `version`, for a 1.0 reader), the
+release it was last confirmed against (`checked_version`), its `content_hash` and `data_hash`,
 the licence kind, whether the provider gave a citation, every table's rows, what was left out,
 and per format either the file (`url`, `bytes`, `sha256`, `excel_openable`) or, for a format not
 offered, the reason in plain words. It carries no clock time, so an unchanged run rewrites it
@@ -293,12 +317,16 @@ holds those bytes.
 
 ```{r}
 #| label: manifest
-manifest <- list(schema_version = "1.0", generated_by = "publish_to-zip.qmd",
+manifest <- list(schema_version = "1.1", generated_by = "publish_to-zip.qmd",
                  release = RELEASE_VERSION, base_url = CC_BUNDLE_BASE_URL,
                  datasets = unname(entries[sort(names(entries))]))
 man_json <- jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null", digits = NA)
 writeLines(man_json, file.path(OUT_DIR, "manifest.json"))
 writeLines(man_json, file.path(STAGE_DIR, "manifest.json"))
+# this release's manifest is kept beside the others: the chain of them is each package's history,
+# as the chain of catalog.json is each release table's
+dir.create(file.path(STAGE_DIR, "releases", RELEASE_VERSION), recursive = TRUE, showWarnings = FALSE)
+writeLines(man_json, file.path(STAGE_DIR, "releases", RELEASE_VERSION, "manifest.json"))
 
 # what the bucket holds now, for the upload status
 remote <- if (STAGING) NULL else fetch_bundle_manifest()
@@ -314,7 +342,8 @@ man_tbl <- bind_rows(lapply(entries, function(e) bind_rows(lapply(e$bundles, fun
   tibble(dataset_key = e$dataset_key, format = b$format, written = isTRUE(b$written),
          version = e$version, checked_version = e$checked_version,
          action = runs[[e$dataset_key]]$action, main_table = main$table, main_rows = main$rows,
-         file = b$file %||% NA_character_, bytes = b$bytes %||% NA_real_, sha256 = b$sha256 %||% NA_character_,
+         file = b$file %||% NA_character_, path = b$path %||% NA_character_,
+         bytes = b$bytes %||% NA_real_, sha256 = b$sha256 %||% NA_character_,
          excel_openable = isTRUE(b$excel_openable), reason = b$reason %||% "",
          license_kind = e$license_kind, uploaded_hash = r$sha256, uploaded_version = r$version)
 })))) |>
@@ -342,10 +371,10 @@ release's own record measured for the dataset (`coverage.n_obs`), an independent
 #| label: verify
 chk <- bind_rows(lapply(entries, function(e) {
   k <- e$dataset_key
-  if (runs[[k]]$action != "build") return(NULL)
+  if (runs[[k]]$action != "upload") return(NULL)
   n_obs <- records[[k]]$coverage$n_obs %||% NA
   bind_rows(lapply(Filter(function(b) isTRUE(b$written), e$bundles), function(b) {
-    zl <- zip::zip_list(file.path(STAGE_DIR, k, b$file))
+    zl <- zip::zip_list(file.path(STAGE_DIR, sub("^publish/zip/", "", b$path)))
     stem <- sub("\\.zip$", "", b$file)
     docs <- paste0(stem, "/", c("README.md", "CITATION.md", "CITATION.bib", "LICENSE.txt", "columns.csv"))
     data_files <- if (b$format == "xlsx") paste0(stem, "/", stem, ".xlsx") else
@@ -367,35 +396,34 @@ if (nrow(chk)) {
 
 ## Upload (gated)
 
-Each zip goes to `gs://calcofi-db/publish/zip/{dataset_key}/{file}` (an unchanged object is not
-re-uploaded: `put_gcs_file()` compares md5s), then the manifest, then a superseded version's zips
-are removed from the bucket, so a page never links a file that is not there.
+Only new content is uploaded, each zip to its own content-addressed path
+`gs://calcofi-db/publish/zip/{dataset_key}/{hash24}/{file}` (an object that already exists is
+never written again), then this release's manifest and `manifest.json`. Nothing is deleted: a
+package a newer content replaced stays at its path, and the release manifests that listed it
+say when it was current.
 
 ```{r}
 #| label: upload
 #| eval: !expr PUBLISH
-for (i in which(man_tbl$written & man_tbl$needs_upload)) {
-  r <- man_tbl[i, ]
-  put_gcs_file(file.path(STAGE_DIR, r$dataset_key, r$file), glue("{ZIP_GCS}/{r$dataset_key}/{r$file}"),
+# every current object is offered: put_gcs_file() compares md5s, so one already in the bucket
+# costs a HEAD and is never re-uploaded, while one this machine built in a dry run still goes up
+# (the decision is against what is published, as freeze_plan()'s is against the last catalog)
+up <- man_tbl |> filter(written)
+for (i in seq_len(nrow(up))) {
+  b <- Filter(function(x) identical(x$format, up$format[i]), entries[[up$dataset_key[i]]]$bundles)[[1]]
+  put_gcs_file(file.path(STAGE_DIR, sub("^publish/zip/", "", b$path)), glue("gs://calcofi-db/{b$path}"),
                content_type = "application/zip")
-  cat(glue("uploaded {r$dataset_key}/{r$file}"), "\n")
+  cat(glue("uploaded {b$path}"), "\n")
 }
-put_gcs_file(file.path(STAGE_DIR, "manifest.json"), glue("{ZIP_GCS}/manifest.json"),
-             content_type = "application/json")
-for (k in names(entries)) {
-  keep <- man_tbl$file[man_tbl$dataset_key == k & man_tbl$written]
-  have <- list_gcs_files("calcofi-db", prefix = glue("publish/zip/{k}/"))$name
-  for (p in setdiff(have[grepl("\\.zip$", have)], glue("publish/zip/{k}/{keep}"))) {
-    delete_gcs_prefix(p, bucket = "calcofi-db", dry_run = FALSE)
-    cat(glue("  removed superseded gs://calcofi-db/{p}"), "\n")
-  }
-}
+put_gcs_file(file.path(STAGE_DIR, "releases", RELEASE_VERSION, "manifest.json"),
+             glue("{ZIP_GCS}/releases/{RELEASE_VERSION}/manifest.json"), content_type = "application/json")
+put_gcs_file(file.path(STAGE_DIR, "manifest.json"), glue("{ZIP_GCS}/manifest.json"), content_type = "application/json")
 ```
 
 ```{r}
 #| label: upload-skip
 #| eval: !expr NO_PUBLISH
-due <- man_tbl |> filter(written, needs_upload)
+due <- man_tbl |> filter(written, action == "upload")
 cat(glue("CALCOFI_PUBLISH_ZIP is not `true`{if (STAGING) ' (and this is a staging run)' else ''}: nothing uploaded.\n",
          "{nrow(due)} zip(s) ({round(sum(due$bytes) / 1e6)} MB) differ from what {ZIP_GCS}/ holds; ",
          "they are staged at {STAGE_DIR}/.\n"))

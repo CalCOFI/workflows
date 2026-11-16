@@ -13,6 +13,17 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## Published files are content-addressed, as the release's tables are
+
+No table changes. The four publishers (download zips, CF netCDF, EDI staging, Darwin Core
+archives) now store each file once per distinct content, as the release stores its Parquet:
+identity is a `content_hash` over the dataset's rows, its metadata record and a pinned format
+version (calcofi4db 4.41.0, `CC_PUBLISH_FORMAT`), the path carries it
+(`…/{dataset_key}/{content_hash[1:24]}/`), and a file names the release its content first
+appeared in (`since`). A release that leaves a dataset alone only lists the existing file;
+nothing is re-uploaded or deleted. Bucket staging for EDI and OBIS is now opt-in
+(`CALCOFI_PUBLISH_EDI_STAGE`, `CALCOFI_PUBLISH_DWCA`), like the zip and netCDF uploads.
+
 ## Download bundles: every dataset as zips a researcher can open
 
 No table changes. A new publisher, `publish_to-zip.qmd`, writes for every dataset one zip per

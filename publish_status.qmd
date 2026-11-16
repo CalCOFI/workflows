@@ -101,7 +101,9 @@ edi_rows <- if (is.null(edi) || !nrow(edi)) tibble() else edi |>
     blocked_by = if_else(nzchar(coalesce(eml_blocking, "")),
                          paste("record incomplete:", eml_blocking), ""),
     how  = "CALCOFI_PUBLISH_EDI=true + EDI credentials, re-render publish_to-edi.qmd",
-    link = glue("{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"))
+    # content-addressed folders since 2026-11 (`path`); the version-named folder before
+    link = if ("path" %in% names(edi)) glue("{BASE_HTTPS}/{path}") else
+      glue("{BASE_HTTPS}/publish/edi/{dataset_key}/{dataset_key}_{version}/"))
 if (nrow(edi_rows)) kable(edi_rows |> select(dataset_key, built_from, upload_status, blocked_by)) else
   cat("no EDI manifest yet\n")
 ```
@@ -128,7 +130,7 @@ obis_rows <- map_dfr(mans, function(p) {
     blocked_by = if (!on_portal) "provider agreement (Decision 21); no IPT resource yet" else
       if (is.null(m$uploaded_hash)) "stamp uploaded_utc + uploaded_hash in the manifest at the next upload" else "",
     how  = "manual OBIS-USA IPT upload — docs/portals.qmd § OBIS",
-    link = glue("{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"))
+    link = m$url %||% glue("{BASE_HTTPS}/publish/dwca/{m$dataset_key}/{m$archive}"))
 })
 # a candidate that failed its checks has no manifest, and is listed rather than dropped
 plan_csv <- file.path(obis_dir, "publish_plan.csv")
@@ -208,7 +210,7 @@ zip_rows <- if (is.null(zm) || !nrow(zm)) tibble() else zm |>
     portal = "zip", dataset_key = paste(dataset_key, format), built_from = version, checked_version,
     upload_status, needs_upload = as.logical(needs_upload), blocked_by = "",
     how  = "CALCOFI_PUBLISH_ZIP=true, re-render publish_to-zip.qmd",
-    link = glue("{BASE_HTTPS}/publish/zip/{sub(' .*$', '', dataset_key)}/{file}"))
+    link = glue("{BASE_HTTPS}/{path}"))
 if (nrow(zip_rows)) kable(zip_rows |> select(dataset_key, built_from, upload_status)) else
   cat("no bundle manifest yet — publish_to-zip.qmd has not run\n")
 ```
@@ -253,7 +255,7 @@ kable(status |> select(portal, dataset_key, built_from, checked_version, upload_
 `storage.calcofi.io` serves object storage, which has no directory listing: every
 browsable folder is an `index.html` object that `scripts/build_storage_index.R` writes by
 walking each bucket. Nothing else calls it, and the publishers above create new folders
-(`publish/edi/{dataset}/{dataset}_{version}/`, `publish/dwca/`, `netcdf/{dataset}/{version}/`)
+(`publish/{edi,dwca,zip}/{dataset}/{content_hash}/`, `netcdf/{dataset}/{content_hash}/` and each release's pointer folder)
 *after* `deploy_consumers.sh` has run — so every release left the browse pages one release
 behind, pointing at version folders that had since been pruned. On 2026-09-16 a provider
 meeting opened a staged EDI package link and got `Not found.` while the files sat on GCS.

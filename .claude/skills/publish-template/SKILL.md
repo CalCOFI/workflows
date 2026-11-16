@@ -163,6 +163,24 @@ its name, version and sha256. `publish/zip/manifest.json` is the website's contr
 `release_database.qmd` passes it to `build_dataset_catalog(bundles = )` (`kind = "bundle"`).
 Render a worktree against its own calcofi4db with `CALCOFI4DB_DIR=../calcofi4db-<branch>`.
 
+#### Content-addressed, every publisher (calcofi4db >= 4.41.0)
+
+The release's Parquet scheme (`release-objects` skill), applied to published files:
+`publish_fingerprint(..., format = CC_PUBLISH_FORMAT[[publisher]])` gives `content_hash`
+(identity: data parts + metadata parts + format, never code or version) and `data_hash`
+(data alone, so a metadata-only rebuild reads "same data, new file"). Path:
+`publish_object_path(publisher, dataset_key, content_hash, file)` →
+`publish/{publisher}/{dataset_key}/{hash24}/{file}` (netCDF: `netcdf/{dataset}/{hash24}/`).
+The file is named for `since`, the release its content first appeared in; because a file is
+built only for new content, everything inside it that names a release names `since`, whose DOI
+holds exactly these data. Decide before building: a `content_hash` the previous manifest lists
+**exists** (`publish_objects_plan()`, the publishers' `freeze_plan()`): nothing written or
+uploaded, `since`/path/bytes/sha256 inherited, only the manifest's `checked_version` moves.
+Never delete a published object; history is the chain of per-release manifests
+(`publish/{publisher}/releases/{version}/`), as catalogs are for tables. A code fix reaches
+users only when `CC_PUBLISH_FORMAT` is bumped (RELEASES.md says so), exactly as a
+`CC_PARQUET_WRITER` change does not by itself re-upload a table.
+
 ### 5. Join the DAG through the `calcofi:` block — and rebuild only what changed
 
 Never hand-edit `_targets.R`; `build_targets_list()` reads the notebook's front matter. A

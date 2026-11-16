@@ -93,7 +93,10 @@ librarian::shelf(DBI, duckdb, dplyr, glue, ncdf4, readr, jsonlite, digest,
                  knitr, tibble, here, quiet = TRUE)
 here <- here::here
 # devtools::install_local(here::here("../calcofi4db"), force = TRUE)
-devtools::load_all(here::here("../calcofi4db"))
+# the engine package from its sibling checkout; CALCOFI4DB_DIR points a worktree's render at its own
+PKG_DIR <- Sys.getenv("CALCOFI4DB_DIR", here::here("../calcofi4db"))
+devtools::load_all(PKG_DIR)
+stopifnot("calcofi4db >= 4.41.0 (publish_object_path) is required" = exists("publish_object_path"))
 source(here("libs/publish_netcdf.R"))
 
 RELEASE <- cc_release_version()          # the PROMOTED release, never a local tree
@@ -134,6 +137,11 @@ q <- function(sql, ...) dbGetQuery(con, glue(sql, ..., .envir = parent.frame()))
 # builds below read each dataset's own obs partition, so no build ever scans
 # another dataset's rows.
 t0 <- Sys.time()
+# source_accessed is re-measured at every release and no file carries it: kept out of the
+# `dataset` table the files' identity is signed over, so a new release alone changes nothing
+ds_drop <- intersect(c("source_accessed", "source_accessed_method"),
+                     dbGetQuery(con, glue("DESCRIBE SELECT * FROM read_parquet('{PQ('dataset')}')"))$column_name)
+ds_exclude <- if (length(ds_drop)) glue("EXCLUDE ({paste(ds_drop, collapse = ', ')})") else ""
 dbExecute(con, glue("
   CREATE TABLE sample AS
     SELECT sample_key, sample_type, parent_sample_key, root_sample_key, dataset_key,
@@ -151,7 +159,7 @@ dbExecute(con, glue("
     SELECT taxon_key, scientific_name, rank, worms_id, itis_id
     FROM read_parquet('{PQ('taxon')}');
   CREATE TABLE dataset AS
-    SELECT *, provider || '_' || dataset AS dataset_key
+    SELECT * {ds_exclude}, provider || '_' || dataset AS dataset_key
     FROM read_parquet('{PQ('dataset')}');"))
 cat(glue("materialized planning tables in {round(difftime(Sys.time(), t0, units='secs'))}s\n"))
 
@@ -303,7 +311,7 @@ from costing its hour.
 ```{r}
 #| label: fingerprint
 CODE_FILES <- c(here("publish_to-netcdf.qmd"), here("libs/publish_netcdf.R"),
-                here("../calcofi4db/R/netcdf.R"))
+                file.path(PKG_DIR, "R/netcdf.R"))
 code_parts <- publish_code_parts(CODE_FILES)
 rel_catalog <- cc_release_catalog(RELEASE)
 sigs <- rbind(
@@ -315,7 +323,8 @@ nc_read_side <- function(path) {
   tryCatch(jsonlite::fromJSON(path, simplifyVector = FALSE), error = function(e) NULL)
 }
 nc_write_side <- function(path, fp, ...) {
-  writeLines(jsonlite::toJSON(c(list(hash = fp$hash, parts = as.list(fp$parts), built_from = RELEASE),
+  writeLines(jsonlite::toJSON(c(list(hash = fp$hash, parts = as.list(fp$parts), built_from = RELEASE,
+                                     content_hash = fp$content_hash, data_hash = fp$data_hash),
                                 list(...)), auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null"),
              path)
 }
@@ -329,7 +338,8 @@ for (d in names(plans)) {
     data     = publish_data_parts(sigs, d, tbls),
     metadata = list(meta = dataset_meta_of(d), var_meta = var_meta[intersect(mts, names(var_meta))],
                     plan = summarise_netcdf_plan(plans[[d]])),
-    code     = code_parts)
+    code     = code_parts,
+    format   = CC_PUBLISH_FORMAT[["netcdf"]])
 }
 cat(glue("fingerprinted {length(fps)} dataset(s)\n"))
 ```
@@ -753,7 +763,8 @@ sup_sigs <- publish_object_signatures(con, rel_catalog, "obs_ctd_full",
 fp_full <- publish_fingerprint(
   data     = publish_data_parts(sup_sigs, "calcofi_ctd-cast", "obs_ctd_full"),
   metadata = list(meta = dataset_meta_of("calcofi_ctd-cast"), var_meta = var_meta),
-  code     = code_parts)
+  code     = code_parts,
+  format   = CC_PUBLISH_FORMAT[["netcdf"]])
 prior_full <- nc_read_side(SIDE_FULL)
 dec_full <- publish_decide(fp_full, prior_full, FULL_NC)
 SUP_REUSE <- DO_SUPPLEMENTAL && dec_full$action == "reuse"
@@ -931,7 +942,35 @@ if (nrow(demo)) {
 }
 ```
 
+## What an upload would do (read-only)
+
+Content-addressed, as the release's own tables are: a file's identity is its
+`content_hash` (`publish_fingerprint()`: the dataset's row signatures in the tables the
+writer reads, its self-description and the pinned `CC_PUBLISH_FORMAT[["netcdf"]]`; never the
+code or the release version), and it lives at `netcdf/{dataset}/{content_hash[1:24]}/{dataset}.nc`.
+A file whose content the site's `manifests.json` already records is not uploaded again; the
+release only gains its small manifest and index page pointing at it. A file's `db_release`
+and `date_created` attributes name the release it was built from, which, because a file is
+built only when its content is new, is the release its content first appeared in (`since`).
+
+```{r}
+#| label: upload-plan
+built$content_hash <- vapply(built$dataset_key, function(d)
+  if (d == "calcofi_ctd-cast_full") fp_full$content_hash else fps[[d]]$content_hash, "")
+built$data_hash <- vapply(built$dataset_key, function(d)
+  if (d == "calcofi_ctd-cast_full") fp_full$data_hash else fps[[d]]$data_hash, "")
+up_plan <- bind_rows(lapply(seq_len(nrow(built)), function(i) {
+  p <- cc_netcdf_plan(built$path[i], built$dataset_key[i], RELEASE, built$content_hash[i])
+  tibble(dataset_key = built$dataset_key[i], MB = round(built$bytes[i] / 1e6, 1),
+         content_hash = substr(built$content_hash[i], 1, 12), action = if (p$upload) "upload" else "exists",
+         since = p$since, canonical_url = as.character(p$canonical_url))
+}))
+write_csv(up_plan, file.path(OUT_DIR, "upload_plan.csv"), na = "")
+kable(up_plan, caption = glue("netCDF: {sum(up_plan$action == 'upload')} of {nrow(up_plan)} file(s) would upload for {RELEASE}"))
+```
+
 ## Publish
+
 
 Versioned by **DB release**, with bytes written **once**: a build that is
 byte-identical to an earlier release still gets a manifest and index page, but the
@@ -946,8 +985,8 @@ pub <- lapply(seq_len(nrow(built)), function(i) {
   r <- built[i, ]
   # the published dataset id drops the provider prefix only where the file is the
   # whole dataset; keeping dataset_key makes the URL self-describing
-  plan_i <- cc_netcdf_plan(r$path, r$dataset_key, RELEASE)
-  man <- cc_netcdf_manifest(plan_i, r$dataset_key, RELEASE, RELEASE, r$bytes,
+  plan_i <- cc_netcdf_plan(r$path, r$dataset_key, RELEASE, r$content_hash)
+  man <- cc_netcdf_manifest(plan_i, r$dataset_key, RELEASE, plan_i$since, r$bytes,
                             source_tables = strsplit(r$source_tables, ",")[[1]],
                             cf_scope = r$cf_scope %||% "")
   res <- cc_netcdf_publish(r$path, r$dataset_key, RELEASE, plan_i, man)

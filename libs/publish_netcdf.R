@@ -42,6 +42,20 @@ GCS_BUCKET_DB  <- "calcofi-db"
 GCS_BUCKET_PUB <- "calcofi-files-public"
 RELEASES_URL   <- glue("https://storage.googleapis.com/{GCS_BUCKET_DB}/ducklake/releases")
 NETCDF_SITE    <- glue("https://storage.calcofi.io/{GCS_BUCKET_PUB}/netcdf")
+# the bucket's own host, for reading manifests: storage.calcofi.io is a proxy that can be down
+# (2026-11-16: 15 s timeouts, and a jsonlite::fromJSON(url) with no timeout hung a render)
+NETCDF_GCS_HTTPS <- glue("https://storage.googleapis.com/{GCS_BUCKET_PUB}/netcdf")
+
+#' A dataset's published netCDF history (`manifests.json`). A 404 is "never published"
+#' (an empty history); any other failure stops, because writing a history built on a failed
+#' read would erase the record of every earlier release.
+cc_netcdf_history <- function(dataset, timeout = 60) {
+  h <- curl::new_handle(timeout = timeout, connecttimeout = 15)
+  r <- curl::curl_fetch_memory(glue("{NETCDF_GCS_HTTPS}/{dataset}/manifests.json"), handle = h)
+  if (r$status_code == 404) return(list(releases = list()))
+  if (r$status_code != 200) stop(glue("{dataset}/manifests.json: HTTP {r$status_code}; not guessing the history"))
+  fromJSON(rawToChar(r$content), simplifyDataFrame = FALSE)
+}
 
 #' Resolve the release to publish from. Defaults to the PROMOTED release
 #' (latest.txt), never to whatever a local tree happens to hold.
@@ -156,36 +170,35 @@ cc_release_parquet <- function(table, version = NULL) {
 
 # ---- versioning: release-named paths, bytes written once ---------------------
 
-#' Decide whether a freshly built file needs uploading, or is byte-identical to
-#' an earlier release and should be POINTED at instead.
+#' Decide whether a freshly built file needs uploading, or its content is already
+#' published and should be POINTED at instead.
 #'
-#' Release-named paths (so a URL always answers "which release is this?") without
-#' re-uploading unchanged bytes. Object storage has no symlinks, so the pointer is
-#' a manifest + index page, and Caddy 302s the .nc path to the canonical object.
+#' Content-addressed, as the release's own tables are (calcofi4db `R/release.R`): the
+#' identity is the file's `content_hash` (`publish_fingerprint()`), not its sha256 — a
+#' file embeds `db_release`, so before 2026-11 an unchanged dataset made different bytes
+#' at every release and was uploaded again (calcofi_ctd-cast_full: 3.6 GB stored three
+#' times). A new content lives once at `{dataset}/{content_hash[1:24]}/{dataset}.nc`;
+#' each release still gets its small manifest + index page pointing at it.
 #'
-#' @return list(sha256, identical_to = <version or NA>, canonical_url)
-cc_netcdf_plan <- function(local_file, dataset, version) {
+#' @return list(sha256, content_hash, identical_to = <version or NA>, since,
+#'   canonical_url, upload, published)
+cc_netcdf_plan <- function(local_file, dataset, version, content_hash) {
+  stopifnot(nchar(content_hash) >= 24)
   sha <- digest::digest(local_file, algo = "sha256", file = TRUE)
-  prior <- tryCatch(
-    fromJSON(glue("{NETCDF_SITE}/{dataset}/manifests.json"), simplifyDataFrame = FALSE),
-    error = function(e) list(releases = list()))
-  hit <- NULL
-  for (r in prior$releases %||% list())
-    if (identical(r$sha256, sha)) { hit <- r; break }
-  # THIS version already published with THESE bytes: there is nothing to write at all
-  # (2026-09-06) — the plan says so, and cc_netcdf_publish() then touches no object
-  this <- Filter(function(r) identical(r$version, version), prior$releases %||% list())
-  published <- length(this) == 1 && identical(this[[1]]$sha256, sha)
-  if (published) {
-    list(sha256 = sha, identical_to = this[[1]]$identical_to %||% NA_character_,
-         canonical_url = this[[1]]$canonical_url, upload = FALSE, published = TRUE,
-         generated_utc = this[[1]]$generated_utc)
-  } else if (!is.null(hit)) {
-    list(sha256 = sha, identical_to = hit$version,
-         canonical_url = hit$canonical_url, upload = FALSE, published = FALSE)
+  prior <- cc_netcdf_history(dataset)
+  rel <- prior$releases %||% list()
+  hit <- Find(function(r) identical(r$content_hash %||% "", content_hash), rel)
+  this <- Filter(function(r) identical(r$version, version), rel)
+  published <- length(this) == 1 && identical(this[[1]]$content_hash %||% "", content_hash)
+  if (!is.null(hit)) {
+    # the content is online: point at it, keep its since, its bytes and their sha256
+    list(sha256 = hit$sha256 %||% sha, content_hash = content_hash,
+         identical_to = hit$since %||% hit$version, since = hit$since %||% hit$version,
+         canonical_url = hit$canonical_url, upload = FALSE, published = published,
+         generated_utc = hit$generated_utc)
   } else {
-    list(sha256 = sha, identical_to = NA_character_,
-         canonical_url = glue("{NETCDF_SITE}/{dataset}/{version}/{dataset}.nc"),
+    list(sha256 = sha, content_hash = content_hash, identical_to = NA_character_, since = version,
+         canonical_url = glue("{NETCDF_SITE}/{dataset}/{substr(content_hash, 1, 24)}/{dataset}.nc"),
          upload = TRUE, published = FALSE)
   }
 }
@@ -239,8 +252,7 @@ cc_netcdf_publish <- function(local_nc, dataset, release, plan, manifest,
   }
 
   # accumulate history BEFORE writing, so a re-run is idempotent
-  hist <- tryCatch(fromJSON(glue("{base_web}/manifests.json"), simplifyDataFrame = FALSE),
-                   error = function(e) list(releases = list()))
+  hist <- cc_netcdf_history(dataset)
   rel <- Filter(function(r) !identical(r$version, release), hist$releases %||% list())
   rel <- c(rel, list(manifest))
   ord <- order(vapply(rel, function(r) r$version, character(1)), decreasing = TRUE)
@@ -254,11 +266,10 @@ cc_netcdf_publish <- function(local_nc, dataset, release, plan, manifest,
     '<tr><td><a href="{manifest$canonical_url}">{dataset}.nc</a></td>',
     '<td class="num">{size_mb} MB</td></tr></tbody></table></div>',
     if (!is.na(ident)) glue(
-      '<div class="note"><b>Identical to {ident}.</b> This release produced a ',
-      'byte-identical file, so the bytes are not duplicated — the download above ',
-      'points at the object published for <code>{ident}</code>. The ',
-      '<code>sha256</code> in <a href="{base_web}/{release}/manifest.json">',
-      'manifest.json</a> confirms they match.</div>') else "",
+      '<div class="note"><b>Same data as {ident}.</b> This release carries the same ',
+      'content (<code>content_hash</code> in <a href="{base_web}/{release}/manifest.json">',
+      'manifest.json</a>), so the file is not duplicated — the download above is the ',
+      'one built from <code>{ident}</code>.</div>') else "",
     '<div class="note"><b>Provenance.</b> Built from CalCOFI integrated database ',
     'release <b>{manifest$db_release}</b> on {substr(manifest$generated_utc,1,10)} ',
     'from <code>{paste(manifest$source_tables, collapse="</code>, <code>")}</code>.',
@@ -281,9 +292,9 @@ cc_netcdf_publish <- function(local_nc, dataset, release, plan, manifest,
 
   if (plan$upload) {
     message(glue("  uploading {basename(local_nc)} ({size_mb} MB) ..."))
-    cc_gcs_cp(local_nc, glue("{base_gs}/{release}/{dataset}.nc"), "application/x-netcdf")
+    cc_gcs_cp(local_nc, glue("{base_gs}/{substr(plan$content_hash, 1, 24)}/{dataset}.nc"), "application/x-netcdf")
   } else {
-    message(glue("  byte-identical to {ident} — not re-uploading {size_mb} MB"))
+    message(glue("  same content as {ident} — not re-uploading {size_mb} MB"))
   }
   cc_gcs_cp(f_man,  glue("{base_gs}/{release}/manifest.json"), "application/json", "no-cache")
   cc_gcs_cp(f_idx,  glue("{base_gs}/{release}/index.html"),    "text/html",        "no-cache")
@@ -296,7 +307,7 @@ cc_netcdf_publish <- function(local_nc, dataset, release, plan, manifest,
 
 #' Per-release manifest written alongside every published file — including the
 #' releases where nothing changed, so the release folder always exists and always
-#' explains itself.
+#' explains itself. `release` is the release the file was built from (its `since`).
 cc_netcdf_manifest <- function(plan, dataset, version, release, n_bytes,
                                source_tables, cf_scope) {
   list(
@@ -306,6 +317,8 @@ cc_netcdf_manifest <- function(plan, dataset, version, release, n_bytes,
     # when the same bytes were already published for this version, the time they were
     # first made is the truth; the wall clock is not
     generated_utc = plan$generated_utc %||% format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    since         = plan$since,
+    content_hash  = plan$content_hash,
     sha256        = plan$sha256,
     bytes         = n_bytes,
     identical_to  = plan$identical_to,

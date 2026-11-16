@@ -102,7 +102,10 @@ presence-only, which is what OBIS assumes of an archive with no `absent` rows.
 librarian::shelf(DBI, duckdb, dplyr, glue, jsonlite, knitr, readr, tibble,
                  here, curl, quiet = TRUE)
 here <- here::here
-devtools::load_all(here::here("../calcofi4db"))
+# the engine package from its sibling checkout; CALCOFI4DB_DIR points a worktree's render at its own
+PKG_DIR <- Sys.getenv("CALCOFI4DB_DIR", here::here("../calcofi4db"))
+devtools::load_all(PKG_DIR)
+stopifnot("calcofi4db >= 4.41.0 (publish_object_path) is required" = exists("publish_object_path"))
 
 # a STAGING run (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases) reads the
 # staging release and writes under data/darwincore-staging/, so it can never be
@@ -122,14 +125,18 @@ dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
 # comma-separated dataset_keys to restrict a run while iterating; empty = all
 ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[[1]]))
 # the code an archive is a function of: a change here rebuilds every archive
-CODE_FILES <- c(here("publish_to-obis.qmd"), here("../calcofi4db/R/dwc.R"),
-                here("../calcofi4db/R/eml.R"))
+CODE_FILES <- c(here("publish_to-obis.qmd"), file.path(PKG_DIR, "R/dwc.R"),
+                file.path(PKG_DIR, "R/eml.R"))
 # the duplicate check asks api.obis.org; off-line it is skipped, never faked
 NET  <- !identical(Sys.getenv("CALCOFI_OFFLINE"), "true")
+# copying archives to gs://calcofi-db/publish/dwca/ is opt-in, as every publisher's upload is
+STAGE_GCS <- identical(Sys.getenv("CALCOFI_PUBLISH_DWCA"), "true") && !STAGING
+DWCA_HTTPS <- glue("{BASE_HTTPS}/publish/dwca")
 
 cat(glue("release  : {RELEASE} (prefix {RELEASE_PREFIX})"), "\n")
 cat(glue("output   : {OUT_DIR}"), "\n")
 cat(glue("network  : {NET} (set CALCOFI_OFFLINE=true to skip the OBIS duplicate check)"), "\n")
+cat(glue("stage    : {STAGE_GCS} (CALCOFI_PUBLISH_DWCA=true copies new archives to gs://calcofi-db/publish/dwca/)"), "\n")
 if (length(ONLY)) cat(glue("restricted to: {paste(ONLY, collapse = ', ')}"), "\n")
 ```
 
@@ -381,7 +388,8 @@ for (k in plan$dataset_key)
       measurement_type = reg$measurement_type,
       portal_ids       = dist |> filter(dataset_key == k, portal %in% c("ipt", "obis")) |>
                            select(portal, id) |> arrange(portal, id)),
-    code     = code_parts)
+    code     = code_parts,
+    format   = CC_PUBLISH_FORMAT[["dwca"]])
 cat(glue("fingerprinted {length(fps)} dataset(s) over {length(DWC_TABLES)} tables"), "\n")
 ```
 
@@ -391,33 +399,40 @@ cat(glue("fingerprinted {length(fps)} dataset(s) over {length(DWC_TABLES)} table
 #| label: build
 results <- list()
 findings <- list()
+data_changed <- list()
 
 for (k in plan$dataset_key) {
   cat(glue("\n--- {k} ---"), "\n")
   d_dir <- file.path(OUT_DIR, k)
 
-  # an archive built from an EARLIER release is reused when nothing it is a function
-  # of changed since (the `fingerprint` chunk): the zip keeps that release's name, and the
-  # manifest records the release it was confirmed against. Anything else rebuilds.
+  # content-addressed, as the release's own tables are (calcofi4db::publish_fingerprint()):
+  # an archive whose content_hash the previous manifest records EXISTS — nothing is built or
+  # staged, it keeps its since and path, only checked_version moves. The previous manifest is
+  # this machine's, else the one the bucket serves.
   prev_man <- file.path(OUT_DIR, glue("{k}_manifest.json"))
-  pm <- if (file.exists(prev_man)) jsonlite::fromJSON(prev_man, simplifyVector = FALSE) else NULL
-  dec <- publish_decide(fps[[k]], pm$input_fingerprint,
-                        if (is.null(pm)) character() else file.path(OUT_DIR, pm$archive %||% "<none>"))
-  if (!is.null(pm) && is.null(pm$input_fingerprint))
-    dec$reason <- glue("the {pm$version} build predates input fingerprints")
-  if (dec$action == "reuse") {
+  pm <- if (file.exists(prev_man)) jsonlite::fromJSON(prev_man, simplifyVector = FALSE) else
+    tryCatch(jsonlite::fromJSON(glue("{DWCA_HTTPS}/{k}/{k}_manifest.json"), simplifyVector = FALSE),
+             error = function(e) NULL)
+  ch <- fps[[k]]$content_hash
+  # (a manifest from before content-addressing has no since; its content_hash was the CSVs' md5)
+  if (!is.null(pm$since) && identical(pm$content_hash %||% "", ch)) {
     pm$checked_version <- RELEASE
     writeLines(jsonlite::toJSON(pm, auto_unbox = TRUE, pretty = TRUE, null = "null"), prev_man)
-    cat(glue("unchanged since {pm$version} — {pm$archive} reused ",
-             "(content_hash {substr(pm$content_hash, 1, 12)})"), "\n")
-    results[[k]] <- tibble(dataset_key = k, status = "reused", built_from = pm$version,
+    cat(glue("content {substr(ch, 1, 12)} unchanged since {pm$since %||% pm$version} — {pm$path} exists"), "\n")
+    results[[k]] <- tibble(dataset_key = k, status = "exists", built_from = pm$since %||% pm$version,
                            n_event = pm$counts$event %||% NA_integer_,
                            n_occurrence = pm$counts$occurrence %||% NA_integer_,
                            n_emof = pm$counts$emof %||% NA_integer_,
-                           content_hash = pm$content_hash, archive = pm$archive)
+                           content_hash = ch, archive = pm$archive)
     next
   }
-  cat(glue("rebuilding — {dec$reason}"), "\n")
+  prior_parts <- unlist(pm$input_fingerprint$parts)
+  data_moved <- names(fps[[k]]$parts)[startsWith(names(fps[[k]]$parts), "data:") &
+                  !(fps[[k]]$parts %in% prior_parts[names(fps[[k]]$parts)])]
+  moved <- if (length(data_moved)) paste(data_moved, collapse = ", ") else "none (metadata or format only)"
+  cat(glue("new content {substr(ch, 1, 12)}",
+           "{if (!is.null(pm)) paste0(' (previous build ', pm$version, '; data changed in: ', moved, ')') else ''}"), "\n")
+  data_changed[[k]] <- if (is.null(pm)) NA_character_ else moved
 
   ev <- dwc_event(con, k, gear = reg$gear, measurement_type = reg$measurement_type)
   oc <- dwc_occurrence(con, k, life_stage = reg$life_stage,
@@ -441,11 +456,15 @@ for (k in plan$dataset_key) {
 
   ipt <- dist |> filter(dataset_key == k, portal == "ipt") |> pull(id)
   obs_id <- dist |> filter(dataset_key == k, portal == "obis") |> pull(id)
+  # the archive is named for the release its content first appeared in (since = this
+  # release, being new) and lives in its content_hash directory
+  obj_rel <- publish_object_path("dwca", k, ch, glue("{k}_{RELEASE}.zip"))
   a <- dwc_archive(
     d_dir, ev, oc, mf,
     eml_path        = eml_path_of(k),
     dataset_key     = k,
     version         = RELEASE,
+    zip_path        = file.path(OUT_DIR, sub("^publish/dwca/", "", obj_rel)),
     ipt_resource    = if (length(ipt)) ipt[1] else NULL,
     obis_dataset_id = if (length(obs_id)) obs_id[1] else NULL)
   cat(glue("wrote {basename(a$zip)} ({round(file.size(a$zip) / 1e6, 1)} MB), ",
@@ -453,12 +472,23 @@ for (k in plan$dataset_key) {
   # the fingerprint rides in the manifest dwc_archive() wrote, so the next release can
   # tell whether this archive is still current without rebuilding it
   m <- jsonlite::fromJSON(a$manifest, simplifyVector = FALSE)
+  unlink(a$manifest)   # the dataset's manifest lives beside its object folders, one per dataset
+  # identities, the release tables' vocabulary: content_hash names the object (data + metadata +
+  # format), data_hash the data alone; files_hash is dwc_archive()'s md5 over the CSVs
+  m$files_hash        <- m$content_hash
+  m$since             <- RELEASE
   m$checked_version   <- RELEASE
+  m$content_hash      <- ch
+  m$data_hash         <- fps[[k]]$data_hash
+  m$path              <- obj_rel
+  m$url               <- glue("{BASE_HTTPS}/{obj_rel}")
+  m$sha256            <- digest::digest(a$zip, algo = "sha256", file = TRUE)
+  m$bytes             <- file.size(a$zip)
   m$input_fingerprint <- list(hash = fps[[k]]$hash, parts = as.list(fps[[k]]$parts))
-  writeLines(jsonlite::toJSON(m, auto_unbox = TRUE, pretty = TRUE, null = "null"), a$manifest)
+  writeLines(jsonlite::toJSON(m, auto_unbox = TRUE, pretty = TRUE, null = "null"), prev_man)
   results[[k]] <- tibble(dataset_key = k, status = "built", built_from = RELEASE,
                          n_event = nrow(ev), n_occurrence = nrow(oc), n_emof = nrow(mf),
-                         content_hash = a$content_hash, archive = basename(a$zip))
+                         content_hash = ch, archive = basename(a$zip))
 }
 res <- bind_rows(results)
 ```
@@ -476,30 +506,30 @@ if (nrow(fin)) kable(fin[fin$finding != "ok", ],
 An archive is uploaded to the IPT by hand and only after its provider agrees, but the
 bundle itself should be inspectable before that — by the provider, and by the dataset
 page (calcofi.io/datasets/{dataset_key}/ lists it under *Archives & portals* as "built,
-not deposited"). So every archive built here, with its manifest, is copied to the public
-bucket at a deterministic address: `gs://calcofi-db/publish/dwca/{dataset_key}/{dataset_key}_{version}.zip`
-(+ `{dataset_key}_manifest.json`). A staging run stays local.
+not deposited"). Under `CALCOFI_PUBLISH_DWCA=true`, every archive built here (new content
+only: one that exists is never written again) is copied to its content-addressed address,
+`gs://calcofi-db/publish/dwca/{dataset_key}/{content_hash[1:24]}/{dataset_key}_{since}.zip`,
+with the dataset's `{dataset_key}_manifest.json` beside its folders and this release's copy
+under `publish/dwca/releases/{version}/`. Nothing is deleted; a staging run stays local.
 
 ```{r}
 #| label: stage
-if (!STAGING && nrow(res) && any(res$status %in% c("built", "reused"))) {
-  # a reused archive was staged when it was built; put_gcs_file() compares md5s, so
-  # re-offering it costs a HEAD, and repairs a staging that never happened
-  for (i in which(res$status %in% c("built", "reused"))) {
+if (STAGE_GCS && nrow(res)) {
+  # built or existing: put_gcs_file() compares md5s, so an archive the bucket holds costs a HEAD
+  for (i in which(res$status %in% c("built", "exists"))) {
     k <- res$dataset_key[i]
-    # dwc_archive() writes the zip beside the dataset's folder (OUT_DIR root) and the manifest
-    # under the same name pattern; look in both places so a layout change cannot silently skip
-    zip_path <- c(file.path(OUT_DIR, res$archive[i]), file.path(OUT_DIR, k, res$archive[i]))
-    zip_path <- zip_path[file.exists(zip_path)][1]
-    man_path <- c(file.path(OUT_DIR, glue("{k}_manifest.json")), file.path(OUT_DIR, k, glue("{k}_manifest.json")))
-    man_path <- man_path[file.exists(man_path)][1]
-    if (is.na(zip_path)) { cat(glue("{k}: archive {res$archive[i]} not found on disk; not staged"), "\n"); next }
-    put_gcs_file(zip_path, glue("gs://calcofi-db/publish/dwca/{k}/{basename(zip_path)}"))
-    if (!is.na(man_path))
-      put_gcs_file(man_path, glue("gs://calcofi-db/publish/dwca/{k}/{basename(man_path)}"))
-    cat(glue("staged {k}: https://storage.googleapis.com/calcofi-db/publish/dwca/{k}/{basename(zip_path)}"), "\n")
+    m <- jsonlite::fromJSON(file.path(OUT_DIR, glue("{k}_manifest.json")), simplifyVector = FALSE)
+    put_gcs_file(file.path(OUT_DIR, sub("^publish/dwca/", "", m$path)), glue("gs://calcofi-db/{m$path}"),
+                 content_type = "application/zip")
+    cat(glue("staged {m$url}"), "\n")
   }
-} else cat("staging run or nothing built: nothing staged\n")
+  for (k in res$dataset_key[res$status %in% c("built", "exists")]) {
+    mp <- file.path(OUT_DIR, glue("{k}_manifest.json"))
+    put_gcs_file(mp, glue("gs://calcofi-db/publish/dwca/releases/{RELEASE}/{k}_manifest.json"), content_type = "application/json")
+    put_gcs_file(mp, glue("gs://calcofi-db/publish/dwca/{k}/{k}_manifest.json"), content_type = "application/json")
+  }
+} else cat(glue("CALCOFI_PUBLISH_DWCA is not true (or a staging run): nothing staged to GCS; ",
+                "{sum(res$status == 'built')} new archive(s) are local under {OUT_DIR}"), "\n")
 ```
 
 ## Registration status — when is an upload due?
