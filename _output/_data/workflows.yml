@@ -438,9 +438,11 @@ categories:
         dataset, an Excel workbook where every table fits, Parquet), each holding
         the dataset''s own rows of every table it needs to be used alone, with readable
         names beside keys, and its README, citation, licence and column dictionary.
-        Rebuilds a dataset only when its rows, record or this code changed, writes
-        byte-reproducible zips and a manifest the website reads, and uploads only
-        under an explicit flag.'
+        Content-addressed as the release''s own Parquet tables are: a package is written
+        and uploaded once per distinct content (data, its metadata record, the pinned
+        format), under a path named by its content_hash, and every later release with
+        the same content only lists it in its manifest. Uploads only under an explicit
+        flag; never deletes.'
 - id: release
   title: Release & pipeline
   blurb: Freeze a versioned release, validate it against the consumer contract, deploy
