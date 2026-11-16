@@ -67,9 +67,10 @@ scientist asked for; beside `taxon_key` the `scientific_name` and `common_name`;
 `longitude` stay; a 64-bit cell id does not survive a spreadsheet).
 
 **Excel only where it fits** (`calcofi4db::bundle_format_decision()`): a workbook is made when
-every table has at most 250,000 rows (`BUNDLE_XLSX_MAX_ROWS`, under a quarter of Excel's
-1,048,576-row sheet limit, so it stays tens of megabytes); otherwise the manifest says why in
-plain words, and a CSV too long for a spreadsheet says so in its README.
+every table fits an Excel sheet: at most 1,048,575 rows of data below the header row
+(`BUNDLE_XLSX_MAX_ROWS`, Excel's own 1,048,576-row limit; no lower cap, by the owner's decision of
+2026-11-16); otherwise the manifest says why in plain words, and a CSV too long for a
+spreadsheet says so in its README.
 
 **Rebuilt only when the dataset changed.** Every release re-renders every publisher, so each
 dataset's bundle carries an input fingerprint (`publish_fingerprint()`): the row signatures of

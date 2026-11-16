@@ -152,7 +152,7 @@ Following the pattern from `publish_ichthyo_to_obis.qmd`:
 #### Download bundles (zip, for people rather than portals)
 
 `publish_to-zip.qmd` (generic over `dataset_key`, no template) writes one zip per dataset per
-format (CSV always, Excel only where every table fits `BUNDLE_XLSX_MAX_ROWS`, Parquet always) to
+format (CSV always, Excel wherever every table fits an Excel sheet, `BUNDLE_XLSX_MAX_ROWS` = 1,048,575 data rows, Parquet always) to
 `cc_stage_path("publish", "zip")`, uploading to `gs://calcofi-db/publish/zip/` only under
 `CALCOFI_PUBLISH_ZIP=true`. Every rule is a tested `calcofi4db` function (`bundle_plan()`,
 `bundle_build_tables()`, `bundle_format_decision()`, `bundle_license()`, `bundle_citation()`,

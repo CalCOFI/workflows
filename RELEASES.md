@@ -16,7 +16,7 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 ## Download bundles: every dataset as zips a researcher can open
 
 No table changes. A new publisher, `publish_to-zip.qmd`, writes for every dataset one zip per
-format (CSV for every dataset, an Excel workbook where every table has at most 250,000 rows,
+format (CSV for every dataset, an Excel workbook where every table fits an Excel sheet,
 Parquet), each holding the dataset's own rows of every table it needs to be used alone, with
 `site_key`, `line`, `station`, `scientific_name`, `common_name` and `units` beside their keys,
 and a README, the dataset's and the release's citation, its licence and a column dictionary. They

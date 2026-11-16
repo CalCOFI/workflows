@@ -231,7 +231,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </table>
 <p><strong>Which tables, cut how</strong> (<code>calcofi4db::bundle_plan()</code>, one rule each, tested): the record’s own <code>tables[]</code> plus the shared tables a download needs to be used alone, <code>sample</code>, <code>cruise</code>, <code>taxon</code> and <code>measurement_type</code>; a table with a <code>dataset_key</code> keeps this dataset’s rows, <code>sample</code> also keeps the samples the dataset’s rows sit on (a derived product’s observations sit on the bottle or CTD casts) and their parents, a shared vocabulary keeps the rows reached through its key, and the full-resolution supplementals (<code>obs_ctd_full</code>, <code>obs_mets_full</code>: hundreds of millions of rows partitioned by cruise) are left out and named in the README. <code>obs</code> is read through the catalog’s own view over <code>obs_bio</code> and <code>obs_env</code>.</p>
 <p><strong>A row reads without a join</strong> (<code>calcofi4db::bundle_build_tables()</code>): beside <code>sample_key</code> the station the provider recorded (<code>site_key</code>) and its CalCOFI <code>line</code> and <code>station</code>, which a field scientist asked for; beside <code>taxon_key</code> the <code>scientific_name</code> and <code>common_name</code>; beside <code>measurement_type</code> its <code>units</code>. Geometry and H3 cell-id columns are left out (<code>latitude</code> and <code>longitude</code> stay; a 64-bit cell id does not survive a spreadsheet).</p>
-<p><strong>Excel only where it fits</strong> (<code>calcofi4db::bundle_format_decision()</code>): a workbook is made when every table has at most 250,000 rows (<code>BUNDLE_XLSX_MAX_ROWS</code>, under a quarter of Excel’s 1,048,576-row sheet limit, so it stays tens of megabytes); otherwise the manifest says why in plain words, and a CSV too long for a spreadsheet says so in its README.</p>
+<p><strong>Excel only where it fits</strong> (<code>calcofi4db::bundle_format_decision()</code>): a workbook is made when every table fits an Excel sheet: at most 1,048,575 rows of data below the header row (<code>BUNDLE_XLSX_MAX_ROWS</code>, Excel’s own 1,048,576-row limit; no lower cap, by the owner’s decision of 2026-11-16); otherwise the manifest says why in plain words, and a CSV too long for a spreadsheet says so in its README.</p>
 <p><strong>Rebuilt only when the dataset changed.</strong> Every release re-renders every publisher, so each dataset’s bundle carries an input fingerprint (<code>publish_fingerprint()</code>): the row signatures of exactly the tables it writes, so a vocabulary row another dataset added changes nothing here; its catalog record and the metadata its documents read; and this code. An unchanged fingerprint with the zips still on disk is reused under the release it was built from (its name keeps that version; <code>checked_version</code> records this run). The zips are byte-reproducible (<code>bundle_zip()</code>: fixed member order, timestamp, mode and time zone; the workbook’s own timestamp fixed too), so the same rows always give the same sha256.</p>
 <p><strong>Upload gated, and the website’s contract.</strong> Everything is written under <code>cc_stage_path("publish", "zip")</code>; nothing leaves the machine unless <code>CALCOFI_PUBLISH_ZIP=true</code> (and never in a staging run). The upload puts each zip at <code>gs://calcofi-db/publish/zip/{dataset_key}/{file}</code> and the manifest at <code>gs://calcofi-db/publish/zip/manifest.json</code>, which calcofi.io reads at build time, and which <code>release_database.qmd</code> passes to <code>build_dataset_catalog(bundles = )</code> so the next release’s <code>datasets.json</code> carries a <code>kind = "bundle"</code> distribution per file (the newest built, as the netCDF manifests do).</p>
 </section>
@@ -1174,26 +1174,26 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb19-51"><a href="#cb19-51" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <ul>
-<li><code>calcofi_2022-edna</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>calcofi_bottle</code>: unchanged since v2026.11.14 — reused (2 zip(s))</li>
-<li><code>calcofi_bottle-derived</code>: unchanged since v2026.11.14 — reused (2 zip(s))</li>
-<li><code>calcofi_ctd-cast</code>: built — outputs missing: calcofi_ctd-cast_v2026.11.14_csv.zip, calcofi_ctd-cast_v2026.11.14_parquet.zip; csv 249.8 MB, parquet 182.1 MB</li>
-<li><code>calcofi_ctd-derived</code>: unchanged since v2026.11.14 — reused (2 zip(s))</li>
-<li><code>calcofi_dic</code>: built — outputs missing: calcofi_dic_v2026.11.14_csv.zip, calcofi_dic_v2026.11.14_xlsx.zip, calcofi_dic_v2026.11.14_parquet.zip; csv 0.4 MB, xlsx 1.4 MB, parquet 0.4 MB</li>
-<li><code>calcofi_mets</code>: unchanged since v2026.11.14 — reused (2 zip(s))</li>
-<li><code>calcofi_phyllosoma</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>calcofi_phytoplankton</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>cce-lter_euphausiids</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>cce-lter_iron</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>cce-lter_picoplankton-bacteria</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>cce-lter_zoodb</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>cce-lter_zooscan</code>: built — outputs missing: calcofi_cce-lter_zooscan_v2026.11.14_csv.zip, calcofi_cce-lter_zooscan_v2026.11.14_xlsx.zip, calcofi_cce-lter_zooscan_v2026.11.14_parquet.zip; csv 1.5 MB, xlsx 10.2 MB, parquet 1.1 MB</li>
-<li><code>cdfw_dungeness-crab</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>farallon_bird-mammal</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>sio_mesopelagic-fish</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>sio_pic-zooplankton</code>: unchanged since v2026.11.14 — reused (3 zip(s))</li>
-<li><code>swfsc_cufes</code>: unchanged since v2026.11.14 — reused (2 zip(s))</li>
-<li><code>swfsc_ichthyo</code>: built — outputs missing: calcofi_swfsc_ichthyo_v2026.11.14_csv.zip, calcofi_swfsc_ichthyo_v2026.11.14_parquet.zip; csv 34.0 MB, parquet 16.8 MB</li>
+<li><code>calcofi_2022-edna</code>: built — changed: code:bundle.R; csv 0.0 MB, xlsx 0.1 MB, parquet 0.0 MB</li>
+<li><code>calcofi_bottle</code>: built — changed: code:bundle.R; csv 179.5 MB, parquet 111.9 MB</li>
+<li><code>calcofi_bottle-derived</code>: built — changed: code:bundle.R; csv 56.7 MB, parquet 35.2 MB</li>
+<li><code>calcofi_ctd-cast</code>: built — changed: code:bundle.R; csv 249.8 MB, parquet 182.1 MB</li>
+<li><code>calcofi_ctd-derived</code>: built — changed: code:bundle.R; csv 46.9 MB, parquet 32.2 MB</li>
+<li><code>calcofi_dic</code>: built — changed: code:bundle.R; csv 0.4 MB, xlsx 1.4 MB, parquet 0.4 MB</li>
+<li><code>calcofi_mets</code>: built — changed: code:bundle.R; csv 28.7 MB, xlsx 56.9 MB, parquet 15.1 MB</li>
+<li><code>calcofi_phyllosoma</code>: built — changed: code:bundle.R; csv 0.1 MB, xlsx 0.3 MB, parquet 0.1 MB</li>
+<li><code>calcofi_phytoplankton</code>: built — changed: code:bundle.R; csv 2.2 MB, xlsx 8.9 MB, parquet 0.2 MB</li>
+<li><code>cce-lter_euphausiids</code>: built — changed: code:bundle.R; csv 1.5 MB, xlsx 7.8 MB, parquet 1.0 MB</li>
+<li><code>cce-lter_iron</code>: built — changed: code:bundle.R; csv 0.0 MB, xlsx 0.0 MB, parquet 0.0 MB</li>
+<li><code>cce-lter_picoplankton-bacteria</code>: built — changed: code:bundle.R; csv 1.3 MB, xlsx 5.5 MB, parquet 0.8 MB</li>
+<li><code>cce-lter_zoodb</code>: built — changed: code:bundle.R; csv 0.3 MB, xlsx 1.7 MB, parquet 0.2 MB</li>
+<li><code>cce-lter_zooscan</code>: built — changed: code:bundle.R; csv 1.5 MB, xlsx 10.2 MB, parquet 1.1 MB</li>
+<li><code>cdfw_dungeness-crab</code>: built — changed: code:bundle.R; csv 0.1 MB, xlsx 0.2 MB, parquet 0.1 MB</li>
+<li><code>farallon_bird-mammal</code>: built — changed: code:bundle.R; csv 3.7 MB, xlsx 13.1 MB, parquet 2.2 MB</li>
+<li><code>sio_mesopelagic-fish</code>: built — changed: code:bundle.R; csv 0.0 MB, xlsx 0.1 MB, parquet 0.0 MB</li>
+<li><code>sio_pic-zooplankton</code>: built — changed: code:bundle.R; csv 2.4 MB, xlsx 6.3 MB, parquet 1.2 MB</li>
+<li><code>swfsc_cufes</code>: built — changed: code:bundle.R; csv 8.7 MB, xlsx 40.7 MB, parquet 5.2 MB</li>
+<li><code>swfsc_ichthyo</code>: built — changed: code:bundle.R; csv 34.0 MB, xlsx 114.2 MB, parquet 16.8 MB</li>
 </ul>
 </section>
 <section id="the-manifest-what-the-website-reads" class="level2" data-number="6">
@@ -1235,7 +1235,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>data/zip/manifest.csv — 53 zip(s) for 20 dataset(s)</caption>
+<caption>data/zip/manifest.csv — 56 zip(s) for 20 dataset(s)</caption>
 <colgroup>
 <col style="width: 25%">
 <col style="width: 6%">
@@ -1272,7 +1272,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">148</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1284,7 +1284,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">148</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1296,7 +1296,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">148</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1308,7 +1308,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">11135334</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1320,7 +1320,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">11135334</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">not built</td>
 </tr>
 <tr class="even">
@@ -1332,7 +1332,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">11135334</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1344,7 +1344,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1683308</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1356,7 +1356,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1683308</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">not built</td>
 </tr>
 <tr class="odd">
@@ -1368,7 +1368,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1683308</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1416,7 +1416,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">2023053</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1428,7 +1428,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">2023053</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">not built</td>
 </tr>
 <tr class="odd">
@@ -1440,7 +1440,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">2023053</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1488,20 +1488,20 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">511395</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_mets</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">FALSE</td>
-<td style="text-align: right;">NA</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: right;">56.9</td>
 <td style="text-align: left;">obs</td>
 <td style="text-align: right;">511395</td>
-<td style="text-align: left;">FALSE</td>
+<td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;">not built</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_mets</td>
@@ -1512,7 +1512,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">511395</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1524,7 +1524,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1859</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1536,7 +1536,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1859</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1548,7 +1548,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1859</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1560,7 +1560,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">155553</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1572,7 +1572,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">155553</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1584,7 +1584,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">155553</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1596,7 +1596,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">100505</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1608,7 +1608,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">100505</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1620,7 +1620,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">100505</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1632,7 +1632,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">170</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1644,7 +1644,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">170</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1656,7 +1656,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">170</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1668,7 +1668,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">60802</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1680,7 +1680,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">60802</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1692,7 +1692,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">60802</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1704,7 +1704,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">30948</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1716,7 +1716,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">30948</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1728,7 +1728,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">30948</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1776,7 +1776,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1456</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1788,7 +1788,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1456</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1800,7 +1800,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1456</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1812,7 +1812,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">69661</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1824,7 +1824,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">69661</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1836,7 +1836,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">69661</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1848,7 +1848,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1393</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1860,7 +1860,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1393</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1872,7 +1872,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1393</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1884,7 +1884,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">82343</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1896,7 +1896,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">82343</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1908,7 +1908,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">82343</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
@@ -1920,20 +1920,20 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">550162</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_cufes</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">FALSE</td>
-<td style="text-align: right;">NA</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: right;">40.7</td>
 <td style="text-align: left;">obs</td>
 <td style="text-align: right;">550162</td>
-<td style="text-align: left;">FALSE</td>
+<td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;">not built</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_cufes</td>
@@ -1944,7 +1944,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">550162</td>
 <td style="text-align: left;">FALSE</td>
 <td style="text-align: left;">v2026.11.14</td>
-<td style="text-align: left;">reuse</td>
+<td style="text-align: left;">build</td>
 <td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
@@ -1962,14 +1962,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tr class="odd">
 <td style="text-align: left;">swfsc_ichthyo</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">FALSE</td>
-<td style="text-align: right;">NA</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: right;">114.2</td>
 <td style="text-align: left;">obs</td>
 <td style="text-align: right;">487616</td>
-<td style="text-align: left;">FALSE</td>
+<td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">v2026.11.14</td>
 <td style="text-align: left;">build</td>
-<td style="text-align: left;">not built</td>
+<td style="text-align: left;">never uploaded</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_ichthyo</td>
@@ -2013,37 +2013,22 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tr class="odd">
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 11,135,334 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
+<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 11,135,334 rows, more than an Excel sheet holds (1,048,576 rows including the header row). Use the CSV download, or take a subset from the Explorer.</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_bottle-derived</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 1,683,308 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
+<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 1,683,308 rows, more than an Excel sheet holds (1,048,576 rows including the header row). Use the CSV download, or take a subset from the Explorer.</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 19,028,964 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
+<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 19,028,964 rows, more than an Excel sheet holds (1,048,576 rows including the header row). Use the CSV download, or take a subset from the Explorer.</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_ctd-derived</td>
 <td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 2,023,053 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">calcofi_mets</td>
-<td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 511,395 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 550,162 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">swfsc_ichthyo</td>
-<td style="text-align: left;">xlsx</td>
-<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 487,616 rows, and a workbook is made only when every table has at most 250,000 rows (Excel itself stops at 1,048,576). Use the CSV download.</td>
+<td style="text-align: left;">Not offered as an Excel workbook: its largest table, obs, has 2,023,053 rows, more than an Excel sheet holds (1,048,576 rows including the header row). Use the CSV download, or take a subset from the Explorer.</td>
 </tr>
 </tbody>
 </table>
@@ -2116,7 +2101,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>CALCOFI_PUBLISH_ZIP is not `true`: nothing uploaded.
-53 zip(s) (1080 MB) differ from what gs://calcofi-db/publish/zip/ holds; they are staged at /Users/bbest/_big/calcofi/publish/zip/.</code></pre>
+56 zip(s) (1291 MB) differ from what gs://calcofi-db/publish/zip/ holds; they are staged at /Users/bbest/_big/calcofi/publish/zip/.</code></pre>
 </div>
 </div>
 <div class="cell">
@@ -2138,123 +2123,123 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">calcofi_2022-edna</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_bottle</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">3</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">34</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_bottle-derived</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">1</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">9</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">build</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">51</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_ctd-derived</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">1</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">8</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_dic</td>
 <td style="text-align: left;">build</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">1</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_mets</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">19</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_phyllosoma</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_phytoplankton</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">4</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_euphausiids</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">3</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_iron</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_picoplankton-bacteria</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">3</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_zoodb</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">1</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_zooscan</td>
 <td style="text-align: left;">build</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">4</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cdfw_dungeness-crab</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">farallon_bird-mammal</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">5</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">sio_mesopelagic-fish</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">sio_pic-zooplankton</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">3</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: left;">reuse</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">0</td>
+<td style="text-align: left;">build</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">16</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_ichthyo</td>
 <td style="text-align: left;">build</td>
-<td style="text-align: left;"></td>
-<td style="text-align: right;">7</td>
+<td style="text-align: left;">code:bundle.R</td>
+<td style="text-align: right;">42</td>
 </tr>
 </tbody>
 </table>
@@ -2792,348 +2777,349 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb28-67"><a href="#cb28-67" aria-hidden="true" tabindex="-1"></a><span class="in">`longitude`</span> stay; a 64-bit cell id does not survive a spreadsheet).</span>
 <span id="cb28-68"><a href="#cb28-68" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb28-69"><a href="#cb28-69" aria-hidden="true" tabindex="-1"></a>**Excel only where it fits** (<span class="in">`calcofi4db::bundle_format_decision()`</span>): a workbook is made when</span>
-<span id="cb28-70"><a href="#cb28-70" aria-hidden="true" tabindex="-1"></a>every table has at most 250,000 rows (<span class="in">`BUNDLE_XLSX_MAX_ROWS`</span>, under a quarter of Excel's</span>
-<span id="cb28-71"><a href="#cb28-71" aria-hidden="true" tabindex="-1"></a>1,048,576-row sheet limit, so it stays tens of megabytes); otherwise the manifest says why in</span>
-<span id="cb28-72"><a href="#cb28-72" aria-hidden="true" tabindex="-1"></a>plain words, and a CSV too long for a spreadsheet says so in its README.</span>
-<span id="cb28-73"><a href="#cb28-73" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-74"><a href="#cb28-74" aria-hidden="true" tabindex="-1"></a>**Rebuilt only when the dataset changed.** Every release re-renders every publisher, so each</span>
-<span id="cb28-75"><a href="#cb28-75" aria-hidden="true" tabindex="-1"></a>dataset's bundle carries an input fingerprint (<span class="in">`publish_fingerprint()`</span>): the row signatures of</span>
-<span id="cb28-76"><a href="#cb28-76" aria-hidden="true" tabindex="-1"></a>exactly the tables it writes, so a vocabulary row another dataset added changes nothing here; its</span>
-<span id="cb28-77"><a href="#cb28-77" aria-hidden="true" tabindex="-1"></a>catalog record and the metadata its documents read; and this code. An unchanged fingerprint with</span>
-<span id="cb28-78"><a href="#cb28-78" aria-hidden="true" tabindex="-1"></a>the zips still on disk is reused under the release it was built from (its name keeps that version;</span>
-<span id="cb28-79"><a href="#cb28-79" aria-hidden="true" tabindex="-1"></a><span class="in">`checked_version`</span> records this run). The zips are byte-reproducible (<span class="in">`bundle_zip()`</span>: fixed member</span>
-<span id="cb28-80"><a href="#cb28-80" aria-hidden="true" tabindex="-1"></a>order, timestamp, mode and time zone; the workbook's own timestamp fixed too), so the same rows</span>
-<span id="cb28-81"><a href="#cb28-81" aria-hidden="true" tabindex="-1"></a>always give the same sha256.</span>
-<span id="cb28-82"><a href="#cb28-82" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-83"><a href="#cb28-83" aria-hidden="true" tabindex="-1"></a>**Upload gated, and the website's contract.** Everything is written under</span>
-<span id="cb28-84"><a href="#cb28-84" aria-hidden="true" tabindex="-1"></a><span class="in">`cc_stage_path("publish", "zip")`</span>; nothing leaves the machine unless <span class="in">`CALCOFI_PUBLISH_ZIP=true`</span></span>
-<span id="cb28-85"><a href="#cb28-85" aria-hidden="true" tabindex="-1"></a>(and never in a staging run). The upload puts each zip at</span>
-<span id="cb28-86"><a href="#cb28-86" aria-hidden="true" tabindex="-1"></a><span class="in">`gs://calcofi-db/publish/zip/{dataset_key}/{file}`</span> and the manifest at</span>
-<span id="cb28-87"><a href="#cb28-87" aria-hidden="true" tabindex="-1"></a><span class="in">`gs://calcofi-db/publish/zip/manifest.json`</span>, which calcofi.io reads at build time, and which</span>
-<span id="cb28-88"><a href="#cb28-88" aria-hidden="true" tabindex="-1"></a><span class="in">`release_database.qmd`</span> passes to <span class="in">`build_dataset_catalog(bundles = )`</span> so the next release's</span>
-<span id="cb28-89"><a href="#cb28-89" aria-hidden="true" tabindex="-1"></a><span class="in">`datasets.json`</span> carries a <span class="in">`kind = "bundle"`</span> distribution per file (the newest built, as the</span>
-<span id="cb28-90"><a href="#cb28-90" aria-hidden="true" tabindex="-1"></a>netCDF manifests do).</span>
-<span id="cb28-91"><a href="#cb28-91" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-92"><a href="#cb28-92" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
-<span id="cb28-93"><a href="#cb28-93" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-96"><a href="#cb28-96" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-97"><a href="#cb28-97" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
-<span id="cb28-98"><a href="#cb28-98" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
-<span id="cb28-99"><a href="#cb28-99" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
-<span id="cb28-100"><a href="#cb28-100" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-101"><a href="#cb28-101" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(DBI, duckdb, dplyr, glue, jsonlite, digest, readr, tibble, knitr, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb28-102"><a href="#cb28-102" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
-<span id="cb28-103"><a href="#cb28-103" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb28-104"><a href="#cb28-104" aria-hidden="true" tabindex="-1"></a><span class="co"># the engine package from its sibling checkout, as every publisher loads it; CALCOFI4DB_DIR points a</span></span>
-<span id="cb28-105"><a href="#cb28-105" aria-hidden="true" tabindex="-1"></a><span class="co"># worktree's render at that worktree's calcofi4db</span></span>
-<span id="cb28-106"><a href="#cb28-106" aria-hidden="true" tabindex="-1"></a>PKG_DIR <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI4DB_DIR"</span>, <span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
-<span id="cb28-107"><a href="#cb28-107" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(PKG_DIR)</span>
-<span id="cb28-108"><a href="#cb28-108" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"calcofi4db &gt;= 4.40.0 (bundle_plan) is required"</span> <span class="ot">=</span> <span class="fu">exists</span>(<span class="st">"bundle_plan"</span>))</span>
-<span id="cb28-109"><a href="#cb28-109" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-110"><a href="#cb28-110" aria-hidden="true" tabindex="-1"></a><span class="co"># the promoted release by default; a STAGING run (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases)</span></span>
-<span id="cb28-111"><a href="#cb28-111" aria-hidden="true" tabindex="-1"></a><span class="co"># reads the staging release, writes under data/zip-staging/ and uploads nothing</span></span>
-<span id="cb28-112"><a href="#cb28-112" aria-hidden="true" tabindex="-1"></a>RELEASE_PREFIX <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_PREFIX"</span>, <span class="st">"ducklake/releases"</span>)</span>
-<span id="cb28-113"><a href="#cb28-113" aria-hidden="true" tabindex="-1"></a>STAGING        <span class="ot">&lt;-</span> <span class="fu">grepl</span>(<span class="st">"staging"</span>, RELEASE_PREFIX, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb28-114"><a href="#cb28-114" aria-hidden="true" tabindex="-1"></a>BASE_HTTPS     <span class="ot">&lt;-</span> <span class="st">"https://storage.googleapis.com/calcofi-db"</span></span>
-<span id="cb28-115"><a href="#cb28-115" aria-hidden="true" tabindex="-1"></a>RELEASE_VERSION <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_VERSION"</span>, <span class="st">""</span>)</span>
-<span id="cb28-116"><a href="#cb28-116" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(RELEASE_VERSION))</span>
-<span id="cb28-117"><a href="#cb28-117" aria-hidden="true" tabindex="-1"></a>  RELEASE_VERSION <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">readLines</span>(<span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"</span>), <span class="at">warn =</span> <span class="cn">FALSE</span>)[<span class="dv">1</span>])</span>
-<span id="cb28-118"><a href="#cb28-118" aria-hidden="true" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">CALCOFI_RELEASE_VERSION =</span> RELEASE_VERSION)   <span class="co"># calcofi4r::cc_catalog() resolves the same one</span></span>
-<span id="cb28-119"><a href="#cb28-119" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-120"><a href="#cb28-120" aria-hidden="true" tabindex="-1"></a><span class="co"># comma-separated dataset_keys to restrict a run while iterating; empty = every public dataset</span></span>
-<span id="cb28-121"><a href="#cb28-121" aria-hidden="true" tabindex="-1"></a>ONLY <span class="ot">&lt;-</span> <span class="fu">Filter</span>(nzchar, <span class="fu">trimws</span>(<span class="fu">strsplit</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_DATASETS"</span>, <span class="st">""</span>), <span class="st">","</span>)[[<span class="dv">1</span>]]))</span>
-<span id="cb28-122"><a href="#cb28-122" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-123"><a href="#cb28-123" aria-hidden="true" tabindex="-1"></a>PUBLISH    <span class="ot">&lt;-</span> <span class="fu">identical</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_PUBLISH_ZIP"</span>), <span class="st">"true"</span>) <span class="sc">&amp;&amp;</span> <span class="sc">!</span>STAGING   <span class="co"># opt-in upload</span></span>
-<span id="cb28-124"><a href="#cb28-124" aria-hidden="true" tabindex="-1"></a>NO_PUBLISH <span class="ot">&lt;-</span> <span class="sc">!</span>PUBLISH</span>
-<span id="cb28-125"><a href="#cb28-125" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-126"><a href="#cb28-126" aria-hidden="true" tabindex="-1"></a><span class="co"># bulk under the stage root, never in the git tree; the small manifests beside the notebook</span></span>
-<span id="cb28-127"><a href="#cb28-127" aria-hidden="true" tabindex="-1"></a>STAGE_DIR <span class="ot">&lt;-</span> <span class="fu">cc_stage_path</span>(<span class="st">"publish"</span>, <span class="cf">if</span> (STAGING) <span class="st">"zip-staging"</span> <span class="cf">else</span> <span class="st">"zip"</span>, <span class="at">create =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb28-128"><a href="#cb28-128" aria-hidden="true" tabindex="-1"></a>OBJ_CACHE <span class="ot">&lt;-</span> <span class="fu">cc_stage_path</span>(<span class="st">"publish"</span>, <span class="st">"objects"</span>, <span class="at">create =</span> <span class="cn">TRUE</span>)   <span class="co"># release objects, content-addressed</span></span>
-<span id="cb28-129"><a href="#cb28-129" aria-hidden="true" tabindex="-1"></a>OUT_DIR   <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/zip-staging"</span> <span class="cf">else</span> <span class="st">"data/zip"</span>)</span>
-<span id="cb28-130"><a href="#cb28-130" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(OUT_DIR, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb28-131"><a href="#cb28-131" aria-hidden="true" tabindex="-1"></a>ZIP_GCS   <span class="ot">&lt;-</span> <span class="st">"gs://calcofi-db/publish/zip"</span></span>
-<span id="cb28-132"><a href="#cb28-132" aria-hidden="true" tabindex="-1"></a><span class="co"># the code the bundles are a function of: a change here rebuilds them</span></span>
-<span id="cb28-133"><a href="#cb28-133" aria-hidden="true" tabindex="-1"></a>LIC_DIR    <span class="ot">&lt;-</span> <span class="fu">file.path</span>(PKG_DIR, <span class="st">"inst"</span>, <span class="st">"licenses"</span>)</span>
-<span id="cb28-134"><a href="#cb28-134" aria-hidden="true" tabindex="-1"></a>CODE_FILES <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"publish_to-zip.qmd"</span>), <span class="fu">file.path</span>(PKG_DIR, <span class="st">"R"</span>, <span class="st">"bundle.R"</span>),</span>
-<span id="cb28-135"><a href="#cb28-135" aria-hidden="true" tabindex="-1"></a>                <span class="fu">sort</span>(<span class="fu">list.files</span>(LIC_DIR, <span class="at">full.names =</span> <span class="cn">TRUE</span>)))</span>
-<span id="cb28-136"><a href="#cb28-136" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-137"><a href="#cb28-137" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release prefix : {RELEASE_PREFIX}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-138"><a href="#cb28-138" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release        : {RELEASE_VERSION}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-139"><a href="#cb28-139" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"calcofi4db     : {PKG_DIR} ({as.character(utils::packageVersion('calcofi4db'))})"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-140"><a href="#cb28-140" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"stage (zips)   : {STAGE_DIR}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-141"><a href="#cb28-141" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"manifests      : {OUT_DIR}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-142"><a href="#cb28-142" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"CALCOFI_PUBLISH_ZIP : {PUBLISH} (upload to {ZIP_GCS}/ only when true)"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-143"><a href="#cb28-143" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(ONLY)) <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"restricted to  : {paste(ONLY, collapse = ', ')}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-144"><a href="#cb28-144" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-145"><a href="#cb28-145" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-148"><a href="#cb28-148" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-149"><a href="#cb28-149" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fetch-release-json</span></span>
-<span id="cb28-150"><a href="#cb28-150" aria-hidden="true" tabindex="-1"></a>rel_url  <span class="ot">&lt;-</span> <span class="cf">function</span>(f) <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/{RELEASE_VERSION}/{f}"</span>)</span>
-<span id="cb28-151"><a href="#cb28-151" aria-hidden="true" tabindex="-1"></a>read_j   <span class="ot">&lt;-</span> <span class="cf">function</span>(u) jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(u, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb28-152"><a href="#cb28-152" aria-hidden="true" tabindex="-1"></a>catalog  <span class="ot">&lt;-</span> calcofi4r<span class="sc">::</span><span class="fu">cc_catalog</span>(RELEASE_VERSION)</span>
-<span id="cb28-153"><a href="#cb28-153" aria-hidden="true" tabindex="-1"></a>ds_json  <span class="ot">&lt;-</span> <span class="fu">read_j</span>(<span class="fu">rel_url</span>(<span class="st">"datasets.json"</span>))</span>
-<span id="cb28-154"><a href="#cb28-154" aria-hidden="true" tabindex="-1"></a>meta     <span class="ot">&lt;-</span> <span class="fu">read_j</span>(<span class="fu">rel_url</span>(<span class="st">"metadata.json"</span>))</span>
-<span id="cb28-155"><a href="#cb28-155" aria-hidden="true" tabindex="-1"></a>release  <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">version =</span> RELEASE_VERSION, <span class="at">release_date =</span> catalog<span class="sc">$</span>release_date <span class="sc">%||%</span> <span class="cn">NA</span>,</span>
-<span id="cb28-156"><a href="#cb28-156" aria-hidden="true" tabindex="-1"></a>                 <span class="at">citation =</span> catalog<span class="sc">$</span>citation <span class="sc">%||%</span> <span class="cn">NA</span>, <span class="at">doi =</span> catalog<span class="sc">$</span>doi <span class="sc">%||%</span> <span class="cn">NA</span>,</span>
-<span id="cb28-157"><a href="#cb28-157" aria-hidden="true" tabindex="-1"></a>                 <span class="at">concept_doi =</span> catalog<span class="sc">$</span>concept_doi <span class="sc">%||%</span> <span class="cn">NA</span>)</span>
-<span id="cb28-158"><a href="#cb28-158" aria-hidden="true" tabindex="-1"></a>records  <span class="ot">&lt;-</span> <span class="fu">setNames</span>(ds_json<span class="sc">$</span>datasets, <span class="fu">vapply</span>(ds_json<span class="sc">$</span>datasets, <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"dataset_key"</span>))</span>
-<span id="cb28-159"><a href="#cb28-159" aria-hidden="true" tabindex="-1"></a>public   <span class="ot">&lt;-</span> <span class="fu">names</span>(records)[<span class="fu">vapply</span>(records, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>visibility <span class="sc">%||%</span> <span class="st">"public"</span>, <span class="st">"public"</span>), <span class="cn">TRUE</span>)]</span>
-<span id="cb28-160"><a href="#cb28-160" aria-hidden="true" tabindex="-1"></a>keys     <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(ONLY)) <span class="fu">intersect</span>(public, ONLY) <span class="cf">else</span> public</span>
-<span id="cb28-161"><a href="#cb28-161" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(ONLY) <span class="sc">&amp;&amp;</span> <span class="fu">length</span>(<span class="fu">setdiff</span>(ONLY, public)))</span>
-<span id="cb28-162"><a href="#cb28-162" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"NOTE requested but not a public dataset of {RELEASE_VERSION}: {paste(setdiff(ONLY, public), collapse = ', ')}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-163"><a href="#cb28-163" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{length(keys)} dataset(s) of {length(records)} in the release; "</span>,</span>
-<span id="cb28-164"><a href="#cb28-164" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{length(ds_json$holdings %||% list())} holding(s) have no release data and get no bundle"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-165"><a href="#cb28-165" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-166"><a href="#cb28-166" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-167"><a href="#cb28-167" aria-hidden="true" tabindex="-1"></a><span class="fu">## Read the release</span></span>
-<span id="cb28-168"><a href="#cb28-168" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-169"><a href="#cb28-169" aria-hidden="true" tabindex="-1"></a>Every table a bundle reads is resolved through the catalog (<span class="in">`calcofi4r::cc_release_sources()`</span>,</span>
-<span id="cb28-170"><a href="#cb28-170" aria-hidden="true" tabindex="-1"></a>never a hand-built path) and its objects copied once into a content-addressed cache under the</span>
-<span id="cb28-171"><a href="#cb28-171" aria-hidden="true" tabindex="-1"></a>stage root, so twenty datasets do not read the same <span class="in">`sample`</span> object over HTTPS twenty times, and</span>
-<span id="cb28-172"><a href="#cb28-172" aria-hidden="true" tabindex="-1"></a>an object unchanged since the previous release is never fetched again. <span class="in">`obs`</span> is the catalog's own</span>
-<span id="cb28-173"><a href="#cb28-173" aria-hidden="true" tabindex="-1"></a>view over <span class="in">`obs_bio`</span> and <span class="in">`obs_env`</span> (<span class="in">`calcofi4r::cc_view_sql()`</span>).</span>
-<span id="cb28-174"><a href="#cb28-174" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-177"><a href="#cb28-177" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-178"><a href="#cb28-178" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: connect</span></span>
-<span id="cb28-179"><a href="#cb28-179" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">get_duckdb_con</span>()</span>
-<span id="cb28-180"><a href="#cb28-180" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (s <span class="cf">in</span> <span class="fu">c</span>(<span class="st">"SET enable_progress_bar = false"</span>, <span class="st">"SET preserve_insertion_order = true"</span>))</span>
-<span id="cb28-181"><a href="#cb28-181" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(con, s)</span>
-<span id="cb28-182"><a href="#cb28-182" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-183"><a href="#cb28-183" aria-hidden="true" tabindex="-1"></a>cat_tables <span class="ot">&lt;-</span> catalog<span class="sc">$</span>tables</span>
-<span id="cb28-184"><a href="#cb28-184" aria-hidden="true" tabindex="-1"></a>cat_entry  <span class="ot">&lt;-</span> <span class="cf">function</span>(tb) <span class="fu">Find</span>(<span class="cf">function</span>(t) <span class="fu">identical</span>(t<span class="sc">$</span>name, tb), cat_tables)</span>
-<span id="cb28-185"><a href="#cb28-185" aria-hidden="true" tabindex="-1"></a>views      <span class="ot">&lt;-</span> calcofi4r<span class="sc">::</span><span class="fu">cc_catalog_views</span>(catalog)</span>
-<span id="cb28-186"><a href="#cb28-186" aria-hidden="true" tabindex="-1"></a>supp       <span class="ot">&lt;-</span> <span class="fu">vapply</span>(<span class="fu">Filter</span>(<span class="cf">function</span>(t) <span class="fu">isTRUE</span>(t<span class="sc">$</span>supplemental), cat_tables), <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"name"</span>)</span>
-<span id="cb28-187"><a href="#cb28-187" aria-hidden="true" tabindex="-1"></a>supp_rows  <span class="ot">&lt;-</span> <span class="fu">vapply</span>(supp, <span class="cf">function</span>(tb) <span class="fu">as.numeric</span>(<span class="fu">cat_entry</span>(tb)<span class="sc">$</span>rows <span class="sc">%||%</span> <span class="cn">NA</span>), <span class="dv">1</span>)</span>
-<span id="cb28-188"><a href="#cb28-188" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-189"><a href="#cb28-189" aria-hidden="true" tabindex="-1"></a><span class="co"># every table some bundle may read: the records' tables plus the companions, minus supplementals</span></span>
-<span id="cb28-190"><a href="#cb28-190" aria-hidden="true" tabindex="-1"></a>want <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(<span class="fu">unique</span>(<span class="fu">c</span>(<span class="fu">unlist</span>(<span class="fu">lapply</span>(records[keys], <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">"tables"</span>)), <span class="st">"sample"</span>, <span class="st">"cruise"</span>, <span class="st">"taxon"</span>,</span>
-<span id="cb28-191"><a href="#cb28-191" aria-hidden="true" tabindex="-1"></a>                         <span class="st">"measurement_type"</span>)), supp)</span>
-<span id="cb28-192"><a href="#cb28-192" aria-hidden="true" tabindex="-1"></a>fetch_local <span class="ot">&lt;-</span> <span class="cf">function</span>(src) {</span>
-<span id="cb28-193"><a href="#cb28-193" aria-hidden="true" tabindex="-1"></a>  paths <span class="ot">&lt;-</span> <span class="fu">file.path</span>(OBJ_CACHE, src<span class="sc">$</span>local_paths)</span>
-<span id="cb28-194"><a href="#cb28-194" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(paths)) {</span>
-<span id="cb28-195"><a href="#cb28-195" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">file.exists</span>(paths[i])) <span class="cf">next</span></span>
-<span id="cb28-196"><a href="#cb28-196" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dir.create</span>(<span class="fu">dirname</span>(paths[i]), <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb28-197"><a href="#cb28-197" aria-hidden="true" tabindex="-1"></a>    part <span class="ot">&lt;-</span> <span class="fu">paste0</span>(paths[i], <span class="st">".part"</span>)</span>
-<span id="cb28-198"><a href="#cb28-198" aria-hidden="true" tabindex="-1"></a>    curl<span class="sc">::</span><span class="fu">curl_download</span>(src<span class="sc">$</span>urls[i], part, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb28-199"><a href="#cb28-199" aria-hidden="true" tabindex="-1"></a>    <span class="fu">file.rename</span>(part, paths[i])</span>
-<span id="cb28-200"><a href="#cb28-200" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb28-201"><a href="#cb28-201" aria-hidden="true" tabindex="-1"></a>  paths</span>
-<span id="cb28-202"><a href="#cb28-202" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-203"><a href="#cb28-203" aria-hidden="true" tabindex="-1"></a>rp <span class="ot">&lt;-</span> <span class="cf">function</span>(tb) {</span>
-<span id="cb28-204"><a href="#cb28-204" aria-hidden="true" tabindex="-1"></a>  src <span class="ot">&lt;-</span> calcofi4r<span class="sc">::</span><span class="fu">cc_release_sources</span>(catalog, tb, <span class="at">base_https =</span> BASE_HTTPS)</span>
-<span id="cb28-205"><a href="#cb28-205" aria-hidden="true" tabindex="-1"></a>  calcofi4r<span class="sc">::</span><span class="fu">cc_read_parquet_sql</span>(src, <span class="at">paths =</span> <span class="fu">fetch_local</span>(src))</span>
-<span id="cb28-206"><a href="#cb28-206" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-207"><a href="#cb28-207" aria-hidden="true" tabindex="-1"></a>t0 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb28-208"><a href="#cb28-208" aria-hidden="true" tabindex="-1"></a>from_sql <span class="ot">&lt;-</span> <span class="fu">setNames</span>(<span class="fu">vapply</span>(want, <span class="cf">function</span>(tb) {</span>
-<span id="cb28-209"><a href="#cb28-209" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (tb <span class="sc">%in%</span> <span class="fu">names</span>(views)) <span class="fu">paste0</span>(<span class="st">"("</span>, calcofi4r<span class="sc">::</span><span class="fu">cc_view_sql</span>(catalog, tb, rp), <span class="st">")"</span>) <span class="cf">else</span></span>
-<span id="cb28-210"><a href="#cb28-210" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(<span class="fu">cat_entry</span>(tb))) <span class="fu">rp</span>(tb) <span class="cf">else</span> <span class="cn">NA_character_</span></span>
-<span id="cb28-211"><a href="#cb28-211" aria-hidden="true" tabindex="-1"></a>}, <span class="st">""</span>), want)</span>
-<span id="cb28-212"><a href="#cb28-212" aria-hidden="true" tabindex="-1"></a>from_sql <span class="ot">&lt;-</span> from_sql[<span class="sc">!</span><span class="fu">is.na</span>(from_sql)]</span>
-<span id="cb28-213"><a href="#cb28-213" aria-hidden="true" tabindex="-1"></a>table_columns <span class="ot">&lt;-</span> <span class="fu">lapply</span>(from_sql, <span class="cf">function</span>(f) <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(<span class="st">"DESCRIBE SELECT * FROM {f}"</span>))<span class="sc">$</span>column_name)</span>
-<span id="cb28-214"><a href="#cb28-214" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{length(from_sql)} tables resolved and cached in {round(difftime(Sys.time(), t0, units = 'secs'))} s "</span>,</span>
-<span id="cb28-215"><a href="#cb28-215" aria-hidden="true" tabindex="-1"></a>         <span class="st">"({round(sum(file.size(list.files(OBJ_CACHE, recursive = TRUE, full.names = TRUE))) / 1e6)} MB in the object cache)"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-216"><a href="#cb28-216" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-217"><a href="#cb28-217" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-218"><a href="#cb28-218" aria-hidden="true" tabindex="-1"></a><span class="fu">## The plan: every dataset, before anything is written</span></span>
-<span id="cb28-219"><a href="#cb28-219" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-222"><a href="#cb28-222" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-223"><a href="#cb28-223" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: plan</span></span>
-<span id="cb28-224"><a href="#cb28-224" aria-hidden="true" tabindex="-1"></a>plans <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="fu">setNames</span>(keys, keys), <span class="cf">function</span>(k)</span>
-<span id="cb28-225"><a href="#cb28-225" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bundle_plan</span>(records[[k]], table_columns, <span class="at">supplemental =</span> supp, <span class="at">supplemental_rows =</span> supp_rows))</span>
-<span id="cb28-226"><a href="#cb28-226" aria-hidden="true" tabindex="-1"></a>plan_tbl <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(<span class="fu">names</span>(plans), <span class="cf">function</span>(k) plans[[k]] <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">dataset_key =</span> k, <span class="at">.before =</span> <span class="dv">1</span>)))</span>
-<span id="cb28-227"><a href="#cb28-227" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(plan_tbl, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"plan.csv"</span>), <span class="at">na =</span> <span class="st">""</span>)</span>
-<span id="cb28-228"><a href="#cb28-228" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(plan_tbl <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>included <span class="sc">|</span> source <span class="sc">==</span> <span class="st">"record"</span>) <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, table, rule, link, reason),</span>
-<span id="cb28-229"><a href="#cb28-229" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"tables each dataset names (companions sample/cruise/taxon/measurement_type are added where reached); {RELEASE_VERSION}"</span>))</span>
-<span id="cb28-230"><a href="#cb28-230" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-231"><a href="#cb28-231" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-232"><a href="#cb28-232" aria-hidden="true" tabindex="-1"></a><span class="fu">## Build, or reuse what did not change</span></span>
-<span id="cb28-233"><a href="#cb28-233" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-236"><a href="#cb28-236" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-237"><a href="#cb28-237" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: build</span></span>
-<span id="cb28-238"><a href="#cb28-238" aria-hidden="true" tabindex="-1"></a><span class="co">#| results: asis</span></span>
-<span id="cb28-239"><a href="#cb28-239" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-240"><a href="#cb28-240" aria-hidden="true" tabindex="-1"></a>read_prior <span class="ot">&lt;-</span> <span class="cf">function</span>() {</span>
-<span id="cb28-241"><a href="#cb28-241" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest.json"</span>)</span>
-<span id="cb28-242"><a href="#cb28-242" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(p)) <span class="fu">return</span>(<span class="fu">list</span>())</span>
-<span id="cb28-243"><a href="#cb28-243" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(<span class="fu">read_j</span>(p), <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
-<span id="cb28-244"><a href="#cb28-244" aria-hidden="true" tabindex="-1"></a>  <span class="fu">setNames</span>(m<span class="sc">$</span>datasets <span class="sc">%||%</span> <span class="fu">list</span>(), <span class="fu">vapply</span>(m<span class="sc">$</span>datasets <span class="sc">%||%</span> <span class="fu">list</span>(), <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"dataset_key"</span>))</span>
-<span id="cb28-245"><a href="#cb28-245" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-246"><a href="#cb28-246" aria-hidden="true" tabindex="-1"></a>prior_all  <span class="ot">&lt;-</span> <span class="fu">read_prior</span>()</span>
-<span id="cb28-247"><a href="#cb28-247" aria-hidden="true" tabindex="-1"></a>code_parts <span class="ot">&lt;-</span> <span class="fu">publish_code_parts</span>(CODE_FILES)</span>
-<span id="cb28-248"><a href="#cb28-248" aria-hidden="true" tabindex="-1"></a>cols_meta  <span class="ot">&lt;-</span> meta<span class="sc">$</span>columns <span class="sc">%||%</span> <span class="fu">list</span>()</span>
-<span id="cb28-249"><a href="#cb28-249" aria-hidden="true" tabindex="-1"></a>tbls_meta  <span class="ot">&lt;-</span> meta<span class="sc">$</span>tables <span class="sc">%||%</span> <span class="fu">list</span>()</span>
-<span id="cb28-250"><a href="#cb28-250" aria-hidden="true" tabindex="-1"></a>entries <span class="ot">&lt;-</span> <span class="fu">list</span>(); runs <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
-<span id="cb28-251"><a href="#cb28-251" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-252"><a href="#cb28-252" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> keys) {</span>
-<span id="cb28-253"><a href="#cb28-253" aria-hidden="true" tabindex="-1"></a>  t0   <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb28-254"><a href="#cb28-254" aria-hidden="true" tabindex="-1"></a>  rec  <span class="ot">&lt;-</span> records[[k]]</span>
-<span id="cb28-255"><a href="#cb28-255" aria-hidden="true" tabindex="-1"></a>  plan <span class="ot">&lt;-</span> plans[[k]]</span>
-<span id="cb28-256"><a href="#cb28-256" aria-hidden="true" tabindex="-1"></a>  built <span class="ot">&lt;-</span> <span class="fu">bundle_build_tables</span>(con, plan, k, from_sql)</span>
-<span id="cb28-257"><a href="#cb28-257" aria-hidden="true" tabindex="-1"></a>  fp <span class="ot">&lt;-</span> <span class="fu">publish_fingerprint</span>(</span>
-<span id="cb28-258"><a href="#cb28-258" aria-hidden="true" tabindex="-1"></a>    <span class="at">data     =</span> <span class="fu">bundle_table_signatures</span>(con, built<span class="sc">$</span>table),</span>
-<span id="cb28-259"><a href="#cb28-259" aria-hidden="true" tabindex="-1"></a>    <span class="at">metadata =</span> <span class="fu">list</span>(</span>
-<span id="cb28-260"><a href="#cb28-260" aria-hidden="true" tabindex="-1"></a>      <span class="at">record  =</span> <span class="fu">publish_record_digest</span>(rec),</span>
-<span id="cb28-261"><a href="#cb28-261" aria-hidden="true" tabindex="-1"></a>      <span class="at">columns =</span> cols_meta[<span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">..*$"</span>, <span class="st">""</span>, <span class="fu">names</span>(cols_meta)) <span class="sc">%in%</span> built<span class="sc">$</span>table],</span>
-<span id="cb28-262"><a href="#cb28-262" aria-hidden="true" tabindex="-1"></a>      <span class="at">tables  =</span> tbls_meta[<span class="fu">intersect</span>(built<span class="sc">$</span>table, <span class="fu">names</span>(tbls_meta))],</span>
-<span id="cb28-263"><a href="#cb28-263" aria-hidden="true" tabindex="-1"></a>      <span class="at">plan    =</span> plan[, <span class="fu">c</span>(<span class="st">"table"</span>, <span class="st">"included"</span>, <span class="st">"rule"</span>, <span class="st">"link"</span>, <span class="st">"reason"</span>)],</span>
-<span id="cb28-264"><a href="#cb28-264" aria-hidden="true" tabindex="-1"></a>      <span class="at">built   =</span> built[, <span class="fu">c</span>(<span class="st">"table"</span>, <span class="st">"dropped"</span>, <span class="st">"added"</span>)]),</span>
-<span id="cb28-265"><a href="#cb28-265" aria-hidden="true" tabindex="-1"></a>    <span class="at">code     =</span> code_parts)</span>
-<span id="cb28-266"><a href="#cb28-266" aria-hidden="true" tabindex="-1"></a>  prior <span class="ot">&lt;-</span> prior_all[[k]]</span>
-<span id="cb28-267"><a href="#cb28-267" aria-hidden="true" tabindex="-1"></a>  files <span class="ot">&lt;-</span> <span class="fu">vapply</span>(<span class="fu">Filter</span>(<span class="cf">function</span>(b) <span class="fu">isTRUE</span>(b<span class="sc">$</span>written), prior<span class="sc">$</span>bundles <span class="sc">%||%</span> <span class="fu">list</span>()), <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"file"</span>)</span>
-<span id="cb28-268"><a href="#cb28-268" aria-hidden="true" tabindex="-1"></a>  dec <span class="ot">&lt;-</span> <span class="fu">publish_decide</span>(fp, prior<span class="sc">$</span>input_fingerprint, <span class="fu">file.path</span>(STAGE_DIR, k, files))</span>
-<span id="cb28-269"><a href="#cb28-269" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (dec<span class="sc">$</span>action <span class="sc">==</span> <span class="st">"reuse"</span>) {</span>
-<span id="cb28-270"><a href="#cb28-270" aria-hidden="true" tabindex="-1"></a>    e <span class="ot">&lt;-</span> prior</span>
-<span id="cb28-271"><a href="#cb28-271" aria-hidden="true" tabindex="-1"></a>    e<span class="sc">$</span>checked_version <span class="ot">&lt;-</span> RELEASE_VERSION</span>
-<span id="cb28-272"><a href="#cb28-272" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- `{k}`: unchanged since {e$version} — reused ({length(files)} zip(s))"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-273"><a href="#cb28-273" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
-<span id="cb28-274"><a href="#cb28-274" aria-hidden="true" tabindex="-1"></a>    w <span class="ot">&lt;-</span> <span class="fu">write_bundle</span>(con, rec, release, built, plan, <span class="fu">file.path</span>(STAGE_DIR, k),</span>
-<span id="cb28-275"><a href="#cb28-275" aria-hidden="true" tabindex="-1"></a>                      <span class="at">meta_columns =</span> cols_meta, <span class="at">meta_tables =</span> tbls_meta, <span class="at">licenses_dir =</span> LIC_DIR)</span>
-<span id="cb28-276"><a href="#cb28-276" aria-hidden="true" tabindex="-1"></a>    lic <span class="ot">&lt;-</span> <span class="fu">bundle_license</span>(rec, LIC_DIR); cit <span class="ot">&lt;-</span> <span class="fu">bundle_citation</span>(rec, release)</span>
-<span id="cb28-277"><a href="#cb28-277" aria-hidden="true" tabindex="-1"></a>    e <span class="ot">&lt;-</span> <span class="fu">bundle_manifest_entry</span>(rec, RELEASE_VERSION, release<span class="sc">$</span>release_date, RELEASE_VERSION, fp, built, plan, w,</span>
-<span id="cb28-278"><a href="#cb28-278" aria-hidden="true" tabindex="-1"></a>                               <span class="at">license_kind =</span> lic<span class="sc">$</span>kind, <span class="at">has_provider_citation =</span> cit<span class="sc">$</span>has_provider_citation)</span>
-<span id="cb28-279"><a href="#cb28-279" aria-hidden="true" tabindex="-1"></a>    <span class="co"># a superseded build's zips go; it is reproducible from its frozen release</span></span>
-<span id="cb28-280"><a href="#cb28-280" aria-hidden="true" tabindex="-1"></a>    old <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(<span class="fu">list.files</span>(<span class="fu">file.path</span>(STAGE_DIR, k), <span class="at">pattern =</span> <span class="st">"</span><span class="sc">\\</span><span class="st">.zip$"</span>), w<span class="sc">$</span>file[w<span class="sc">$</span>written])</span>
-<span id="cb28-281"><a href="#cb28-281" aria-hidden="true" tabindex="-1"></a>    <span class="fu">unlink</span>(<span class="fu">file.path</span>(STAGE_DIR, k, old))</span>
-<span id="cb28-282"><a href="#cb28-282" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- `{k}`: built — {dec$reason}; "</span>,</span>
-<span id="cb28-283"><a href="#cb28-283" aria-hidden="true" tabindex="-1"></a>             <span class="st">"{paste(sprintf('%s %s MB', w$format[w$written], format(round(w$bytes[w$written] / 1e6, 1), nsmall = 1)), collapse = ', ')}"</span>,</span>
-<span id="cb28-284"><a href="#cb28-284" aria-hidden="true" tabindex="-1"></a>             <span class="st">"{if (length(old)) paste0('; removed ', paste(old, collapse = ', ')) else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-285"><a href="#cb28-285" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb28-286"><a href="#cb28-286" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (tb <span class="cf">in</span> built<span class="sc">$</span>table) <span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(<span class="st">'DROP TABLE IF EXISTS "bundle_{tb}"'</span>))</span>
-<span id="cb28-287"><a href="#cb28-287" aria-hidden="true" tabindex="-1"></a>  entries[[k]] <span class="ot">&lt;-</span> e</span>
-<span id="cb28-288"><a href="#cb28-288" aria-hidden="true" tabindex="-1"></a>  runs[[k]] <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">dataset_key =</span> k, <span class="at">action =</span> dec<span class="sc">$</span>action, <span class="at">changed =</span> <span class="fu">paste</span>(dec<span class="sc">$</span>changed, <span class="at">collapse =</span> <span class="st">","</span>),</span>
-<span id="cb28-289"><a href="#cb28-289" aria-hidden="true" tabindex="-1"></a>                      <span class="at">secs =</span> <span class="fu">round</span>(<span class="fu">as.numeric</span>(<span class="fu">difftime</span>(<span class="fu">Sys.time</span>(), t0, <span class="at">units =</span> <span class="st">"secs"</span>))))</span>
-<span id="cb28-290"><a href="#cb28-290" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-291"><a href="#cb28-291" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-292"><a href="#cb28-292" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-293"><a href="#cb28-293" aria-hidden="true" tabindex="-1"></a><span class="fu">## The manifest: what the website reads</span></span>
-<span id="cb28-294"><a href="#cb28-294" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-295"><a href="#cb28-295" aria-hidden="true" tabindex="-1"></a><span class="in">`data/zip/manifest.json`</span> (and the same file beside the zips) is the contract with calcofi.io:</span>
-<span id="cb28-296"><a href="#cb28-296" aria-hidden="true" tabindex="-1"></a>one entry per dataset with the release its bundles were built from and last confirmed against,</span>
-<span id="cb28-297"><a href="#cb28-297" aria-hidden="true" tabindex="-1"></a>the licence kind, whether the provider gave a citation, every table's rows, what was left out,</span>
-<span id="cb28-298"><a href="#cb28-298" aria-hidden="true" tabindex="-1"></a>and per format either the file (<span class="in">`url`</span>, <span class="in">`bytes`</span>, <span class="in">`sha256`</span>, <span class="in">`excel_openable`</span>) or, for a format not</span>
-<span id="cb28-299"><a href="#cb28-299" aria-hidden="true" tabindex="-1"></a>offered, the reason in plain words. It carries no clock time, so an unchanged run rewrites it</span>
-<span id="cb28-300"><a href="#cb28-300" aria-hidden="true" tabindex="-1"></a>byte for byte. <span class="in">`manifest.csv`</span> is the same per dataset × format, with whether the bucket already</span>
-<span id="cb28-301"><a href="#cb28-301" aria-hidden="true" tabindex="-1"></a>holds those bytes.</span>
-<span id="cb28-302"><a href="#cb28-302" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-305"><a href="#cb28-305" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-306"><a href="#cb28-306" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: manifest</span></span>
-<span id="cb28-307"><a href="#cb28-307" aria-hidden="true" tabindex="-1"></a>manifest <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">schema_version =</span> <span class="st">"1.0"</span>, <span class="at">generated_by =</span> <span class="st">"publish_to-zip.qmd"</span>,</span>
-<span id="cb28-308"><a href="#cb28-308" aria-hidden="true" tabindex="-1"></a>                 <span class="at">release =</span> RELEASE_VERSION, <span class="at">base_url =</span> CC_BUNDLE_BASE_URL,</span>
-<span id="cb28-309"><a href="#cb28-309" aria-hidden="true" tabindex="-1"></a>                 <span class="at">datasets =</span> <span class="fu">unname</span>(entries[<span class="fu">sort</span>(<span class="fu">names</span>(entries))]))</span>
-<span id="cb28-310"><a href="#cb28-310" aria-hidden="true" tabindex="-1"></a>man_json <span class="ot">&lt;-</span> jsonlite<span class="sc">::</span><span class="fu">toJSON</span>(manifest, <span class="at">auto_unbox =</span> <span class="cn">TRUE</span>, <span class="at">pretty =</span> <span class="cn">TRUE</span>, <span class="at">null =</span> <span class="st">"null"</span>, <span class="at">na =</span> <span class="st">"null"</span>, <span class="at">digits =</span> <span class="cn">NA</span>)</span>
-<span id="cb28-311"><a href="#cb28-311" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(man_json, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest.json"</span>))</span>
-<span id="cb28-312"><a href="#cb28-312" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(man_json, <span class="fu">file.path</span>(STAGE_DIR, <span class="st">"manifest.json"</span>))</span>
-<span id="cb28-313"><a href="#cb28-313" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-314"><a href="#cb28-314" aria-hidden="true" tabindex="-1"></a><span class="co"># what the bucket holds now, for the upload status</span></span>
-<span id="cb28-315"><a href="#cb28-315" aria-hidden="true" tabindex="-1"></a>remote <span class="ot">&lt;-</span> <span class="cf">if</span> (STAGING) <span class="cn">NULL</span> <span class="cf">else</span> <span class="fu">fetch_bundle_manifest</span>()</span>
-<span id="cb28-316"><a href="#cb28-316" aria-hidden="true" tabindex="-1"></a>remote_of <span class="ot">&lt;-</span> <span class="cf">function</span>(k, f) {</span>
-<span id="cb28-317"><a href="#cb28-317" aria-hidden="true" tabindex="-1"></a>  e <span class="ot">&lt;-</span> <span class="fu">Filter</span>(<span class="cf">function</span>(x) <span class="fu">identical</span>(x<span class="sc">$</span>dataset_key, k), remote<span class="sc">$</span>datasets <span class="sc">%||%</span> <span class="fu">list</span>())</span>
-<span id="cb28-318"><a href="#cb28-318" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">length</span>(e)) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">sha256 =</span> <span class="cn">NA_character_</span>, <span class="at">version =</span> <span class="cn">NA_character_</span>))</span>
-<span id="cb28-319"><a href="#cb28-319" aria-hidden="true" tabindex="-1"></a>  b <span class="ot">&lt;-</span> <span class="fu">Filter</span>(<span class="cf">function</span>(x) <span class="fu">identical</span>(x<span class="sc">$</span>format, f), e[[<span class="dv">1</span>]]<span class="sc">$</span>bundles <span class="sc">%||%</span> <span class="fu">list</span>())</span>
-<span id="cb28-320"><a href="#cb28-320" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">sha256 =</span> <span class="cf">if</span> (<span class="fu">length</span>(b)) b[[<span class="dv">1</span>]]<span class="sc">$</span>sha256 <span class="sc">%||%</span> <span class="cn">NA_character_</span> <span class="cf">else</span> <span class="cn">NA_character_</span>, <span class="at">version =</span> e[[<span class="dv">1</span>]]<span class="sc">$</span>version)</span>
-<span id="cb28-321"><a href="#cb28-321" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-322"><a href="#cb28-322" aria-hidden="true" tabindex="-1"></a>man_tbl <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(entries, <span class="cf">function</span>(e) <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(e<span class="sc">$</span>bundles, <span class="cf">function</span>(b) {</span>
-<span id="cb28-323"><a href="#cb28-323" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> <span class="fu">remote_of</span>(e<span class="sc">$</span>dataset_key, b<span class="sc">$</span>format)</span>
-<span id="cb28-324"><a href="#cb28-324" aria-hidden="true" tabindex="-1"></a>  main <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(e<span class="sc">$</span>tables)) e<span class="sc">$</span>tables[[<span class="dv">1</span>]] <span class="cf">else</span> <span class="fu">list</span>(<span class="at">table =</span> <span class="cn">NA</span>, <span class="at">rows =</span> <span class="cn">NA</span>)</span>
-<span id="cb28-325"><a href="#cb28-325" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">dataset_key =</span> e<span class="sc">$</span>dataset_key, <span class="at">format =</span> b<span class="sc">$</span>format, <span class="at">written =</span> <span class="fu">isTRUE</span>(b<span class="sc">$</span>written),</span>
-<span id="cb28-326"><a href="#cb28-326" aria-hidden="true" tabindex="-1"></a>         <span class="at">version =</span> e<span class="sc">$</span>version, <span class="at">checked_version =</span> e<span class="sc">$</span>checked_version,</span>
-<span id="cb28-327"><a href="#cb28-327" aria-hidden="true" tabindex="-1"></a>         <span class="at">action =</span> runs[[e<span class="sc">$</span>dataset_key]]<span class="sc">$</span>action, <span class="at">main_table =</span> main<span class="sc">$</span>table, <span class="at">main_rows =</span> main<span class="sc">$</span>rows,</span>
-<span id="cb28-328"><a href="#cb28-328" aria-hidden="true" tabindex="-1"></a>         <span class="at">file =</span> b<span class="sc">$</span>file <span class="sc">%||%</span> <span class="cn">NA_character_</span>, <span class="at">bytes =</span> b<span class="sc">$</span>bytes <span class="sc">%||%</span> <span class="cn">NA_real_</span>, <span class="at">sha256 =</span> b<span class="sc">$</span>sha256 <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
-<span id="cb28-329"><a href="#cb28-329" aria-hidden="true" tabindex="-1"></a>         <span class="at">excel_openable =</span> <span class="fu">isTRUE</span>(b<span class="sc">$</span>excel_openable), <span class="at">reason =</span> b<span class="sc">$</span>reason <span class="sc">%||%</span> <span class="st">""</span>,</span>
-<span id="cb28-330"><a href="#cb28-330" aria-hidden="true" tabindex="-1"></a>         <span class="at">license_kind =</span> e<span class="sc">$</span>license_kind, <span class="at">uploaded_hash =</span> r<span class="sc">$</span>sha256, <span class="at">uploaded_version =</span> r<span class="sc">$</span>version)</span>
-<span id="cb28-331"><a href="#cb28-331" aria-hidden="true" tabindex="-1"></a>})))) <span class="sc">|&gt;</span></span>
-<span id="cb28-332"><a href="#cb28-332" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="fu">publish_upload_status</span>(<span class="fu">ifelse</span>(written, sha256, <span class="cn">NA_character_</span>), uploaded_hash, uploaded_version))</span>
-<span id="cb28-333"><a href="#cb28-333" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(man_tbl, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest.csv"</span>), <span class="at">na =</span> <span class="st">""</span>)</span>
-<span id="cb28-334"><a href="#cb28-334" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(man_tbl <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">MB =</span> <span class="fu">round</span>(bytes <span class="sc">/</span> <span class="fl">1e6</span>, <span class="dv">1</span>)) <span class="sc">|&gt;</span></span>
-<span id="cb28-335"><a href="#cb28-335" aria-hidden="true" tabindex="-1"></a>        <span class="fu">select</span>(dataset_key, format, written, MB, main_table, main_rows, excel_openable, version, action, upload_status),</span>
-<span id="cb28-336"><a href="#cb28-336" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"data/zip/manifest.csv — {sum(man_tbl$written)} zip(s) for {length(entries)} dataset(s)"</span>))</span>
-<span id="cb28-337"><a href="#cb28-337" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-338"><a href="#cb28-338" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-341"><a href="#cb28-341" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-342"><a href="#cb28-342" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: skipped</span></span>
-<span id="cb28-343"><a href="#cb28-343" aria-hidden="true" tabindex="-1"></a>sk <span class="ot">&lt;-</span> man_tbl <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>written)</span>
-<span id="cb28-344"><a href="#cb28-344" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(sk)) <span class="fu">kable</span>(sk <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, format, reason), <span class="at">caption =</span> <span class="st">"formats not offered, and why"</span>) <span class="cf">else</span></span>
-<span id="cb28-345"><a href="#cb28-345" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"every format was offered for every dataset</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-346"><a href="#cb28-346" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-347"><a href="#cb28-347" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-348"><a href="#cb28-348" aria-hidden="true" tabindex="-1"></a><span class="fu">## Check the zips</span></span>
-<span id="cb28-349"><a href="#cb28-349" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-350"><a href="#cb28-350" aria-hidden="true" tabindex="-1"></a>For every bundle built in this run: each zip opens, holds one folder named like it with the five</span>
-<span id="cb28-351"><a href="#cb28-351" aria-hidden="true" tabindex="-1"></a>documents and one data file per table, and the observations it carries are the count the</span>
-<span id="cb28-352"><a href="#cb28-352" aria-hidden="true" tabindex="-1"></a>release's own record measured for the dataset (<span class="in">`coverage.n_obs`</span>), an independent tally.</span>
-<span id="cb28-353"><a href="#cb28-353" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-356"><a href="#cb28-356" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-357"><a href="#cb28-357" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: verify</span></span>
-<span id="cb28-358"><a href="#cb28-358" aria-hidden="true" tabindex="-1"></a>chk <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(entries, <span class="cf">function</span>(e) {</span>
-<span id="cb28-359"><a href="#cb28-359" aria-hidden="true" tabindex="-1"></a>  k <span class="ot">&lt;-</span> e<span class="sc">$</span>dataset_key</span>
-<span id="cb28-360"><a href="#cb28-360" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (runs[[k]]<span class="sc">$</span>action <span class="sc">!=</span> <span class="st">"build"</span>) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
-<span id="cb28-361"><a href="#cb28-361" aria-hidden="true" tabindex="-1"></a>  n_obs <span class="ot">&lt;-</span> records[[k]]<span class="sc">$</span>coverage<span class="sc">$</span>n_obs <span class="sc">%||%</span> <span class="cn">NA</span></span>
-<span id="cb28-362"><a href="#cb28-362" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(<span class="fu">Filter</span>(<span class="cf">function</span>(b) <span class="fu">isTRUE</span>(b<span class="sc">$</span>written), e<span class="sc">$</span>bundles), <span class="cf">function</span>(b) {</span>
-<span id="cb28-363"><a href="#cb28-363" aria-hidden="true" tabindex="-1"></a>    zl <span class="ot">&lt;-</span> zip<span class="sc">::</span><span class="fu">zip_list</span>(<span class="fu">file.path</span>(STAGE_DIR, k, b<span class="sc">$</span>file))</span>
-<span id="cb28-364"><a href="#cb28-364" aria-hidden="true" tabindex="-1"></a>    stem <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.zip$"</span>, <span class="st">""</span>, b<span class="sc">$</span>file)</span>
-<span id="cb28-365"><a href="#cb28-365" aria-hidden="true" tabindex="-1"></a>    docs <span class="ot">&lt;-</span> <span class="fu">paste0</span>(stem, <span class="st">"/"</span>, <span class="fu">c</span>(<span class="st">"README.md"</span>, <span class="st">"CITATION.md"</span>, <span class="st">"CITATION.bib"</span>, <span class="st">"LICENSE.txt"</span>, <span class="st">"columns.csv"</span>))</span>
-<span id="cb28-366"><a href="#cb28-366" aria-hidden="true" tabindex="-1"></a>    data_files <span class="ot">&lt;-</span> <span class="cf">if</span> (b<span class="sc">$</span>format <span class="sc">==</span> <span class="st">"xlsx"</span>) <span class="fu">paste0</span>(stem, <span class="st">"/"</span>, stem, <span class="st">".xlsx"</span>) <span class="cf">else</span></span>
-<span id="cb28-367"><a href="#cb28-367" aria-hidden="true" tabindex="-1"></a>      <span class="fu">paste0</span>(stem, <span class="st">"/"</span>, <span class="fu">vapply</span>(e<span class="sc">$</span>tables, <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"table"</span>), <span class="st">"."</span>, b<span class="sc">$</span>format)</span>
-<span id="cb28-368"><a href="#cb28-368" aria-hidden="true" tabindex="-1"></a>    obs_rows <span class="ot">&lt;-</span> b<span class="sc">$</span>rows<span class="sc">$</span>obs <span class="sc">%||%</span> <span class="dv">0</span></span>
-<span id="cb28-369"><a href="#cb28-369" aria-hidden="true" tabindex="-1"></a>    <span class="fu">tibble</span>(<span class="at">dataset_key =</span> k, <span class="at">format =</span> b<span class="sc">$</span>format, <span class="at">members =</span> <span class="fu">nrow</span>(zl),</span>
-<span id="cb28-370"><a href="#cb28-370" aria-hidden="true" tabindex="-1"></a>           <span class="at">docs_ok =</span> <span class="fu">all</span>(docs <span class="sc">%in%</span> zl<span class="sc">$</span>filename), <span class="at">data_ok =</span> <span class="fu">all</span>(data_files <span class="sc">%in%</span> zl<span class="sc">$</span>filename),</span>
-<span id="cb28-371"><a href="#cb28-371" aria-hidden="true" tabindex="-1"></a>           <span class="at">one_folder =</span> <span class="fu">all</span>(<span class="fu">startsWith</span>(zl<span class="sc">$</span>filename, <span class="fu">paste0</span>(stem, <span class="st">"/"</span>))),</span>
-<span id="cb28-372"><a href="#cb28-372" aria-hidden="true" tabindex="-1"></a>           <span class="at">obs_rows =</span> obs_rows, <span class="at">record_n_obs =</span> n_obs,</span>
-<span id="cb28-373"><a href="#cb28-373" aria-hidden="true" tabindex="-1"></a>           <span class="at">obs_ok =</span> <span class="fu">is.na</span>(n_obs) <span class="sc">||</span> <span class="fu">identical</span>(<span class="fu">as.numeric</span>(obs_rows), <span class="fu">as.numeric</span>(n_obs)))</span>
-<span id="cb28-374"><a href="#cb28-374" aria-hidden="true" tabindex="-1"></a>  }))</span>
-<span id="cb28-375"><a href="#cb28-375" aria-hidden="true" tabindex="-1"></a>}))</span>
-<span id="cb28-376"><a href="#cb28-376" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(chk)) {</span>
-<span id="cb28-377"><a href="#cb28-377" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(chk, <span class="at">caption =</span> <span class="st">"structure of every zip built in this run"</span>)</span>
-<span id="cb28-378"><a href="#cb28-378" aria-hidden="true" tabindex="-1"></a>  bad <span class="ot">&lt;-</span> chk <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>docs_ok <span class="sc">|</span> <span class="sc">!</span>data_ok <span class="sc">|</span> <span class="sc">!</span>one_folder <span class="sc">|</span> <span class="sc">!</span>obs_ok)</span>
-<span id="cb28-379"><a href="#cb28-379" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(<span class="st">"every bundle must hold its documents, its tables and the release's observation count"</span> <span class="ot">=</span> <span class="fu">nrow</span>(bad) <span class="sc">==</span> <span class="dv">0</span>)</span>
-<span id="cb28-380"><a href="#cb28-380" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> <span class="fu">cat</span>(<span class="st">"no bundle was built in this run (every dataset reused)</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-381"><a href="#cb28-381" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-382"><a href="#cb28-382" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-383"><a href="#cb28-383" aria-hidden="true" tabindex="-1"></a><span class="fu">## Upload (gated)</span></span>
-<span id="cb28-384"><a href="#cb28-384" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-385"><a href="#cb28-385" aria-hidden="true" tabindex="-1"></a>Each zip goes to <span class="in">`gs://calcofi-db/publish/zip/{dataset_key}/{file}`</span> (an unchanged object is not</span>
-<span id="cb28-386"><a href="#cb28-386" aria-hidden="true" tabindex="-1"></a>re-uploaded: <span class="in">`put_gcs_file()`</span> compares md5s), then the manifest, then a superseded version's zips</span>
-<span id="cb28-387"><a href="#cb28-387" aria-hidden="true" tabindex="-1"></a>are removed from the bucket, so a page never links a file that is not there.</span>
-<span id="cb28-388"><a href="#cb28-388" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-391"><a href="#cb28-391" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-392"><a href="#cb28-392" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: upload</span></span>
-<span id="cb28-393"><a href="#cb28-393" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr PUBLISH</span></span>
-<span id="cb28-394"><a href="#cb28-394" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">which</span>(man_tbl<span class="sc">$</span>written <span class="sc">&amp;</span> man_tbl<span class="sc">$</span>needs_upload)) {</span>
-<span id="cb28-395"><a href="#cb28-395" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> man_tbl[i, ]</span>
-<span id="cb28-396"><a href="#cb28-396" aria-hidden="true" tabindex="-1"></a>  <span class="fu">put_gcs_file</span>(<span class="fu">file.path</span>(STAGE_DIR, r<span class="sc">$</span>dataset_key, r<span class="sc">$</span>file), <span class="fu">glue</span>(<span class="st">"{ZIP_GCS}/{r$dataset_key}/{r$file}"</span>),</span>
-<span id="cb28-397"><a href="#cb28-397" aria-hidden="true" tabindex="-1"></a>               <span class="at">content_type =</span> <span class="st">"application/zip"</span>)</span>
-<span id="cb28-398"><a href="#cb28-398" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"uploaded {r$dataset_key}/{r$file}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-399"><a href="#cb28-399" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-400"><a href="#cb28-400" aria-hidden="true" tabindex="-1"></a><span class="fu">put_gcs_file</span>(<span class="fu">file.path</span>(STAGE_DIR, <span class="st">"manifest.json"</span>), <span class="fu">glue</span>(<span class="st">"{ZIP_GCS}/manifest.json"</span>),</span>
-<span id="cb28-401"><a href="#cb28-401" aria-hidden="true" tabindex="-1"></a>             <span class="at">content_type =</span> <span class="st">"application/json"</span>)</span>
-<span id="cb28-402"><a href="#cb28-402" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">names</span>(entries)) {</span>
-<span id="cb28-403"><a href="#cb28-403" aria-hidden="true" tabindex="-1"></a>  keep <span class="ot">&lt;-</span> man_tbl<span class="sc">$</span>file[man_tbl<span class="sc">$</span>dataset_key <span class="sc">==</span> k <span class="sc">&amp;</span> man_tbl<span class="sc">$</span>written]</span>
-<span id="cb28-404"><a href="#cb28-404" aria-hidden="true" tabindex="-1"></a>  have <span class="ot">&lt;-</span> <span class="fu">list_gcs_files</span>(<span class="st">"calcofi-db"</span>, <span class="at">prefix =</span> <span class="fu">glue</span>(<span class="st">"publish/zip/{k}/"</span>))<span class="sc">$</span>name</span>
-<span id="cb28-405"><a href="#cb28-405" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (p <span class="cf">in</span> <span class="fu">setdiff</span>(have[<span class="fu">grepl</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.zip$"</span>, have)], <span class="fu">glue</span>(<span class="st">"publish/zip/{k}/{keep}"</span>))) {</span>
-<span id="cb28-406"><a href="#cb28-406" aria-hidden="true" tabindex="-1"></a>    <span class="fu">delete_gcs_prefix</span>(p, <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>, <span class="at">dry_run =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb28-407"><a href="#cb28-407" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"  removed superseded gs://calcofi-db/{p}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
-<span id="cb28-408"><a href="#cb28-408" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb28-409"><a href="#cb28-409" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb28-410"><a href="#cb28-410" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-411"><a href="#cb28-411" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-414"><a href="#cb28-414" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-415"><a href="#cb28-415" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: upload-skip</span></span>
-<span id="cb28-416"><a href="#cb28-416" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr NO_PUBLISH</span></span>
-<span id="cb28-417"><a href="#cb28-417" aria-hidden="true" tabindex="-1"></a>due <span class="ot">&lt;-</span> man_tbl <span class="sc">|&gt;</span> <span class="fu">filter</span>(written, needs_upload)</span>
-<span id="cb28-418"><a href="#cb28-418" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"CALCOFI_PUBLISH_ZIP is not `true`{if (STAGING) ' (and this is a staging run)' else ''}: nothing uploaded.</span><span class="sc">\n</span><span class="st">"</span>,</span>
-<span id="cb28-419"><a href="#cb28-419" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{nrow(due)} zip(s) ({round(sum(due$bytes) / 1e6)} MB) differ from what {ZIP_GCS}/ holds; "</span>,</span>
-<span id="cb28-420"><a href="#cb28-420" aria-hidden="true" tabindex="-1"></a>         <span class="st">"they are staged at {STAGE_DIR}/.</span><span class="sc">\n</span><span class="st">"</span>))</span>
-<span id="cb28-421"><a href="#cb28-421" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-422"><a href="#cb28-422" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-425"><a href="#cb28-425" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-426"><a href="#cb28-426" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: timings</span></span>
-<span id="cb28-427"><a href="#cb28-427" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(<span class="fu">bind_rows</span>(runs), <span class="at">caption =</span> <span class="st">"per dataset: reuse or build, what changed, seconds"</span>)</span>
-<span id="cb28-428"><a href="#cb28-428" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb28-429"><a href="#cb28-429" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb28-432"><a href="#cb28-432" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb28-433"><a href="#cb28-433" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
-<span id="cb28-434"><a href="#cb28-434" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb28-435"><a href="#cb28-435" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-70"><a href="#cb28-70" aria-hidden="true" tabindex="-1"></a>every table fits an Excel sheet: at most 1,048,575 rows of data below the header row</span>
+<span id="cb28-71"><a href="#cb28-71" aria-hidden="true" tabindex="-1"></a>(<span class="in">`BUNDLE_XLSX_MAX_ROWS`</span>, Excel's own 1,048,576-row limit; no lower cap, by the owner's decision of</span>
+<span id="cb28-72"><a href="#cb28-72" aria-hidden="true" tabindex="-1"></a>2026-11-16); otherwise the manifest says why in plain words, and a CSV too long for a</span>
+<span id="cb28-73"><a href="#cb28-73" aria-hidden="true" tabindex="-1"></a>spreadsheet says so in its README.</span>
+<span id="cb28-74"><a href="#cb28-74" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-75"><a href="#cb28-75" aria-hidden="true" tabindex="-1"></a>**Rebuilt only when the dataset changed.** Every release re-renders every publisher, so each</span>
+<span id="cb28-76"><a href="#cb28-76" aria-hidden="true" tabindex="-1"></a>dataset's bundle carries an input fingerprint (<span class="in">`publish_fingerprint()`</span>): the row signatures of</span>
+<span id="cb28-77"><a href="#cb28-77" aria-hidden="true" tabindex="-1"></a>exactly the tables it writes, so a vocabulary row another dataset added changes nothing here; its</span>
+<span id="cb28-78"><a href="#cb28-78" aria-hidden="true" tabindex="-1"></a>catalog record and the metadata its documents read; and this code. An unchanged fingerprint with</span>
+<span id="cb28-79"><a href="#cb28-79" aria-hidden="true" tabindex="-1"></a>the zips still on disk is reused under the release it was built from (its name keeps that version;</span>
+<span id="cb28-80"><a href="#cb28-80" aria-hidden="true" tabindex="-1"></a><span class="in">`checked_version`</span> records this run). The zips are byte-reproducible (<span class="in">`bundle_zip()`</span>: fixed member</span>
+<span id="cb28-81"><a href="#cb28-81" aria-hidden="true" tabindex="-1"></a>order, timestamp, mode and time zone; the workbook's own timestamp fixed too), so the same rows</span>
+<span id="cb28-82"><a href="#cb28-82" aria-hidden="true" tabindex="-1"></a>always give the same sha256.</span>
+<span id="cb28-83"><a href="#cb28-83" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-84"><a href="#cb28-84" aria-hidden="true" tabindex="-1"></a>**Upload gated, and the website's contract.** Everything is written under</span>
+<span id="cb28-85"><a href="#cb28-85" aria-hidden="true" tabindex="-1"></a><span class="in">`cc_stage_path("publish", "zip")`</span>; nothing leaves the machine unless <span class="in">`CALCOFI_PUBLISH_ZIP=true`</span></span>
+<span id="cb28-86"><a href="#cb28-86" aria-hidden="true" tabindex="-1"></a>(and never in a staging run). The upload puts each zip at</span>
+<span id="cb28-87"><a href="#cb28-87" aria-hidden="true" tabindex="-1"></a><span class="in">`gs://calcofi-db/publish/zip/{dataset_key}/{file}`</span> and the manifest at</span>
+<span id="cb28-88"><a href="#cb28-88" aria-hidden="true" tabindex="-1"></a><span class="in">`gs://calcofi-db/publish/zip/manifest.json`</span>, which calcofi.io reads at build time, and which</span>
+<span id="cb28-89"><a href="#cb28-89" aria-hidden="true" tabindex="-1"></a><span class="in">`release_database.qmd`</span> passes to <span class="in">`build_dataset_catalog(bundles = )`</span> so the next release's</span>
+<span id="cb28-90"><a href="#cb28-90" aria-hidden="true" tabindex="-1"></a><span class="in">`datasets.json`</span> carries a <span class="in">`kind = "bundle"`</span> distribution per file (the newest built, as the</span>
+<span id="cb28-91"><a href="#cb28-91" aria-hidden="true" tabindex="-1"></a>netCDF manifests do).</span>
+<span id="cb28-92"><a href="#cb28-92" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-93"><a href="#cb28-93" aria-hidden="true" tabindex="-1"></a><span class="fu">## Setup</span></span>
+<span id="cb28-94"><a href="#cb28-94" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-97"><a href="#cb28-97" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-98"><a href="#cb28-98" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: setup</span></span>
+<span id="cb28-99"><a href="#cb28-99" aria-hidden="true" tabindex="-1"></a><span class="co">#| message: false</span></span>
+<span id="cb28-100"><a href="#cb28-100" aria-hidden="true" tabindex="-1"></a><span class="co">#| warning: false</span></span>
+<span id="cb28-101"><a href="#cb28-101" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-102"><a href="#cb28-102" aria-hidden="true" tabindex="-1"></a>librarian<span class="sc">::</span><span class="fu">shelf</span>(DBI, duckdb, dplyr, glue, jsonlite, digest, readr, tibble, knitr, here, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb28-103"><a href="#cb28-103" aria-hidden="true" tabindex="-1"></a>here <span class="ot">&lt;-</span> here<span class="sc">::</span>here</span>
+<span id="cb28-104"><a href="#cb28-104" aria-hidden="true" tabindex="-1"></a><span class="fu">options</span>(<span class="at">readr.show_col_types =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb28-105"><a href="#cb28-105" aria-hidden="true" tabindex="-1"></a><span class="co"># the engine package from its sibling checkout, as every publisher loads it; CALCOFI4DB_DIR points a</span></span>
+<span id="cb28-106"><a href="#cb28-106" aria-hidden="true" tabindex="-1"></a><span class="co"># worktree's render at that worktree's calcofi4db</span></span>
+<span id="cb28-107"><a href="#cb28-107" aria-hidden="true" tabindex="-1"></a>PKG_DIR <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI4DB_DIR"</span>, <span class="fu">here</span>(<span class="st">"../calcofi4db"</span>))</span>
+<span id="cb28-108"><a href="#cb28-108" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">load_all</span>(PKG_DIR)</span>
+<span id="cb28-109"><a href="#cb28-109" aria-hidden="true" tabindex="-1"></a><span class="fu">stopifnot</span>(<span class="st">"calcofi4db &gt;= 4.40.0 (bundle_plan) is required"</span> <span class="ot">=</span> <span class="fu">exists</span>(<span class="st">"bundle_plan"</span>))</span>
+<span id="cb28-110"><a href="#cb28-110" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-111"><a href="#cb28-111" aria-hidden="true" tabindex="-1"></a><span class="co"># the promoted release by default; a STAGING run (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases)</span></span>
+<span id="cb28-112"><a href="#cb28-112" aria-hidden="true" tabindex="-1"></a><span class="co"># reads the staging release, writes under data/zip-staging/ and uploads nothing</span></span>
+<span id="cb28-113"><a href="#cb28-113" aria-hidden="true" tabindex="-1"></a>RELEASE_PREFIX <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_PREFIX"</span>, <span class="st">"ducklake/releases"</span>)</span>
+<span id="cb28-114"><a href="#cb28-114" aria-hidden="true" tabindex="-1"></a>STAGING        <span class="ot">&lt;-</span> <span class="fu">grepl</span>(<span class="st">"staging"</span>, RELEASE_PREFIX, <span class="at">fixed =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb28-115"><a href="#cb28-115" aria-hidden="true" tabindex="-1"></a>BASE_HTTPS     <span class="ot">&lt;-</span> <span class="st">"https://storage.googleapis.com/calcofi-db"</span></span>
+<span id="cb28-116"><a href="#cb28-116" aria-hidden="true" tabindex="-1"></a>RELEASE_VERSION <span class="ot">&lt;-</span> <span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_RELEASE_VERSION"</span>, <span class="st">""</span>)</span>
+<span id="cb28-117"><a href="#cb28-117" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">nzchar</span>(RELEASE_VERSION))</span>
+<span id="cb28-118"><a href="#cb28-118" aria-hidden="true" tabindex="-1"></a>  RELEASE_VERSION <span class="ot">&lt;-</span> <span class="fu">trimws</span>(<span class="fu">readLines</span>(<span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"</span>), <span class="at">warn =</span> <span class="cn">FALSE</span>)[<span class="dv">1</span>])</span>
+<span id="cb28-119"><a href="#cb28-119" aria-hidden="true" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">CALCOFI_RELEASE_VERSION =</span> RELEASE_VERSION)   <span class="co"># calcofi4r::cc_catalog() resolves the same one</span></span>
+<span id="cb28-120"><a href="#cb28-120" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-121"><a href="#cb28-121" aria-hidden="true" tabindex="-1"></a><span class="co"># comma-separated dataset_keys to restrict a run while iterating; empty = every public dataset</span></span>
+<span id="cb28-122"><a href="#cb28-122" aria-hidden="true" tabindex="-1"></a>ONLY <span class="ot">&lt;-</span> <span class="fu">Filter</span>(nzchar, <span class="fu">trimws</span>(<span class="fu">strsplit</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_DATASETS"</span>, <span class="st">""</span>), <span class="st">","</span>)[[<span class="dv">1</span>]]))</span>
+<span id="cb28-123"><a href="#cb28-123" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-124"><a href="#cb28-124" aria-hidden="true" tabindex="-1"></a>PUBLISH    <span class="ot">&lt;-</span> <span class="fu">identical</span>(<span class="fu">Sys.getenv</span>(<span class="st">"CALCOFI_PUBLISH_ZIP"</span>), <span class="st">"true"</span>) <span class="sc">&amp;&amp;</span> <span class="sc">!</span>STAGING   <span class="co"># opt-in upload</span></span>
+<span id="cb28-125"><a href="#cb28-125" aria-hidden="true" tabindex="-1"></a>NO_PUBLISH <span class="ot">&lt;-</span> <span class="sc">!</span>PUBLISH</span>
+<span id="cb28-126"><a href="#cb28-126" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-127"><a href="#cb28-127" aria-hidden="true" tabindex="-1"></a><span class="co"># bulk under the stage root, never in the git tree; the small manifests beside the notebook</span></span>
+<span id="cb28-128"><a href="#cb28-128" aria-hidden="true" tabindex="-1"></a>STAGE_DIR <span class="ot">&lt;-</span> <span class="fu">cc_stage_path</span>(<span class="st">"publish"</span>, <span class="cf">if</span> (STAGING) <span class="st">"zip-staging"</span> <span class="cf">else</span> <span class="st">"zip"</span>, <span class="at">create =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb28-129"><a href="#cb28-129" aria-hidden="true" tabindex="-1"></a>OBJ_CACHE <span class="ot">&lt;-</span> <span class="fu">cc_stage_path</span>(<span class="st">"publish"</span>, <span class="st">"objects"</span>, <span class="at">create =</span> <span class="cn">TRUE</span>)   <span class="co"># release objects, content-addressed</span></span>
+<span id="cb28-130"><a href="#cb28-130" aria-hidden="true" tabindex="-1"></a>OUT_DIR   <span class="ot">&lt;-</span> <span class="fu">here</span>(<span class="cf">if</span> (STAGING) <span class="st">"data/zip-staging"</span> <span class="cf">else</span> <span class="st">"data/zip"</span>)</span>
+<span id="cb28-131"><a href="#cb28-131" aria-hidden="true" tabindex="-1"></a><span class="fu">dir.create</span>(OUT_DIR, <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb28-132"><a href="#cb28-132" aria-hidden="true" tabindex="-1"></a>ZIP_GCS   <span class="ot">&lt;-</span> <span class="st">"gs://calcofi-db/publish/zip"</span></span>
+<span id="cb28-133"><a href="#cb28-133" aria-hidden="true" tabindex="-1"></a><span class="co"># the code the bundles are a function of: a change here rebuilds them</span></span>
+<span id="cb28-134"><a href="#cb28-134" aria-hidden="true" tabindex="-1"></a>LIC_DIR    <span class="ot">&lt;-</span> <span class="fu">file.path</span>(PKG_DIR, <span class="st">"inst"</span>, <span class="st">"licenses"</span>)</span>
+<span id="cb28-135"><a href="#cb28-135" aria-hidden="true" tabindex="-1"></a>CODE_FILES <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">here</span>(<span class="st">"publish_to-zip.qmd"</span>), <span class="fu">file.path</span>(PKG_DIR, <span class="st">"R"</span>, <span class="st">"bundle.R"</span>),</span>
+<span id="cb28-136"><a href="#cb28-136" aria-hidden="true" tabindex="-1"></a>                <span class="fu">sort</span>(<span class="fu">list.files</span>(LIC_DIR, <span class="at">full.names =</span> <span class="cn">TRUE</span>)))</span>
+<span id="cb28-137"><a href="#cb28-137" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-138"><a href="#cb28-138" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release prefix : {RELEASE_PREFIX}{if (STAGING) ' (STAGING)' else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-139"><a href="#cb28-139" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release        : {RELEASE_VERSION}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-140"><a href="#cb28-140" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"calcofi4db     : {PKG_DIR} ({as.character(utils::packageVersion('calcofi4db'))})"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-141"><a href="#cb28-141" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"stage (zips)   : {STAGE_DIR}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-142"><a href="#cb28-142" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"manifests      : {OUT_DIR}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-143"><a href="#cb28-143" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"CALCOFI_PUBLISH_ZIP : {PUBLISH} (upload to {ZIP_GCS}/ only when true)"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-144"><a href="#cb28-144" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(ONLY)) <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"restricted to  : {paste(ONLY, collapse = ', ')}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-145"><a href="#cb28-145" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-146"><a href="#cb28-146" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-149"><a href="#cb28-149" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-150"><a href="#cb28-150" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: fetch-release-json</span></span>
+<span id="cb28-151"><a href="#cb28-151" aria-hidden="true" tabindex="-1"></a>rel_url  <span class="ot">&lt;-</span> <span class="cf">function</span>(f) <span class="fu">glue</span>(<span class="st">"{BASE_HTTPS}/{RELEASE_PREFIX}/{RELEASE_VERSION}/{f}"</span>)</span>
+<span id="cb28-152"><a href="#cb28-152" aria-hidden="true" tabindex="-1"></a>read_j   <span class="ot">&lt;-</span> <span class="cf">function</span>(u) jsonlite<span class="sc">::</span><span class="fu">fromJSON</span>(u, <span class="at">simplifyVector =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb28-153"><a href="#cb28-153" aria-hidden="true" tabindex="-1"></a>catalog  <span class="ot">&lt;-</span> calcofi4r<span class="sc">::</span><span class="fu">cc_catalog</span>(RELEASE_VERSION)</span>
+<span id="cb28-154"><a href="#cb28-154" aria-hidden="true" tabindex="-1"></a>ds_json  <span class="ot">&lt;-</span> <span class="fu">read_j</span>(<span class="fu">rel_url</span>(<span class="st">"datasets.json"</span>))</span>
+<span id="cb28-155"><a href="#cb28-155" aria-hidden="true" tabindex="-1"></a>meta     <span class="ot">&lt;-</span> <span class="fu">read_j</span>(<span class="fu">rel_url</span>(<span class="st">"metadata.json"</span>))</span>
+<span id="cb28-156"><a href="#cb28-156" aria-hidden="true" tabindex="-1"></a>release  <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">version =</span> RELEASE_VERSION, <span class="at">release_date =</span> catalog<span class="sc">$</span>release_date <span class="sc">%||%</span> <span class="cn">NA</span>,</span>
+<span id="cb28-157"><a href="#cb28-157" aria-hidden="true" tabindex="-1"></a>                 <span class="at">citation =</span> catalog<span class="sc">$</span>citation <span class="sc">%||%</span> <span class="cn">NA</span>, <span class="at">doi =</span> catalog<span class="sc">$</span>doi <span class="sc">%||%</span> <span class="cn">NA</span>,</span>
+<span id="cb28-158"><a href="#cb28-158" aria-hidden="true" tabindex="-1"></a>                 <span class="at">concept_doi =</span> catalog<span class="sc">$</span>concept_doi <span class="sc">%||%</span> <span class="cn">NA</span>)</span>
+<span id="cb28-159"><a href="#cb28-159" aria-hidden="true" tabindex="-1"></a>records  <span class="ot">&lt;-</span> <span class="fu">setNames</span>(ds_json<span class="sc">$</span>datasets, <span class="fu">vapply</span>(ds_json<span class="sc">$</span>datasets, <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"dataset_key"</span>))</span>
+<span id="cb28-160"><a href="#cb28-160" aria-hidden="true" tabindex="-1"></a>public   <span class="ot">&lt;-</span> <span class="fu">names</span>(records)[<span class="fu">vapply</span>(records, <span class="cf">function</span>(r) <span class="fu">identical</span>(r<span class="sc">$</span>visibility <span class="sc">%||%</span> <span class="st">"public"</span>, <span class="st">"public"</span>), <span class="cn">TRUE</span>)]</span>
+<span id="cb28-161"><a href="#cb28-161" aria-hidden="true" tabindex="-1"></a>keys     <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(ONLY)) <span class="fu">intersect</span>(public, ONLY) <span class="cf">else</span> public</span>
+<span id="cb28-162"><a href="#cb28-162" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">length</span>(ONLY) <span class="sc">&amp;&amp;</span> <span class="fu">length</span>(<span class="fu">setdiff</span>(ONLY, public)))</span>
+<span id="cb28-163"><a href="#cb28-163" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"NOTE requested but not a public dataset of {RELEASE_VERSION}: {paste(setdiff(ONLY, public), collapse = ', ')}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-164"><a href="#cb28-164" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{length(keys)} dataset(s) of {length(records)} in the release; "</span>,</span>
+<span id="cb28-165"><a href="#cb28-165" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{length(ds_json$holdings %||% list())} holding(s) have no release data and get no bundle"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-166"><a href="#cb28-166" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-167"><a href="#cb28-167" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-168"><a href="#cb28-168" aria-hidden="true" tabindex="-1"></a><span class="fu">## Read the release</span></span>
+<span id="cb28-169"><a href="#cb28-169" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-170"><a href="#cb28-170" aria-hidden="true" tabindex="-1"></a>Every table a bundle reads is resolved through the catalog (<span class="in">`calcofi4r::cc_release_sources()`</span>,</span>
+<span id="cb28-171"><a href="#cb28-171" aria-hidden="true" tabindex="-1"></a>never a hand-built path) and its objects copied once into a content-addressed cache under the</span>
+<span id="cb28-172"><a href="#cb28-172" aria-hidden="true" tabindex="-1"></a>stage root, so twenty datasets do not read the same <span class="in">`sample`</span> object over HTTPS twenty times, and</span>
+<span id="cb28-173"><a href="#cb28-173" aria-hidden="true" tabindex="-1"></a>an object unchanged since the previous release is never fetched again. <span class="in">`obs`</span> is the catalog's own</span>
+<span id="cb28-174"><a href="#cb28-174" aria-hidden="true" tabindex="-1"></a>view over <span class="in">`obs_bio`</span> and <span class="in">`obs_env`</span> (<span class="in">`calcofi4r::cc_view_sql()`</span>).</span>
+<span id="cb28-175"><a href="#cb28-175" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-178"><a href="#cb28-178" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-179"><a href="#cb28-179" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: connect</span></span>
+<span id="cb28-180"><a href="#cb28-180" aria-hidden="true" tabindex="-1"></a>con <span class="ot">&lt;-</span> <span class="fu">get_duckdb_con</span>()</span>
+<span id="cb28-181"><a href="#cb28-181" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (s <span class="cf">in</span> <span class="fu">c</span>(<span class="st">"SET enable_progress_bar = false"</span>, <span class="st">"SET preserve_insertion_order = true"</span>))</span>
+<span id="cb28-182"><a href="#cb28-182" aria-hidden="true" tabindex="-1"></a>  <span class="fu">dbExecute</span>(con, s)</span>
+<span id="cb28-183"><a href="#cb28-183" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-184"><a href="#cb28-184" aria-hidden="true" tabindex="-1"></a>cat_tables <span class="ot">&lt;-</span> catalog<span class="sc">$</span>tables</span>
+<span id="cb28-185"><a href="#cb28-185" aria-hidden="true" tabindex="-1"></a>cat_entry  <span class="ot">&lt;-</span> <span class="cf">function</span>(tb) <span class="fu">Find</span>(<span class="cf">function</span>(t) <span class="fu">identical</span>(t<span class="sc">$</span>name, tb), cat_tables)</span>
+<span id="cb28-186"><a href="#cb28-186" aria-hidden="true" tabindex="-1"></a>views      <span class="ot">&lt;-</span> calcofi4r<span class="sc">::</span><span class="fu">cc_catalog_views</span>(catalog)</span>
+<span id="cb28-187"><a href="#cb28-187" aria-hidden="true" tabindex="-1"></a>supp       <span class="ot">&lt;-</span> <span class="fu">vapply</span>(<span class="fu">Filter</span>(<span class="cf">function</span>(t) <span class="fu">isTRUE</span>(t<span class="sc">$</span>supplemental), cat_tables), <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"name"</span>)</span>
+<span id="cb28-188"><a href="#cb28-188" aria-hidden="true" tabindex="-1"></a>supp_rows  <span class="ot">&lt;-</span> <span class="fu">vapply</span>(supp, <span class="cf">function</span>(tb) <span class="fu">as.numeric</span>(<span class="fu">cat_entry</span>(tb)<span class="sc">$</span>rows <span class="sc">%||%</span> <span class="cn">NA</span>), <span class="dv">1</span>)</span>
+<span id="cb28-189"><a href="#cb28-189" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-190"><a href="#cb28-190" aria-hidden="true" tabindex="-1"></a><span class="co"># every table some bundle may read: the records' tables plus the companions, minus supplementals</span></span>
+<span id="cb28-191"><a href="#cb28-191" aria-hidden="true" tabindex="-1"></a>want <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(<span class="fu">unique</span>(<span class="fu">c</span>(<span class="fu">unlist</span>(<span class="fu">lapply</span>(records[keys], <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">"tables"</span>)), <span class="st">"sample"</span>, <span class="st">"cruise"</span>, <span class="st">"taxon"</span>,</span>
+<span id="cb28-192"><a href="#cb28-192" aria-hidden="true" tabindex="-1"></a>                         <span class="st">"measurement_type"</span>)), supp)</span>
+<span id="cb28-193"><a href="#cb28-193" aria-hidden="true" tabindex="-1"></a>fetch_local <span class="ot">&lt;-</span> <span class="cf">function</span>(src) {</span>
+<span id="cb28-194"><a href="#cb28-194" aria-hidden="true" tabindex="-1"></a>  paths <span class="ot">&lt;-</span> <span class="fu">file.path</span>(OBJ_CACHE, src<span class="sc">$</span>local_paths)</span>
+<span id="cb28-195"><a href="#cb28-195" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(paths)) {</span>
+<span id="cb28-196"><a href="#cb28-196" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">file.exists</span>(paths[i])) <span class="cf">next</span></span>
+<span id="cb28-197"><a href="#cb28-197" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dir.create</span>(<span class="fu">dirname</span>(paths[i]), <span class="at">recursive =</span> <span class="cn">TRUE</span>, <span class="at">showWarnings =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb28-198"><a href="#cb28-198" aria-hidden="true" tabindex="-1"></a>    part <span class="ot">&lt;-</span> <span class="fu">paste0</span>(paths[i], <span class="st">".part"</span>)</span>
+<span id="cb28-199"><a href="#cb28-199" aria-hidden="true" tabindex="-1"></a>    curl<span class="sc">::</span><span class="fu">curl_download</span>(src<span class="sc">$</span>urls[i], part, <span class="at">quiet =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb28-200"><a href="#cb28-200" aria-hidden="true" tabindex="-1"></a>    <span class="fu">file.rename</span>(part, paths[i])</span>
+<span id="cb28-201"><a href="#cb28-201" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb28-202"><a href="#cb28-202" aria-hidden="true" tabindex="-1"></a>  paths</span>
+<span id="cb28-203"><a href="#cb28-203" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-204"><a href="#cb28-204" aria-hidden="true" tabindex="-1"></a>rp <span class="ot">&lt;-</span> <span class="cf">function</span>(tb) {</span>
+<span id="cb28-205"><a href="#cb28-205" aria-hidden="true" tabindex="-1"></a>  src <span class="ot">&lt;-</span> calcofi4r<span class="sc">::</span><span class="fu">cc_release_sources</span>(catalog, tb, <span class="at">base_https =</span> BASE_HTTPS)</span>
+<span id="cb28-206"><a href="#cb28-206" aria-hidden="true" tabindex="-1"></a>  calcofi4r<span class="sc">::</span><span class="fu">cc_read_parquet_sql</span>(src, <span class="at">paths =</span> <span class="fu">fetch_local</span>(src))</span>
+<span id="cb28-207"><a href="#cb28-207" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-208"><a href="#cb28-208" aria-hidden="true" tabindex="-1"></a>t0 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb28-209"><a href="#cb28-209" aria-hidden="true" tabindex="-1"></a>from_sql <span class="ot">&lt;-</span> <span class="fu">setNames</span>(<span class="fu">vapply</span>(want, <span class="cf">function</span>(tb) {</span>
+<span id="cb28-210"><a href="#cb28-210" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (tb <span class="sc">%in%</span> <span class="fu">names</span>(views)) <span class="fu">paste0</span>(<span class="st">"("</span>, calcofi4r<span class="sc">::</span><span class="fu">cc_view_sql</span>(catalog, tb, rp), <span class="st">")"</span>) <span class="cf">else</span></span>
+<span id="cb28-211"><a href="#cb28-211" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(<span class="fu">cat_entry</span>(tb))) <span class="fu">rp</span>(tb) <span class="cf">else</span> <span class="cn">NA_character_</span></span>
+<span id="cb28-212"><a href="#cb28-212" aria-hidden="true" tabindex="-1"></a>}, <span class="st">""</span>), want)</span>
+<span id="cb28-213"><a href="#cb28-213" aria-hidden="true" tabindex="-1"></a>from_sql <span class="ot">&lt;-</span> from_sql[<span class="sc">!</span><span class="fu">is.na</span>(from_sql)]</span>
+<span id="cb28-214"><a href="#cb28-214" aria-hidden="true" tabindex="-1"></a>table_columns <span class="ot">&lt;-</span> <span class="fu">lapply</span>(from_sql, <span class="cf">function</span>(f) <span class="fu">dbGetQuery</span>(con, <span class="fu">glue</span>(<span class="st">"DESCRIBE SELECT * FROM {f}"</span>))<span class="sc">$</span>column_name)</span>
+<span id="cb28-215"><a href="#cb28-215" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"{length(from_sql)} tables resolved and cached in {round(difftime(Sys.time(), t0, units = 'secs'))} s "</span>,</span>
+<span id="cb28-216"><a href="#cb28-216" aria-hidden="true" tabindex="-1"></a>         <span class="st">"({round(sum(file.size(list.files(OBJ_CACHE, recursive = TRUE, full.names = TRUE))) / 1e6)} MB in the object cache)"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-217"><a href="#cb28-217" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-218"><a href="#cb28-218" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-219"><a href="#cb28-219" aria-hidden="true" tabindex="-1"></a><span class="fu">## The plan: every dataset, before anything is written</span></span>
+<span id="cb28-220"><a href="#cb28-220" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-223"><a href="#cb28-223" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-224"><a href="#cb28-224" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: plan</span></span>
+<span id="cb28-225"><a href="#cb28-225" aria-hidden="true" tabindex="-1"></a>plans <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="fu">setNames</span>(keys, keys), <span class="cf">function</span>(k)</span>
+<span id="cb28-226"><a href="#cb28-226" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bundle_plan</span>(records[[k]], table_columns, <span class="at">supplemental =</span> supp, <span class="at">supplemental_rows =</span> supp_rows))</span>
+<span id="cb28-227"><a href="#cb28-227" aria-hidden="true" tabindex="-1"></a>plan_tbl <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(<span class="fu">names</span>(plans), <span class="cf">function</span>(k) plans[[k]] <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">dataset_key =</span> k, <span class="at">.before =</span> <span class="dv">1</span>)))</span>
+<span id="cb28-228"><a href="#cb28-228" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(plan_tbl, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"plan.csv"</span>), <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb28-229"><a href="#cb28-229" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(plan_tbl <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>included <span class="sc">|</span> source <span class="sc">==</span> <span class="st">"record"</span>) <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, table, rule, link, reason),</span>
+<span id="cb28-230"><a href="#cb28-230" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"tables each dataset names (companions sample/cruise/taxon/measurement_type are added where reached); {RELEASE_VERSION}"</span>))</span>
+<span id="cb28-231"><a href="#cb28-231" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-232"><a href="#cb28-232" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-233"><a href="#cb28-233" aria-hidden="true" tabindex="-1"></a><span class="fu">## Build, or reuse what did not change</span></span>
+<span id="cb28-234"><a href="#cb28-234" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-237"><a href="#cb28-237" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-238"><a href="#cb28-238" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: build</span></span>
+<span id="cb28-239"><a href="#cb28-239" aria-hidden="true" tabindex="-1"></a><span class="co">#| results: asis</span></span>
+<span id="cb28-240"><a href="#cb28-240" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-241"><a href="#cb28-241" aria-hidden="true" tabindex="-1"></a>read_prior <span class="ot">&lt;-</span> <span class="cf">function</span>() {</span>
+<span id="cb28-242"><a href="#cb28-242" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest.json"</span>)</span>
+<span id="cb28-243"><a href="#cb28-243" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(p)) <span class="fu">return</span>(<span class="fu">list</span>())</span>
+<span id="cb28-244"><a href="#cb28-244" aria-hidden="true" tabindex="-1"></a>  m <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(<span class="fu">read_j</span>(p), <span class="at">error =</span> <span class="cf">function</span>(e) <span class="cn">NULL</span>)</span>
+<span id="cb28-245"><a href="#cb28-245" aria-hidden="true" tabindex="-1"></a>  <span class="fu">setNames</span>(m<span class="sc">$</span>datasets <span class="sc">%||%</span> <span class="fu">list</span>(), <span class="fu">vapply</span>(m<span class="sc">$</span>datasets <span class="sc">%||%</span> <span class="fu">list</span>(), <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"dataset_key"</span>))</span>
+<span id="cb28-246"><a href="#cb28-246" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-247"><a href="#cb28-247" aria-hidden="true" tabindex="-1"></a>prior_all  <span class="ot">&lt;-</span> <span class="fu">read_prior</span>()</span>
+<span id="cb28-248"><a href="#cb28-248" aria-hidden="true" tabindex="-1"></a>code_parts <span class="ot">&lt;-</span> <span class="fu">publish_code_parts</span>(CODE_FILES)</span>
+<span id="cb28-249"><a href="#cb28-249" aria-hidden="true" tabindex="-1"></a>cols_meta  <span class="ot">&lt;-</span> meta<span class="sc">$</span>columns <span class="sc">%||%</span> <span class="fu">list</span>()</span>
+<span id="cb28-250"><a href="#cb28-250" aria-hidden="true" tabindex="-1"></a>tbls_meta  <span class="ot">&lt;-</span> meta<span class="sc">$</span>tables <span class="sc">%||%</span> <span class="fu">list</span>()</span>
+<span id="cb28-251"><a href="#cb28-251" aria-hidden="true" tabindex="-1"></a>entries <span class="ot">&lt;-</span> <span class="fu">list</span>(); runs <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
+<span id="cb28-252"><a href="#cb28-252" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-253"><a href="#cb28-253" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> keys) {</span>
+<span id="cb28-254"><a href="#cb28-254" aria-hidden="true" tabindex="-1"></a>  t0   <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb28-255"><a href="#cb28-255" aria-hidden="true" tabindex="-1"></a>  rec  <span class="ot">&lt;-</span> records[[k]]</span>
+<span id="cb28-256"><a href="#cb28-256" aria-hidden="true" tabindex="-1"></a>  plan <span class="ot">&lt;-</span> plans[[k]]</span>
+<span id="cb28-257"><a href="#cb28-257" aria-hidden="true" tabindex="-1"></a>  built <span class="ot">&lt;-</span> <span class="fu">bundle_build_tables</span>(con, plan, k, from_sql)</span>
+<span id="cb28-258"><a href="#cb28-258" aria-hidden="true" tabindex="-1"></a>  fp <span class="ot">&lt;-</span> <span class="fu">publish_fingerprint</span>(</span>
+<span id="cb28-259"><a href="#cb28-259" aria-hidden="true" tabindex="-1"></a>    <span class="at">data     =</span> <span class="fu">bundle_table_signatures</span>(con, built<span class="sc">$</span>table),</span>
+<span id="cb28-260"><a href="#cb28-260" aria-hidden="true" tabindex="-1"></a>    <span class="at">metadata =</span> <span class="fu">list</span>(</span>
+<span id="cb28-261"><a href="#cb28-261" aria-hidden="true" tabindex="-1"></a>      <span class="at">record  =</span> <span class="fu">publish_record_digest</span>(rec),</span>
+<span id="cb28-262"><a href="#cb28-262" aria-hidden="true" tabindex="-1"></a>      <span class="at">columns =</span> cols_meta[<span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">..*$"</span>, <span class="st">""</span>, <span class="fu">names</span>(cols_meta)) <span class="sc">%in%</span> built<span class="sc">$</span>table],</span>
+<span id="cb28-263"><a href="#cb28-263" aria-hidden="true" tabindex="-1"></a>      <span class="at">tables  =</span> tbls_meta[<span class="fu">intersect</span>(built<span class="sc">$</span>table, <span class="fu">names</span>(tbls_meta))],</span>
+<span id="cb28-264"><a href="#cb28-264" aria-hidden="true" tabindex="-1"></a>      <span class="at">plan    =</span> plan[, <span class="fu">c</span>(<span class="st">"table"</span>, <span class="st">"included"</span>, <span class="st">"rule"</span>, <span class="st">"link"</span>, <span class="st">"reason"</span>)],</span>
+<span id="cb28-265"><a href="#cb28-265" aria-hidden="true" tabindex="-1"></a>      <span class="at">built   =</span> built[, <span class="fu">c</span>(<span class="st">"table"</span>, <span class="st">"dropped"</span>, <span class="st">"added"</span>)]),</span>
+<span id="cb28-266"><a href="#cb28-266" aria-hidden="true" tabindex="-1"></a>    <span class="at">code     =</span> code_parts)</span>
+<span id="cb28-267"><a href="#cb28-267" aria-hidden="true" tabindex="-1"></a>  prior <span class="ot">&lt;-</span> prior_all[[k]]</span>
+<span id="cb28-268"><a href="#cb28-268" aria-hidden="true" tabindex="-1"></a>  files <span class="ot">&lt;-</span> <span class="fu">vapply</span>(<span class="fu">Filter</span>(<span class="cf">function</span>(b) <span class="fu">isTRUE</span>(b<span class="sc">$</span>written), prior<span class="sc">$</span>bundles <span class="sc">%||%</span> <span class="fu">list</span>()), <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"file"</span>)</span>
+<span id="cb28-269"><a href="#cb28-269" aria-hidden="true" tabindex="-1"></a>  dec <span class="ot">&lt;-</span> <span class="fu">publish_decide</span>(fp, prior<span class="sc">$</span>input_fingerprint, <span class="fu">file.path</span>(STAGE_DIR, k, files))</span>
+<span id="cb28-270"><a href="#cb28-270" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (dec<span class="sc">$</span>action <span class="sc">==</span> <span class="st">"reuse"</span>) {</span>
+<span id="cb28-271"><a href="#cb28-271" aria-hidden="true" tabindex="-1"></a>    e <span class="ot">&lt;-</span> prior</span>
+<span id="cb28-272"><a href="#cb28-272" aria-hidden="true" tabindex="-1"></a>    e<span class="sc">$</span>checked_version <span class="ot">&lt;-</span> RELEASE_VERSION</span>
+<span id="cb28-273"><a href="#cb28-273" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- `{k}`: unchanged since {e$version} — reused ({length(files)} zip(s))"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-274"><a href="#cb28-274" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> {</span>
+<span id="cb28-275"><a href="#cb28-275" aria-hidden="true" tabindex="-1"></a>    w <span class="ot">&lt;-</span> <span class="fu">write_bundle</span>(con, rec, release, built, plan, <span class="fu">file.path</span>(STAGE_DIR, k),</span>
+<span id="cb28-276"><a href="#cb28-276" aria-hidden="true" tabindex="-1"></a>                      <span class="at">meta_columns =</span> cols_meta, <span class="at">meta_tables =</span> tbls_meta, <span class="at">licenses_dir =</span> LIC_DIR)</span>
+<span id="cb28-277"><a href="#cb28-277" aria-hidden="true" tabindex="-1"></a>    lic <span class="ot">&lt;-</span> <span class="fu">bundle_license</span>(rec, LIC_DIR); cit <span class="ot">&lt;-</span> <span class="fu">bundle_citation</span>(rec, release)</span>
+<span id="cb28-278"><a href="#cb28-278" aria-hidden="true" tabindex="-1"></a>    e <span class="ot">&lt;-</span> <span class="fu">bundle_manifest_entry</span>(rec, RELEASE_VERSION, release<span class="sc">$</span>release_date, RELEASE_VERSION, fp, built, plan, w,</span>
+<span id="cb28-279"><a href="#cb28-279" aria-hidden="true" tabindex="-1"></a>                               <span class="at">license_kind =</span> lic<span class="sc">$</span>kind, <span class="at">has_provider_citation =</span> cit<span class="sc">$</span>has_provider_citation)</span>
+<span id="cb28-280"><a href="#cb28-280" aria-hidden="true" tabindex="-1"></a>    <span class="co"># a superseded build's zips go; it is reproducible from its frozen release</span></span>
+<span id="cb28-281"><a href="#cb28-281" aria-hidden="true" tabindex="-1"></a>    old <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(<span class="fu">list.files</span>(<span class="fu">file.path</span>(STAGE_DIR, k), <span class="at">pattern =</span> <span class="st">"</span><span class="sc">\\</span><span class="st">.zip$"</span>), w<span class="sc">$</span>file[w<span class="sc">$</span>written])</span>
+<span id="cb28-282"><a href="#cb28-282" aria-hidden="true" tabindex="-1"></a>    <span class="fu">unlink</span>(<span class="fu">file.path</span>(STAGE_DIR, k, old))</span>
+<span id="cb28-283"><a href="#cb28-283" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"- `{k}`: built — {dec$reason}; "</span>,</span>
+<span id="cb28-284"><a href="#cb28-284" aria-hidden="true" tabindex="-1"></a>             <span class="st">"{paste(sprintf('%s %s MB', w$format[w$written], format(round(w$bytes[w$written] / 1e6, 1), nsmall = 1)), collapse = ', ')}"</span>,</span>
+<span id="cb28-285"><a href="#cb28-285" aria-hidden="true" tabindex="-1"></a>             <span class="st">"{if (length(old)) paste0('; removed ', paste(old, collapse = ', ')) else ''}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-286"><a href="#cb28-286" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb28-287"><a href="#cb28-287" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (tb <span class="cf">in</span> built<span class="sc">$</span>table) <span class="fu">dbExecute</span>(con, <span class="fu">glue</span>(<span class="st">'DROP TABLE IF EXISTS "bundle_{tb}"'</span>))</span>
+<span id="cb28-288"><a href="#cb28-288" aria-hidden="true" tabindex="-1"></a>  entries[[k]] <span class="ot">&lt;-</span> e</span>
+<span id="cb28-289"><a href="#cb28-289" aria-hidden="true" tabindex="-1"></a>  runs[[k]] <span class="ot">&lt;-</span> <span class="fu">tibble</span>(<span class="at">dataset_key =</span> k, <span class="at">action =</span> dec<span class="sc">$</span>action, <span class="at">changed =</span> <span class="fu">paste</span>(dec<span class="sc">$</span>changed, <span class="at">collapse =</span> <span class="st">","</span>),</span>
+<span id="cb28-290"><a href="#cb28-290" aria-hidden="true" tabindex="-1"></a>                      <span class="at">secs =</span> <span class="fu">round</span>(<span class="fu">as.numeric</span>(<span class="fu">difftime</span>(<span class="fu">Sys.time</span>(), t0, <span class="at">units =</span> <span class="st">"secs"</span>))))</span>
+<span id="cb28-291"><a href="#cb28-291" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-292"><a href="#cb28-292" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-293"><a href="#cb28-293" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-294"><a href="#cb28-294" aria-hidden="true" tabindex="-1"></a><span class="fu">## The manifest: what the website reads</span></span>
+<span id="cb28-295"><a href="#cb28-295" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-296"><a href="#cb28-296" aria-hidden="true" tabindex="-1"></a><span class="in">`data/zip/manifest.json`</span> (and the same file beside the zips) is the contract with calcofi.io:</span>
+<span id="cb28-297"><a href="#cb28-297" aria-hidden="true" tabindex="-1"></a>one entry per dataset with the release its bundles were built from and last confirmed against,</span>
+<span id="cb28-298"><a href="#cb28-298" aria-hidden="true" tabindex="-1"></a>the licence kind, whether the provider gave a citation, every table's rows, what was left out,</span>
+<span id="cb28-299"><a href="#cb28-299" aria-hidden="true" tabindex="-1"></a>and per format either the file (<span class="in">`url`</span>, <span class="in">`bytes`</span>, <span class="in">`sha256`</span>, <span class="in">`excel_openable`</span>) or, for a format not</span>
+<span id="cb28-300"><a href="#cb28-300" aria-hidden="true" tabindex="-1"></a>offered, the reason in plain words. It carries no clock time, so an unchanged run rewrites it</span>
+<span id="cb28-301"><a href="#cb28-301" aria-hidden="true" tabindex="-1"></a>byte for byte. <span class="in">`manifest.csv`</span> is the same per dataset × format, with whether the bucket already</span>
+<span id="cb28-302"><a href="#cb28-302" aria-hidden="true" tabindex="-1"></a>holds those bytes.</span>
+<span id="cb28-303"><a href="#cb28-303" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-306"><a href="#cb28-306" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-307"><a href="#cb28-307" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: manifest</span></span>
+<span id="cb28-308"><a href="#cb28-308" aria-hidden="true" tabindex="-1"></a>manifest <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">schema_version =</span> <span class="st">"1.0"</span>, <span class="at">generated_by =</span> <span class="st">"publish_to-zip.qmd"</span>,</span>
+<span id="cb28-309"><a href="#cb28-309" aria-hidden="true" tabindex="-1"></a>                 <span class="at">release =</span> RELEASE_VERSION, <span class="at">base_url =</span> CC_BUNDLE_BASE_URL,</span>
+<span id="cb28-310"><a href="#cb28-310" aria-hidden="true" tabindex="-1"></a>                 <span class="at">datasets =</span> <span class="fu">unname</span>(entries[<span class="fu">sort</span>(<span class="fu">names</span>(entries))]))</span>
+<span id="cb28-311"><a href="#cb28-311" aria-hidden="true" tabindex="-1"></a>man_json <span class="ot">&lt;-</span> jsonlite<span class="sc">::</span><span class="fu">toJSON</span>(manifest, <span class="at">auto_unbox =</span> <span class="cn">TRUE</span>, <span class="at">pretty =</span> <span class="cn">TRUE</span>, <span class="at">null =</span> <span class="st">"null"</span>, <span class="at">na =</span> <span class="st">"null"</span>, <span class="at">digits =</span> <span class="cn">NA</span>)</span>
+<span id="cb28-312"><a href="#cb28-312" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(man_json, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest.json"</span>))</span>
+<span id="cb28-313"><a href="#cb28-313" aria-hidden="true" tabindex="-1"></a><span class="fu">writeLines</span>(man_json, <span class="fu">file.path</span>(STAGE_DIR, <span class="st">"manifest.json"</span>))</span>
+<span id="cb28-314"><a href="#cb28-314" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-315"><a href="#cb28-315" aria-hidden="true" tabindex="-1"></a><span class="co"># what the bucket holds now, for the upload status</span></span>
+<span id="cb28-316"><a href="#cb28-316" aria-hidden="true" tabindex="-1"></a>remote <span class="ot">&lt;-</span> <span class="cf">if</span> (STAGING) <span class="cn">NULL</span> <span class="cf">else</span> <span class="fu">fetch_bundle_manifest</span>()</span>
+<span id="cb28-317"><a href="#cb28-317" aria-hidden="true" tabindex="-1"></a>remote_of <span class="ot">&lt;-</span> <span class="cf">function</span>(k, f) {</span>
+<span id="cb28-318"><a href="#cb28-318" aria-hidden="true" tabindex="-1"></a>  e <span class="ot">&lt;-</span> <span class="fu">Filter</span>(<span class="cf">function</span>(x) <span class="fu">identical</span>(x<span class="sc">$</span>dataset_key, k), remote<span class="sc">$</span>datasets <span class="sc">%||%</span> <span class="fu">list</span>())</span>
+<span id="cb28-319"><a href="#cb28-319" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">length</span>(e)) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">sha256 =</span> <span class="cn">NA_character_</span>, <span class="at">version =</span> <span class="cn">NA_character_</span>))</span>
+<span id="cb28-320"><a href="#cb28-320" aria-hidden="true" tabindex="-1"></a>  b <span class="ot">&lt;-</span> <span class="fu">Filter</span>(<span class="cf">function</span>(x) <span class="fu">identical</span>(x<span class="sc">$</span>format, f), e[[<span class="dv">1</span>]]<span class="sc">$</span>bundles <span class="sc">%||%</span> <span class="fu">list</span>())</span>
+<span id="cb28-321"><a href="#cb28-321" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">sha256 =</span> <span class="cf">if</span> (<span class="fu">length</span>(b)) b[[<span class="dv">1</span>]]<span class="sc">$</span>sha256 <span class="sc">%||%</span> <span class="cn">NA_character_</span> <span class="cf">else</span> <span class="cn">NA_character_</span>, <span class="at">version =</span> e[[<span class="dv">1</span>]]<span class="sc">$</span>version)</span>
+<span id="cb28-322"><a href="#cb28-322" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-323"><a href="#cb28-323" aria-hidden="true" tabindex="-1"></a>man_tbl <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(entries, <span class="cf">function</span>(e) <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(e<span class="sc">$</span>bundles, <span class="cf">function</span>(b) {</span>
+<span id="cb28-324"><a href="#cb28-324" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> <span class="fu">remote_of</span>(e<span class="sc">$</span>dataset_key, b<span class="sc">$</span>format)</span>
+<span id="cb28-325"><a href="#cb28-325" aria-hidden="true" tabindex="-1"></a>  main <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(e<span class="sc">$</span>tables)) e<span class="sc">$</span>tables[[<span class="dv">1</span>]] <span class="cf">else</span> <span class="fu">list</span>(<span class="at">table =</span> <span class="cn">NA</span>, <span class="at">rows =</span> <span class="cn">NA</span>)</span>
+<span id="cb28-326"><a href="#cb28-326" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(<span class="at">dataset_key =</span> e<span class="sc">$</span>dataset_key, <span class="at">format =</span> b<span class="sc">$</span>format, <span class="at">written =</span> <span class="fu">isTRUE</span>(b<span class="sc">$</span>written),</span>
+<span id="cb28-327"><a href="#cb28-327" aria-hidden="true" tabindex="-1"></a>         <span class="at">version =</span> e<span class="sc">$</span>version, <span class="at">checked_version =</span> e<span class="sc">$</span>checked_version,</span>
+<span id="cb28-328"><a href="#cb28-328" aria-hidden="true" tabindex="-1"></a>         <span class="at">action =</span> runs[[e<span class="sc">$</span>dataset_key]]<span class="sc">$</span>action, <span class="at">main_table =</span> main<span class="sc">$</span>table, <span class="at">main_rows =</span> main<span class="sc">$</span>rows,</span>
+<span id="cb28-329"><a href="#cb28-329" aria-hidden="true" tabindex="-1"></a>         <span class="at">file =</span> b<span class="sc">$</span>file <span class="sc">%||%</span> <span class="cn">NA_character_</span>, <span class="at">bytes =</span> b<span class="sc">$</span>bytes <span class="sc">%||%</span> <span class="cn">NA_real_</span>, <span class="at">sha256 =</span> b<span class="sc">$</span>sha256 <span class="sc">%||%</span> <span class="cn">NA_character_</span>,</span>
+<span id="cb28-330"><a href="#cb28-330" aria-hidden="true" tabindex="-1"></a>         <span class="at">excel_openable =</span> <span class="fu">isTRUE</span>(b<span class="sc">$</span>excel_openable), <span class="at">reason =</span> b<span class="sc">$</span>reason <span class="sc">%||%</span> <span class="st">""</span>,</span>
+<span id="cb28-331"><a href="#cb28-331" aria-hidden="true" tabindex="-1"></a>         <span class="at">license_kind =</span> e<span class="sc">$</span>license_kind, <span class="at">uploaded_hash =</span> r<span class="sc">$</span>sha256, <span class="at">uploaded_version =</span> r<span class="sc">$</span>version)</span>
+<span id="cb28-332"><a href="#cb28-332" aria-hidden="true" tabindex="-1"></a>})))) <span class="sc">|&gt;</span></span>
+<span id="cb28-333"><a href="#cb28-333" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="fu">publish_upload_status</span>(<span class="fu">ifelse</span>(written, sha256, <span class="cn">NA_character_</span>), uploaded_hash, uploaded_version))</span>
+<span id="cb28-334"><a href="#cb28-334" aria-hidden="true" tabindex="-1"></a><span class="fu">write_csv</span>(man_tbl, <span class="fu">file.path</span>(OUT_DIR, <span class="st">"manifest.csv"</span>), <span class="at">na =</span> <span class="st">""</span>)</span>
+<span id="cb28-335"><a href="#cb28-335" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(man_tbl <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">MB =</span> <span class="fu">round</span>(bytes <span class="sc">/</span> <span class="fl">1e6</span>, <span class="dv">1</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb28-336"><a href="#cb28-336" aria-hidden="true" tabindex="-1"></a>        <span class="fu">select</span>(dataset_key, format, written, MB, main_table, main_rows, excel_openable, version, action, upload_status),</span>
+<span id="cb28-337"><a href="#cb28-337" aria-hidden="true" tabindex="-1"></a>      <span class="at">caption =</span> <span class="fu">glue</span>(<span class="st">"data/zip/manifest.csv — {sum(man_tbl$written)} zip(s) for {length(entries)} dataset(s)"</span>))</span>
+<span id="cb28-338"><a href="#cb28-338" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-339"><a href="#cb28-339" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-342"><a href="#cb28-342" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-343"><a href="#cb28-343" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: skipped</span></span>
+<span id="cb28-344"><a href="#cb28-344" aria-hidden="true" tabindex="-1"></a>sk <span class="ot">&lt;-</span> man_tbl <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>written)</span>
+<span id="cb28-345"><a href="#cb28-345" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(sk)) <span class="fu">kable</span>(sk <span class="sc">|&gt;</span> <span class="fu">select</span>(dataset_key, format, reason), <span class="at">caption =</span> <span class="st">"formats not offered, and why"</span>) <span class="cf">else</span></span>
+<span id="cb28-346"><a href="#cb28-346" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"every format was offered for every dataset</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-347"><a href="#cb28-347" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-348"><a href="#cb28-348" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-349"><a href="#cb28-349" aria-hidden="true" tabindex="-1"></a><span class="fu">## Check the zips</span></span>
+<span id="cb28-350"><a href="#cb28-350" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-351"><a href="#cb28-351" aria-hidden="true" tabindex="-1"></a>For every bundle built in this run: each zip opens, holds one folder named like it with the five</span>
+<span id="cb28-352"><a href="#cb28-352" aria-hidden="true" tabindex="-1"></a>documents and one data file per table, and the observations it carries are the count the</span>
+<span id="cb28-353"><a href="#cb28-353" aria-hidden="true" tabindex="-1"></a>release's own record measured for the dataset (<span class="in">`coverage.n_obs`</span>), an independent tally.</span>
+<span id="cb28-354"><a href="#cb28-354" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-357"><a href="#cb28-357" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-358"><a href="#cb28-358" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: verify</span></span>
+<span id="cb28-359"><a href="#cb28-359" aria-hidden="true" tabindex="-1"></a>chk <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(entries, <span class="cf">function</span>(e) {</span>
+<span id="cb28-360"><a href="#cb28-360" aria-hidden="true" tabindex="-1"></a>  k <span class="ot">&lt;-</span> e<span class="sc">$</span>dataset_key</span>
+<span id="cb28-361"><a href="#cb28-361" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (runs[[k]]<span class="sc">$</span>action <span class="sc">!=</span> <span class="st">"build"</span>) <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb28-362"><a href="#cb28-362" aria-hidden="true" tabindex="-1"></a>  n_obs <span class="ot">&lt;-</span> records[[k]]<span class="sc">$</span>coverage<span class="sc">$</span>n_obs <span class="sc">%||%</span> <span class="cn">NA</span></span>
+<span id="cb28-363"><a href="#cb28-363" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(<span class="fu">Filter</span>(<span class="cf">function</span>(b) <span class="fu">isTRUE</span>(b<span class="sc">$</span>written), e<span class="sc">$</span>bundles), <span class="cf">function</span>(b) {</span>
+<span id="cb28-364"><a href="#cb28-364" aria-hidden="true" tabindex="-1"></a>    zl <span class="ot">&lt;-</span> zip<span class="sc">::</span><span class="fu">zip_list</span>(<span class="fu">file.path</span>(STAGE_DIR, k, b<span class="sc">$</span>file))</span>
+<span id="cb28-365"><a href="#cb28-365" aria-hidden="true" tabindex="-1"></a>    stem <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.zip$"</span>, <span class="st">""</span>, b<span class="sc">$</span>file)</span>
+<span id="cb28-366"><a href="#cb28-366" aria-hidden="true" tabindex="-1"></a>    docs <span class="ot">&lt;-</span> <span class="fu">paste0</span>(stem, <span class="st">"/"</span>, <span class="fu">c</span>(<span class="st">"README.md"</span>, <span class="st">"CITATION.md"</span>, <span class="st">"CITATION.bib"</span>, <span class="st">"LICENSE.txt"</span>, <span class="st">"columns.csv"</span>))</span>
+<span id="cb28-367"><a href="#cb28-367" aria-hidden="true" tabindex="-1"></a>    data_files <span class="ot">&lt;-</span> <span class="cf">if</span> (b<span class="sc">$</span>format <span class="sc">==</span> <span class="st">"xlsx"</span>) <span class="fu">paste0</span>(stem, <span class="st">"/"</span>, stem, <span class="st">".xlsx"</span>) <span class="cf">else</span></span>
+<span id="cb28-368"><a href="#cb28-368" aria-hidden="true" tabindex="-1"></a>      <span class="fu">paste0</span>(stem, <span class="st">"/"</span>, <span class="fu">vapply</span>(e<span class="sc">$</span>tables, <span class="st">`</span><span class="at">[[</span><span class="st">`</span>, <span class="st">""</span>, <span class="st">"table"</span>), <span class="st">"."</span>, b<span class="sc">$</span>format)</span>
+<span id="cb28-369"><a href="#cb28-369" aria-hidden="true" tabindex="-1"></a>    obs_rows <span class="ot">&lt;-</span> b<span class="sc">$</span>rows<span class="sc">$</span>obs <span class="sc">%||%</span> <span class="dv">0</span></span>
+<span id="cb28-370"><a href="#cb28-370" aria-hidden="true" tabindex="-1"></a>    <span class="fu">tibble</span>(<span class="at">dataset_key =</span> k, <span class="at">format =</span> b<span class="sc">$</span>format, <span class="at">members =</span> <span class="fu">nrow</span>(zl),</span>
+<span id="cb28-371"><a href="#cb28-371" aria-hidden="true" tabindex="-1"></a>           <span class="at">docs_ok =</span> <span class="fu">all</span>(docs <span class="sc">%in%</span> zl<span class="sc">$</span>filename), <span class="at">data_ok =</span> <span class="fu">all</span>(data_files <span class="sc">%in%</span> zl<span class="sc">$</span>filename),</span>
+<span id="cb28-372"><a href="#cb28-372" aria-hidden="true" tabindex="-1"></a>           <span class="at">one_folder =</span> <span class="fu">all</span>(<span class="fu">startsWith</span>(zl<span class="sc">$</span>filename, <span class="fu">paste0</span>(stem, <span class="st">"/"</span>))),</span>
+<span id="cb28-373"><a href="#cb28-373" aria-hidden="true" tabindex="-1"></a>           <span class="at">obs_rows =</span> obs_rows, <span class="at">record_n_obs =</span> n_obs,</span>
+<span id="cb28-374"><a href="#cb28-374" aria-hidden="true" tabindex="-1"></a>           <span class="at">obs_ok =</span> <span class="fu">is.na</span>(n_obs) <span class="sc">||</span> <span class="fu">identical</span>(<span class="fu">as.numeric</span>(obs_rows), <span class="fu">as.numeric</span>(n_obs)))</span>
+<span id="cb28-375"><a href="#cb28-375" aria-hidden="true" tabindex="-1"></a>  }))</span>
+<span id="cb28-376"><a href="#cb28-376" aria-hidden="true" tabindex="-1"></a>}))</span>
+<span id="cb28-377"><a href="#cb28-377" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">nrow</span>(chk)) {</span>
+<span id="cb28-378"><a href="#cb28-378" aria-hidden="true" tabindex="-1"></a>  <span class="fu">kable</span>(chk, <span class="at">caption =</span> <span class="st">"structure of every zip built in this run"</span>)</span>
+<span id="cb28-379"><a href="#cb28-379" aria-hidden="true" tabindex="-1"></a>  bad <span class="ot">&lt;-</span> chk <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span>docs_ok <span class="sc">|</span> <span class="sc">!</span>data_ok <span class="sc">|</span> <span class="sc">!</span>one_folder <span class="sc">|</span> <span class="sc">!</span>obs_ok)</span>
+<span id="cb28-380"><a href="#cb28-380" aria-hidden="true" tabindex="-1"></a>  <span class="fu">stopifnot</span>(<span class="st">"every bundle must hold its documents, its tables and the release's observation count"</span> <span class="ot">=</span> <span class="fu">nrow</span>(bad) <span class="sc">==</span> <span class="dv">0</span>)</span>
+<span id="cb28-381"><a href="#cb28-381" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> <span class="fu">cat</span>(<span class="st">"no bundle was built in this run (every dataset reused)</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-382"><a href="#cb28-382" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-383"><a href="#cb28-383" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-384"><a href="#cb28-384" aria-hidden="true" tabindex="-1"></a><span class="fu">## Upload (gated)</span></span>
+<span id="cb28-385"><a href="#cb28-385" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-386"><a href="#cb28-386" aria-hidden="true" tabindex="-1"></a>Each zip goes to <span class="in">`gs://calcofi-db/publish/zip/{dataset_key}/{file}`</span> (an unchanged object is not</span>
+<span id="cb28-387"><a href="#cb28-387" aria-hidden="true" tabindex="-1"></a>re-uploaded: <span class="in">`put_gcs_file()`</span> compares md5s), then the manifest, then a superseded version's zips</span>
+<span id="cb28-388"><a href="#cb28-388" aria-hidden="true" tabindex="-1"></a>are removed from the bucket, so a page never links a file that is not there.</span>
+<span id="cb28-389"><a href="#cb28-389" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-392"><a href="#cb28-392" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-393"><a href="#cb28-393" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: upload</span></span>
+<span id="cb28-394"><a href="#cb28-394" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr PUBLISH</span></span>
+<span id="cb28-395"><a href="#cb28-395" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">which</span>(man_tbl<span class="sc">$</span>written <span class="sc">&amp;</span> man_tbl<span class="sc">$</span>needs_upload)) {</span>
+<span id="cb28-396"><a href="#cb28-396" aria-hidden="true" tabindex="-1"></a>  r <span class="ot">&lt;-</span> man_tbl[i, ]</span>
+<span id="cb28-397"><a href="#cb28-397" aria-hidden="true" tabindex="-1"></a>  <span class="fu">put_gcs_file</span>(<span class="fu">file.path</span>(STAGE_DIR, r<span class="sc">$</span>dataset_key, r<span class="sc">$</span>file), <span class="fu">glue</span>(<span class="st">"{ZIP_GCS}/{r$dataset_key}/{r$file}"</span>),</span>
+<span id="cb28-398"><a href="#cb28-398" aria-hidden="true" tabindex="-1"></a>               <span class="at">content_type =</span> <span class="st">"application/zip"</span>)</span>
+<span id="cb28-399"><a href="#cb28-399" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"uploaded {r$dataset_key}/{r$file}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-400"><a href="#cb28-400" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-401"><a href="#cb28-401" aria-hidden="true" tabindex="-1"></a><span class="fu">put_gcs_file</span>(<span class="fu">file.path</span>(STAGE_DIR, <span class="st">"manifest.json"</span>), <span class="fu">glue</span>(<span class="st">"{ZIP_GCS}/manifest.json"</span>),</span>
+<span id="cb28-402"><a href="#cb28-402" aria-hidden="true" tabindex="-1"></a>             <span class="at">content_type =</span> <span class="st">"application/json"</span>)</span>
+<span id="cb28-403"><a href="#cb28-403" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">names</span>(entries)) {</span>
+<span id="cb28-404"><a href="#cb28-404" aria-hidden="true" tabindex="-1"></a>  keep <span class="ot">&lt;-</span> man_tbl<span class="sc">$</span>file[man_tbl<span class="sc">$</span>dataset_key <span class="sc">==</span> k <span class="sc">&amp;</span> man_tbl<span class="sc">$</span>written]</span>
+<span id="cb28-405"><a href="#cb28-405" aria-hidden="true" tabindex="-1"></a>  have <span class="ot">&lt;-</span> <span class="fu">list_gcs_files</span>(<span class="st">"calcofi-db"</span>, <span class="at">prefix =</span> <span class="fu">glue</span>(<span class="st">"publish/zip/{k}/"</span>))<span class="sc">$</span>name</span>
+<span id="cb28-406"><a href="#cb28-406" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (p <span class="cf">in</span> <span class="fu">setdiff</span>(have[<span class="fu">grepl</span>(<span class="st">"</span><span class="sc">\\</span><span class="st">.zip$"</span>, have)], <span class="fu">glue</span>(<span class="st">"publish/zip/{k}/{keep}"</span>))) {</span>
+<span id="cb28-407"><a href="#cb28-407" aria-hidden="true" tabindex="-1"></a>    <span class="fu">delete_gcs_prefix</span>(p, <span class="at">bucket =</span> <span class="st">"calcofi-db"</span>, <span class="at">dry_run =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb28-408"><a href="#cb28-408" aria-hidden="true" tabindex="-1"></a>    <span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"  removed superseded gs://calcofi-db/{p}"</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb28-409"><a href="#cb28-409" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb28-410"><a href="#cb28-410" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb28-411"><a href="#cb28-411" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-412"><a href="#cb28-412" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-415"><a href="#cb28-415" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-416"><a href="#cb28-416" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: upload-skip</span></span>
+<span id="cb28-417"><a href="#cb28-417" aria-hidden="true" tabindex="-1"></a><span class="co">#| eval: !expr NO_PUBLISH</span></span>
+<span id="cb28-418"><a href="#cb28-418" aria-hidden="true" tabindex="-1"></a>due <span class="ot">&lt;-</span> man_tbl <span class="sc">|&gt;</span> <span class="fu">filter</span>(written, needs_upload)</span>
+<span id="cb28-419"><a href="#cb28-419" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"CALCOFI_PUBLISH_ZIP is not `true`{if (STAGING) ' (and this is a staging run)' else ''}: nothing uploaded.</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb28-420"><a href="#cb28-420" aria-hidden="true" tabindex="-1"></a>         <span class="st">"{nrow(due)} zip(s) ({round(sum(due$bytes) / 1e6)} MB) differ from what {ZIP_GCS}/ holds; "</span>,</span>
+<span id="cb28-421"><a href="#cb28-421" aria-hidden="true" tabindex="-1"></a>         <span class="st">"they are staged at {STAGE_DIR}/.</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb28-422"><a href="#cb28-422" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-423"><a href="#cb28-423" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-426"><a href="#cb28-426" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-427"><a href="#cb28-427" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: timings</span></span>
+<span id="cb28-428"><a href="#cb28-428" aria-hidden="true" tabindex="-1"></a><span class="fu">kable</span>(<span class="fu">bind_rows</span>(runs), <span class="at">caption =</span> <span class="st">"per dataset: reuse or build, what changed, seconds"</span>)</span>
+<span id="cb28-429"><a href="#cb28-429" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb28-430"><a href="#cb28-430" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb28-433"><a href="#cb28-433" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb28-434"><a href="#cb28-434" aria-hidden="true" tabindex="-1"></a><span class="co">#| label: cleanup</span></span>
+<span id="cb28-435"><a href="#cb28-435" aria-hidden="true" tabindex="-1"></a><span class="fu">dbDisconnect</span>(con, <span class="at">shutdown =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb28-436"><a href="#cb28-436" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
