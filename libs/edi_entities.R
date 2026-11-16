@@ -290,9 +290,18 @@ edi_add_other_entity <- function(doc, entity_name, description, object_name, byt
 #' @param reason the human-readable reason (from [edi_classify_table()])
 #' @return `doc`
 edi_note_excluded_table <- function(doc, table, reason) {
-  am <- doc$additionalMetadata$metadata$calcofi %||% list()
+  # build_eml() writes additionalMetadata as a LIST of blocks since calcofi4db 4.35.1 (the
+  # citations, then a unitList); writing `$metadata` onto that list put character content
+  # into the element and failed EML::eml_validate() for every package with an excluded table
+  # (ctd-cast, mets; first seen on v2026.11.14). Find the calcofi block, whichever shape.
+  blocks <- doc$additionalMetadata
+  if (!is.null(blocks$metadata)) blocks <- list(blocks)
+  i <- Position(function(b) !is.null(b$metadata$calcofi), blocks)
+  if (is.na(i)) { blocks <- c(list(list(metadata = list(calcofi = list()))), blocks); i <- 1L }
+  am <- blocks[[i]]$metadata$calcofi
   am$excludedTables <- c(am$excludedTables, stats::setNames(list(reason), table))
-  doc$additionalMetadata$metadata$calcofi <- am
+  blocks[[i]]$metadata$calcofi <- am
+  doc$additionalMetadata <- blocks
   doc
 }
 
@@ -340,13 +349,14 @@ edi_manifest_row <- function(dataset_key, version, content_hash, n_csv = NA_inte
 
 #' The most recent package built for a dataset, whatever release it came from
 #'
-#' Packages live at `{out_dir}/{dataset_key}/{dataset_key}_{version}/`; the one whose
+#' Packages live at `{out_dir}/{dataset_key}/{content_hash[1:24]}/` (formerly `{dataset_key}_{version}/`); the one whose
 #' `manifest.json` names the latest `version` is the previous build a new run is
 #' compared with.
 #'
 #' @return list(dir, manifest) or NULL when nothing was ever built
 edi_latest_package <- function(out_dir, dataset_key) {
-  mans <- Sys.glob(file.path(out_dir, dataset_key, paste0(dataset_key, "_*"), "manifest.json"))
+  # content-addressed folders ({dataset_key}/{hash24}/) and the older {dataset_key}_{version}/ alike
+  mans <- Sys.glob(file.path(out_dir, dataset_key, "*", "manifest.json"))
   if (!length(mans)) return(NULL)
   ms <- lapply(mans, function(m) tryCatch(jsonlite::fromJSON(m, simplifyVector = FALSE),
                                           error = function(e) NULL))
