@@ -149,6 +149,20 @@ Following the pattern from `publish_ichthyo_to_obis.qmd`:
 8. **Upload to EDI staging** — Via EDI API (optional)
 9. **Upload to GCS**
 
+#### Download bundles (zip, for people rather than portals)
+
+`publish_to-zip.qmd` (generic over `dataset_key`, no template) writes one zip per dataset per
+format (CSV always, Excel only where every table fits `BUNDLE_XLSX_MAX_ROWS`, Parquet always) to
+`cc_stage_path("publish", "zip")`, uploading to `gs://calcofi-db/publish/zip/` only under
+`CALCOFI_PUBLISH_ZIP=true`. Every rule is a tested `calcofi4db` function (`bundle_plan()`,
+`bundle_build_tables()`, `bundle_format_decision()`, `bundle_license()`, `bundle_citation()`,
+`write_bundle()`, `bundle_manifest_entry()`); change the rule there, not in the notebook. Its
+fingerprint's data part is `bundle_table_signatures()` over the exact rows written, not the
+release objects, and the zips are byte-reproducible (`bundle_zip()`), so a reused bundle keeps
+its name, version and sha256. `publish/zip/manifest.json` is the website's contract and
+`release_database.qmd` passes it to `build_dataset_catalog(bundles = )` (`kind = "bundle"`).
+Render a worktree against its own calcofi4db with `CALCOFI4DB_DIR=../calcofi4db-<branch>`.
+
 ### 5. Join the DAG through the `calcofi:` block — and rebuild only what changed
 
 Never hand-edit `_targets.R`; `build_targets_list()` reads the notebook's front matter. A

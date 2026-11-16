@@ -18,11 +18,12 @@ calcofi:
     - publish_to_obis
     - publish_to_netcdf
     - publish_to_erddap
+    - publish_to_zip
   output: data/publish/portal_status.csv
   workflow_url: https://calcofi.io/workflows/publish_status.html
   description: >
-    The caboose of the publishers: after publish_to-edi, -obis, -netcdf and
-    -erddap have run against a promoted release, compares each dataset's built
+    The caboose of the publishers: after publish_to-edi, -obis, -netcdf,
+    -erddap and -zip have run against a promoted release, compares each dataset's built
     package, archive or file with the copy its portal holds, and lists what
     needs a fresh upload — never deposited, or changed since the last deposit —
     with what still blocks it and how to do it.
@@ -32,16 +33,18 @@ editor_options:
 
 ## Why this page exists
 
-The four publishers run after every promoted release, and each rebuilds a dataset's
+The five publishers run after every promoted release, and each rebuilds a dataset's
 output only when that dataset's rows, metadata or the publisher's code changed
-(`calcofi4db::publish_fingerprint()`). Two of the four portals then take a deliberate,
-manual step — an EDI deposit and an OBIS-USA IPT upload — and the other two publish
-from the pipeline when a flag says so. Whether a portal is behind is therefore a
+(`calcofi4db::publish_fingerprint()`). Two of the five destinations then take a deliberate,
+manual step — an EDI deposit and an OBIS-USA IPT upload — and the other three (netCDF,
+ERDDAP and the download bundles in our own bucket) publish from the pipeline when a flag
+says so. Whether a portal is behind is therefore a
 comparison, not a memory: the bytes built now against the bytes the portal was last
 given (`calcofi4db::publish_upload_status()`). This page makes that comparison for every
 dataset on every portal, and its first table is the to-do list.
 
-**`upload_status` is about the portal of record, never about our own bucket.** Every
+**`upload_status` is about the portal of record, never about our own bucket** — except for
+the download bundles, whose destination *is* our bucket (`publish/zip/`). Every
 package, archive and file listed here is already built and staged publicly under
 `gs://calcofi-db/publish/` (or `calcofi-files-public/netcdf/`) — that is what a provider
 reviews. `never deposited` therefore means EDI has no such package / the IPT has no such
@@ -54,6 +57,7 @@ that does exist.
 | OBIS (via the OBIS-USA IPT) | each archive's `{dataset_key}_manifest.json` (`uploaded_hash`) | manual, after the provider agrees (Decision 21) — [`docs/portals.qmd` § OBIS](https://calcofi.io/docs/portals.html#obis) |
 | netCDF (`calcofi-files-public/netcdf/`) | the site's `{dataset}/manifests.json` | `CALCOFI_PUBLISH=true`, re-rendering `publish_to-netcdf.qmd`; unchanged bytes are never re-uploaded |
 | ERDDAP (`erddap.calcofi.io`) | `data/erddap/deploy_status.json` | automatic unless `CALCOFI_DEPLOY=false` / `CALCOFI_ERDDAP_DEPLOY=false` |
+| download bundles (`calcofi-db/publish/zip/`) | the bucket's `publish/zip/manifest.json` (`sha256` per zip) | `CALCOFI_PUBLISH_ZIP=true`, re-rendering `publish_to-zip.qmd`; unchanged bytes are never re-uploaded |
 
 ## Setup
 
@@ -188,11 +192,32 @@ if (nrow(erddap_rows)) kable(erddap_rows |> select(upload_status, how)) else
   cat("no ERDDAP deploy status yet — publish_to-erddap.qmd has not run since it began recording one\n")
 ```
 
+## Download bundles
+
+The zips calcofi.io offers behind each dataset's **Download** button
+(`publish_to-zip.qmd`): a zip is current when the bucket's manifest records the same
+sha256 as the one built here.
+
+```{r}
+#| label: zip
+zip_csv <- here(if (STAGING) "data/zip-staging" else "data/zip", "manifest.csv")
+zm <- if (file.exists(zip_csv)) read_csv(zip_csv, col_types = cols(.default = "c"), na = "") else NULL
+zip_rows <- if (is.null(zm) || !nrow(zm)) tibble() else zm |>
+  filter(as.logical(written)) |>
+  transmute(
+    portal = "zip", dataset_key = paste(dataset_key, format), built_from = version, checked_version,
+    upload_status, needs_upload = as.logical(needs_upload), blocked_by = "",
+    how  = "CALCOFI_PUBLISH_ZIP=true, re-render publish_to-zip.qmd",
+    link = glue("{BASE_HTTPS}/publish/zip/{sub(' .*$', '', dataset_key)}/{file}"))
+if (nrow(zip_rows)) kable(zip_rows |> select(dataset_key, built_from, upload_status)) else
+  cat("no bundle manifest yet — publish_to-zip.qmd has not run\n")
+```
+
 ## What needs a fresh upload
 
 ```{r}
 #| label: status
-status <- bind_rows(edi_rows, obis_rows, nc_rows, erddap_rows) |>
+status <- bind_rows(edi_rows, obis_rows, nc_rows, erddap_rows, zip_rows) |>
   mutate(release = RELEASE, .before = 1) |>
   arrange(desc(needs_upload), portal, dataset_key)
 # "never uploaded" read as "not on GCS" in a provider meeting (2026-09-16). The
@@ -203,6 +228,7 @@ status <- status |>
     upload_status == "never uploaded" & portal == "edi"  ~ "never deposited at EDI (staged on GCS)",
     upload_status == "never uploaded" & portal == "obis" ~ "never uploaded to the OBIS-USA IPT (staged on GCS)",
     upload_status == "not online"                        ~ "not yet on calcofi-files-public/netcdf",
+    upload_status == "never uploaded" & portal == "zip"  ~ "not yet on calcofi-db/publish/zip (staged locally)",
     .default = upload_status))
 
 write_csv(status, OUT, na = "")

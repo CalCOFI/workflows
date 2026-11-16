@@ -1,0 +1,411 @@
+---
+title: "Publish every dataset as download bundles"
+subtitle: "One zip per dataset per format (CSV, Excel where it fits, Parquet), each carrying its README, citation and licence; rebuilt only when a dataset changed; upload gated"
+author: "CalCOFI"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    df-print: kable
+calcofi:
+  target_name: publish_to_zip
+  workflow_type: publish
+  dependency:
+    - test_release
+  output: data/zip/manifest.csv
+  workflow_url: https://calcofi.io/workflows/publish_to-zip.html
+  description: >
+    Publishes every dataset in the promoted release as downloads a researcher can
+    open without programming: one zip per format (CSV for every dataset, an Excel
+    workbook where every table fits, Parquet), each holding the dataset's own rows
+    of every table it needs to be used alone, with readable names beside keys, and
+    its README, citation, licence and column dictionary. Rebuilds a dataset only
+    when its rows, record or this code changed, writes byte-reproducible zips and a
+    manifest the website reads, and uploads only under an explicit flag.
+editor_options:
+  chunk_output_type: console
+---
+
+## Overview
+
+Researchers asked for a **Download** button that gives them a file they can open: CSV first,
+Excel where a table is small enough, the technical formats further down, and the citation and
+licence travelling inside every download. A dataset page already offers the release Parquet and a
+CF netCDF, and ERDDAP refuses a whole-table CSV, so none of those is that file. This notebook
+makes it, for every dataset in the promoted release, generic over `dataset_key` like
+`publish_to-netcdf.qmd` and `publish_to-edi.qmd`.
+
+**One zip per format, named so it is recognisable in Downloads:**
+`calcofi_{dataset_key}_{version}_{format}.zip` (`calcofi_bottle_v2026.11.14_csv.zip`,
+`calcofi_swfsc_ichthyo_v2026.11.14_xlsx.zip`; the `calcofi_` prefix is not doubled). Each unzips
+to one folder of the same name holding:
+
+| file | what |
+|---|---|
+| `README.md` | what the dataset is, who collected it, the release and its date, every file and its rows, how the tables join, what was left out and where to get it, the Explorer for a subset, the dataset's page, register-your-use and stay-informed |
+| `CITATION.md`, `CITATION.bib` | the provider's citation where there is one (said plainly where there is not), always the release's with its DOI |
+| `LICENSE.txt` | the legal code for a recognised licence id; the provider's terms URL for `custom`; a plain "no licence has been established" and whom to ask otherwise |
+| `columns.csv` | every column: table, type, units, meaning, from the release's own `metadata.json` |
+| the tables | `.csv`, one `.xlsx` workbook (a README sheet first), or `.parquet` |
+
+**Which tables, cut how** (`calcofi4db::bundle_plan()`, one rule each, tested): the record's own
+`tables[]` plus the shared tables a download needs to be used alone, `sample`, `cruise`, `taxon`
+and `measurement_type`; a table with a `dataset_key` keeps this dataset's rows, `sample` also
+keeps the samples the dataset's rows sit on (a derived product's observations sit on the bottle or
+CTD casts) and their parents, a shared vocabulary keeps the rows reached through its key, and the
+full-resolution supplementals (`obs_ctd_full`, `obs_mets_full`: hundreds of millions of rows
+partitioned by cruise) are left out and named in the README. `obs` is read through the catalog's
+own view over `obs_bio` and `obs_env`.
+
+**A row reads without a join** (`calcofi4db::bundle_build_tables()`): beside `sample_key` the
+station the provider recorded (`site_key`) and its CalCOFI `line` and `station`, which a field
+scientist asked for; beside `taxon_key` the `scientific_name` and `common_name`; beside
+`measurement_type` its `units`. Geometry and H3 cell-id columns are left out (`latitude` and
+`longitude` stay; a 64-bit cell id does not survive a spreadsheet).
+
+**Excel only where it fits** (`calcofi4db::bundle_format_decision()`): a workbook is made when
+every table has at most 250,000 rows (`BUNDLE_XLSX_MAX_ROWS`, under a quarter of Excel's
+1,048,576-row sheet limit, so it stays tens of megabytes); otherwise the manifest says why in
+plain words, and a CSV too long for a spreadsheet says so in its README.
+
+**Rebuilt only when the dataset changed.** Every release re-renders every publisher, so each
+dataset's bundle carries an input fingerprint (`publish_fingerprint()`): the row signatures of
+exactly the tables it writes, so a vocabulary row another dataset added changes nothing here; its
+catalog record and the metadata its documents read; and this code. An unchanged fingerprint with
+the zips still on disk is reused under the release it was built from (its name keeps that version;
+`checked_version` records this run). The zips are byte-reproducible (`bundle_zip()`: fixed member
+order, timestamp, mode and time zone; the workbook's own timestamp fixed too), so the same rows
+always give the same sha256.
+
+**Upload gated, and the website's contract.** Everything is written under
+`cc_stage_path("publish", "zip")`; nothing leaves the machine unless `CALCOFI_PUBLISH_ZIP=true`
+(and never in a staging run). The upload puts each zip at
+`gs://calcofi-db/publish/zip/{dataset_key}/{file}` and the manifest at
+`gs://calcofi-db/publish/zip/manifest.json`, which calcofi.io reads at build time, and which
+`release_database.qmd` passes to `build_dataset_catalog(bundles = )` so the next release's
+`datasets.json` carries a `kind = "bundle"` distribution per file (the newest built, as the
+netCDF manifests do).
+
+## Setup
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+librarian::shelf(DBI, duckdb, dplyr, glue, jsonlite, digest, readr, tibble, knitr, here, quiet = TRUE)
+here <- here::here
+options(readr.show_col_types = FALSE)
+# the engine package from its sibling checkout, as every publisher loads it; CALCOFI4DB_DIR points a
+# worktree's render at that worktree's calcofi4db
+PKG_DIR <- Sys.getenv("CALCOFI4DB_DIR", here("../calcofi4db"))
+devtools::load_all(PKG_DIR)
+stopifnot("calcofi4db >= 4.40.0 (bundle_plan) is required" = exists("bundle_plan"))
+
+# the promoted release by default; a STAGING run (CALCOFI_RELEASE_PREFIX=ducklake-staging/releases)
+# reads the staging release, writes under data/zip-staging/ and uploads nothing
+RELEASE_PREFIX <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
+STAGING        <- grepl("staging", RELEASE_PREFIX, fixed = TRUE)
+BASE_HTTPS     <- "https://storage.googleapis.com/calcofi-db"
+RELEASE_VERSION <- Sys.getenv("CALCOFI_RELEASE_VERSION", "")
+if (!nzchar(RELEASE_VERSION))
+  RELEASE_VERSION <- trimws(readLines(glue("{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"), warn = FALSE)[1])
+Sys.setenv(CALCOFI_RELEASE_VERSION = RELEASE_VERSION)   # calcofi4r::cc_catalog() resolves the same one
+
+# comma-separated dataset_keys to restrict a run while iterating; empty = every public dataset
+ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[[1]]))
+
+PUBLISH    <- identical(Sys.getenv("CALCOFI_PUBLISH_ZIP"), "true") && !STAGING   # opt-in upload
+NO_PUBLISH <- !PUBLISH
+
+# bulk under the stage root, never in the git tree; the small manifests beside the notebook
+STAGE_DIR <- cc_stage_path("publish", if (STAGING) "zip-staging" else "zip", create = TRUE)
+OBJ_CACHE <- cc_stage_path("publish", "objects", create = TRUE)   # release objects, content-addressed
+OUT_DIR   <- here(if (STAGING) "data/zip-staging" else "data/zip")
+dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
+ZIP_GCS   <- "gs://calcofi-db/publish/zip"
+# the code the bundles are a function of: a change here rebuilds them
+LIC_DIR    <- file.path(PKG_DIR, "inst", "licenses")
+CODE_FILES <- c(here("publish_to-zip.qmd"), file.path(PKG_DIR, "R", "bundle.R"),
+                sort(list.files(LIC_DIR, full.names = TRUE)))
+
+cat(glue("release prefix : {RELEASE_PREFIX}{if (STAGING) ' (STAGING)' else ''}"), "\n")
+cat(glue("release        : {RELEASE_VERSION}"), "\n")
+cat(glue("calcofi4db     : {PKG_DIR} ({as.character(utils::packageVersion('calcofi4db'))})"), "\n")
+cat(glue("stage (zips)   : {STAGE_DIR}"), "\n")
+cat(glue("manifests      : {OUT_DIR}"), "\n")
+cat(glue("CALCOFI_PUBLISH_ZIP : {PUBLISH} (upload to {ZIP_GCS}/ only when true)"), "\n")
+if (length(ONLY)) cat(glue("restricted to  : {paste(ONLY, collapse = ', ')}"), "\n")
+```
+
+```{r}
+#| label: fetch-release-json
+rel_url  <- function(f) glue("{BASE_HTTPS}/{RELEASE_PREFIX}/{RELEASE_VERSION}/{f}")
+read_j   <- function(u) jsonlite::fromJSON(u, simplifyVector = FALSE)
+catalog  <- calcofi4r::cc_catalog(RELEASE_VERSION)
+ds_json  <- read_j(rel_url("datasets.json"))
+meta     <- read_j(rel_url("metadata.json"))
+release  <- list(version = RELEASE_VERSION, release_date = catalog$release_date %||% NA,
+                 citation = catalog$citation %||% NA, doi = catalog$doi %||% NA,
+                 concept_doi = catalog$concept_doi %||% NA)
+records  <- setNames(ds_json$datasets, vapply(ds_json$datasets, `[[`, "", "dataset_key"))
+public   <- names(records)[vapply(records, function(r) identical(r$visibility %||% "public", "public"), TRUE)]
+keys     <- if (length(ONLY)) intersect(public, ONLY) else public
+if (length(ONLY) && length(setdiff(ONLY, public)))
+  cat(glue("NOTE requested but not a public dataset of {RELEASE_VERSION}: {paste(setdiff(ONLY, public), collapse = ', ')}"), "\n")
+cat(glue("{length(keys)} dataset(s) of {length(records)} in the release; ",
+         "{length(ds_json$holdings %||% list())} holding(s) have no release data and get no bundle"), "\n")
+```
+
+## Read the release
+
+Every table a bundle reads is resolved through the catalog (`calcofi4r::cc_release_sources()`,
+never a hand-built path) and its objects copied once into a content-addressed cache under the
+stage root, so twenty datasets do not read the same `sample` object over HTTPS twenty times, and
+an object unchanged since the previous release is never fetched again. `obs` is the catalog's own
+view over `obs_bio` and `obs_env` (`calcofi4r::cc_view_sql()`).
+
+```{r}
+#| label: connect
+con <- get_duckdb_con()
+for (s in c("SET enable_progress_bar = false", "SET preserve_insertion_order = true"))
+  dbExecute(con, s)
+
+cat_tables <- catalog$tables
+cat_entry  <- function(tb) Find(function(t) identical(t$name, tb), cat_tables)
+views      <- calcofi4r::cc_catalog_views(catalog)
+supp       <- vapply(Filter(function(t) isTRUE(t$supplemental), cat_tables), `[[`, "", "name")
+supp_rows  <- vapply(supp, function(tb) as.numeric(cat_entry(tb)$rows %||% NA), 1)
+
+# every table some bundle may read: the records' tables plus the companions, minus supplementals
+want <- setdiff(unique(c(unlist(lapply(records[keys], `[[`, "tables")), "sample", "cruise", "taxon",
+                         "measurement_type")), supp)
+fetch_local <- function(src) {
+  paths <- file.path(OBJ_CACHE, src$local_paths)
+  for (i in seq_along(paths)) {
+    if (file.exists(paths[i])) next
+    dir.create(dirname(paths[i]), recursive = TRUE, showWarnings = FALSE)
+    part <- paste0(paths[i], ".part")
+    curl::curl_download(src$urls[i], part, quiet = TRUE)
+    file.rename(part, paths[i])
+  }
+  paths
+}
+rp <- function(tb) {
+  src <- calcofi4r::cc_release_sources(catalog, tb, base_https = BASE_HTTPS)
+  calcofi4r::cc_read_parquet_sql(src, paths = fetch_local(src))
+}
+t0 <- Sys.time()
+from_sql <- setNames(vapply(want, function(tb) {
+  if (tb %in% names(views)) paste0("(", calcofi4r::cc_view_sql(catalog, tb, rp), ")") else
+  if (!is.null(cat_entry(tb))) rp(tb) else NA_character_
+}, ""), want)
+from_sql <- from_sql[!is.na(from_sql)]
+table_columns <- lapply(from_sql, function(f) dbGetQuery(con, glue("DESCRIBE SELECT * FROM {f}"))$column_name)
+cat(glue("{length(from_sql)} tables resolved and cached in {round(difftime(Sys.time(), t0, units = 'secs'))} s ",
+         "({round(sum(file.size(list.files(OBJ_CACHE, recursive = TRUE, full.names = TRUE))) / 1e6)} MB in the object cache)"), "\n")
+```
+
+## The plan: every dataset, before anything is written
+
+```{r}
+#| label: plan
+plans <- lapply(setNames(keys, keys), function(k)
+  bundle_plan(records[[k]], table_columns, supplemental = supp, supplemental_rows = supp_rows))
+plan_tbl <- bind_rows(lapply(names(plans), function(k) plans[[k]] |> mutate(dataset_key = k, .before = 1)))
+write_csv(plan_tbl, file.path(OUT_DIR, "plan.csv"), na = "")
+kable(plan_tbl |> filter(!included | source == "record") |> select(dataset_key, table, rule, link, reason),
+      caption = glue("tables each dataset names (companions sample/cruise/taxon/measurement_type are added where reached); {RELEASE_VERSION}"))
+```
+
+## Build, or reuse what did not change
+
+```{r}
+#| label: build
+#| results: asis
+
+read_prior <- function() {
+  p <- file.path(OUT_DIR, "manifest.json")
+  if (!file.exists(p)) return(list())
+  m <- tryCatch(read_j(p), error = function(e) NULL)
+  setNames(m$datasets %||% list(), vapply(m$datasets %||% list(), `[[`, "", "dataset_key"))
+}
+prior_all  <- read_prior()
+code_parts <- publish_code_parts(CODE_FILES)
+cols_meta  <- meta$columns %||% list()
+tbls_meta  <- meta$tables %||% list()
+entries <- list(); runs <- list()
+
+for (k in keys) {
+  t0   <- Sys.time()
+  rec  <- records[[k]]
+  plan <- plans[[k]]
+  built <- bundle_build_tables(con, plan, k, from_sql)
+  fp <- publish_fingerprint(
+    data     = bundle_table_signatures(con, built$table),
+    metadata = list(
+      record  = publish_record_digest(rec),
+      columns = cols_meta[sub("\\..*$", "", names(cols_meta)) %in% built$table],
+      tables  = tbls_meta[intersect(built$table, names(tbls_meta))],
+      plan    = plan[, c("table", "included", "rule", "link", "reason")],
+      built   = built[, c("table", "dropped", "added")]),
+    code     = code_parts)
+  prior <- prior_all[[k]]
+  files <- vapply(Filter(function(b) isTRUE(b$written), prior$bundles %||% list()), `[[`, "", "file")
+  dec <- publish_decide(fp, prior$input_fingerprint, file.path(STAGE_DIR, k, files))
+  if (dec$action == "reuse") {
+    e <- prior
+    e$checked_version <- RELEASE_VERSION
+    cat(glue("- `{k}`: unchanged since {e$version} — reused ({length(files)} zip(s))"), "\n")
+  } else {
+    w <- write_bundle(con, rec, release, built, plan, file.path(STAGE_DIR, k),
+                      meta_columns = cols_meta, meta_tables = tbls_meta, licenses_dir = LIC_DIR)
+    lic <- bundle_license(rec, LIC_DIR); cit <- bundle_citation(rec, release)
+    e <- bundle_manifest_entry(rec, RELEASE_VERSION, release$release_date, RELEASE_VERSION, fp, built, plan, w,
+                               license_kind = lic$kind, has_provider_citation = cit$has_provider_citation)
+    # a superseded build's zips go; it is reproducible from its frozen release
+    old <- setdiff(list.files(file.path(STAGE_DIR, k), pattern = "\\.zip$"), w$file[w$written])
+    unlink(file.path(STAGE_DIR, k, old))
+    cat(glue("- `{k}`: built — {dec$reason}; ",
+             "{paste(sprintf('%s %s MB', w$format[w$written], format(round(w$bytes[w$written] / 1e6, 1), nsmall = 1)), collapse = ', ')}",
+             "{if (length(old)) paste0('; removed ', paste(old, collapse = ', ')) else ''}"), "\n")
+  }
+  for (tb in built$table) dbExecute(con, glue('DROP TABLE IF EXISTS "bundle_{tb}"'))
+  entries[[k]] <- e
+  runs[[k]] <- tibble(dataset_key = k, action = dec$action, changed = paste(dec$changed, collapse = ","),
+                      secs = round(as.numeric(difftime(Sys.time(), t0, units = "secs"))))
+}
+```
+
+## The manifest: what the website reads
+
+`data/zip/manifest.json` (and the same file beside the zips) is the contract with calcofi.io:
+one entry per dataset with the release its bundles were built from and last confirmed against,
+the licence kind, whether the provider gave a citation, every table's rows, what was left out,
+and per format either the file (`url`, `bytes`, `sha256`, `excel_openable`) or, for a format not
+offered, the reason in plain words. It carries no clock time, so an unchanged run rewrites it
+byte for byte. `manifest.csv` is the same per dataset × format, with whether the bucket already
+holds those bytes.
+
+```{r}
+#| label: manifest
+manifest <- list(schema_version = "1.0", generated_by = "publish_to-zip.qmd",
+                 release = RELEASE_VERSION, base_url = CC_BUNDLE_BASE_URL,
+                 datasets = unname(entries[sort(names(entries))]))
+man_json <- jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null", digits = NA)
+writeLines(man_json, file.path(OUT_DIR, "manifest.json"))
+writeLines(man_json, file.path(STAGE_DIR, "manifest.json"))
+
+# what the bucket holds now, for the upload status
+remote <- if (STAGING) NULL else fetch_bundle_manifest()
+remote_of <- function(k, f) {
+  e <- Filter(function(x) identical(x$dataset_key, k), remote$datasets %||% list())
+  if (!length(e)) return(list(sha256 = NA_character_, version = NA_character_))
+  b <- Filter(function(x) identical(x$format, f), e[[1]]$bundles %||% list())
+  list(sha256 = if (length(b)) b[[1]]$sha256 %||% NA_character_ else NA_character_, version = e[[1]]$version)
+}
+man_tbl <- bind_rows(lapply(entries, function(e) bind_rows(lapply(e$bundles, function(b) {
+  r <- remote_of(e$dataset_key, b$format)
+  main <- if (length(e$tables)) e$tables[[1]] else list(table = NA, rows = NA)
+  tibble(dataset_key = e$dataset_key, format = b$format, written = isTRUE(b$written),
+         version = e$version, checked_version = e$checked_version,
+         action = runs[[e$dataset_key]]$action, main_table = main$table, main_rows = main$rows,
+         file = b$file %||% NA_character_, bytes = b$bytes %||% NA_real_, sha256 = b$sha256 %||% NA_character_,
+         excel_openable = isTRUE(b$excel_openable), reason = b$reason %||% "",
+         license_kind = e$license_kind, uploaded_hash = r$sha256, uploaded_version = r$version)
+})))) |>
+  mutate(publish_upload_status(ifelse(written, sha256, NA_character_), uploaded_hash, uploaded_version))
+write_csv(man_tbl, file.path(OUT_DIR, "manifest.csv"), na = "")
+kable(man_tbl |> mutate(MB = round(bytes / 1e6, 1)) |>
+        select(dataset_key, format, written, MB, main_table, main_rows, excel_openable, version, action, upload_status),
+      caption = glue("data/zip/manifest.csv — {sum(man_tbl$written)} zip(s) for {length(entries)} dataset(s)"))
+```
+
+```{r}
+#| label: skipped
+sk <- man_tbl |> filter(!written)
+if (nrow(sk)) kable(sk |> select(dataset_key, format, reason), caption = "formats not offered, and why") else
+  cat("every format was offered for every dataset\n")
+```
+
+## Check the zips
+
+For every bundle built in this run: each zip opens, holds one folder named like it with the five
+documents and one data file per table, and the observations it carries are the count the
+release's own record measured for the dataset (`coverage.n_obs`), an independent tally.
+
+```{r}
+#| label: verify
+chk <- bind_rows(lapply(entries, function(e) {
+  k <- e$dataset_key
+  if (runs[[k]]$action != "build") return(NULL)
+  n_obs <- records[[k]]$coverage$n_obs %||% NA
+  bind_rows(lapply(Filter(function(b) isTRUE(b$written), e$bundles), function(b) {
+    zl <- zip::zip_list(file.path(STAGE_DIR, k, b$file))
+    stem <- sub("\\.zip$", "", b$file)
+    docs <- paste0(stem, "/", c("README.md", "CITATION.md", "CITATION.bib", "LICENSE.txt", "columns.csv"))
+    data_files <- if (b$format == "xlsx") paste0(stem, "/", stem, ".xlsx") else
+      paste0(stem, "/", vapply(e$tables, `[[`, "", "table"), ".", b$format)
+    obs_rows <- b$rows$obs %||% 0
+    tibble(dataset_key = k, format = b$format, members = nrow(zl),
+           docs_ok = all(docs %in% zl$filename), data_ok = all(data_files %in% zl$filename),
+           one_folder = all(startsWith(zl$filename, paste0(stem, "/"))),
+           obs_rows = obs_rows, record_n_obs = n_obs,
+           obs_ok = is.na(n_obs) || identical(as.numeric(obs_rows), as.numeric(n_obs)))
+  }))
+}))
+if (nrow(chk)) {
+  kable(chk, caption = "structure of every zip built in this run")
+  bad <- chk |> filter(!docs_ok | !data_ok | !one_folder | !obs_ok)
+  stopifnot("every bundle must hold its documents, its tables and the release's observation count" = nrow(bad) == 0)
+} else cat("no bundle was built in this run (every dataset reused)\n")
+```
+
+## Upload (gated)
+
+Each zip goes to `gs://calcofi-db/publish/zip/{dataset_key}/{file}` (an unchanged object is not
+re-uploaded: `put_gcs_file()` compares md5s), then the manifest, then a superseded version's zips
+are removed from the bucket, so a page never links a file that is not there.
+
+```{r}
+#| label: upload
+#| eval: !expr PUBLISH
+for (i in which(man_tbl$written & man_tbl$needs_upload)) {
+  r <- man_tbl[i, ]
+  put_gcs_file(file.path(STAGE_DIR, r$dataset_key, r$file), glue("{ZIP_GCS}/{r$dataset_key}/{r$file}"),
+               content_type = "application/zip")
+  cat(glue("uploaded {r$dataset_key}/{r$file}"), "\n")
+}
+put_gcs_file(file.path(STAGE_DIR, "manifest.json"), glue("{ZIP_GCS}/manifest.json"),
+             content_type = "application/json")
+for (k in names(entries)) {
+  keep <- man_tbl$file[man_tbl$dataset_key == k & man_tbl$written]
+  have <- list_gcs_files("calcofi-db", prefix = glue("publish/zip/{k}/"))$name
+  for (p in setdiff(have[grepl("\\.zip$", have)], glue("publish/zip/{k}/{keep}"))) {
+    delete_gcs_prefix(p, bucket = "calcofi-db", dry_run = FALSE)
+    cat(glue("  removed superseded gs://calcofi-db/{p}"), "\n")
+  }
+}
+```
+
+```{r}
+#| label: upload-skip
+#| eval: !expr NO_PUBLISH
+due <- man_tbl |> filter(written, needs_upload)
+cat(glue("CALCOFI_PUBLISH_ZIP is not `true`{if (STAGING) ' (and this is a staging run)' else ''}: nothing uploaded.\n",
+         "{nrow(due)} zip(s) ({round(sum(due$bytes) / 1e6)} MB) differ from what {ZIP_GCS}/ holds; ",
+         "they are staged at {STAGE_DIR}/.\n"))
+```
+
+```{r}
+#| label: timings
+kable(bind_rows(runs), caption = "per dataset: reuse or build, what changed, seconds")
+```
+
+```{r}
+#| label: cleanup
+dbDisconnect(con, shutdown = TRUE)
+```
