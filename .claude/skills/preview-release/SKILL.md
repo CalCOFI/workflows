@@ -60,6 +60,14 @@ Rules in `scripts/test_preview_tracker.R`.
   ~30 s to settle and never `--disable-gpu` (WebGL blank); the Finder's DuckDB http secret is
   SCOPEd to the bucket (an unscoped token reached GitHub); the site's asset rewrite skips the
   URL base (`#37–#39`); DuckDB-WASM needs HEAD + Range on the data route (0.5.1).
+- **The dataset page's Download button** (calcofi.io's zips, 2026-11-16): `publish_to-zip.qmd` has a
+  PREVIEW run — `CALCOFI_RELEASE_BUCKET=calcofi-preview CALCOFI_RELEASE_PREFIX=ducklake-preview-<short>/releases
+  CALCOFI_DATASETS=<key>` (+ `CALCOFI_PUBLISH_ZIP=true` to upload) — that reads the candidate with the caller's
+  gcloud token, builds the held record whatever its visibility (`internal`), stages under
+  `publish/zip-preview/<root>/` (never `data/zip/`) and uploads to `gs://calcofi-preview/<root>/publish/zip/`.
+  `build_preview.sh` then hands the site the public manifest with this dataset's entry from the root's; its
+  URLs are rewritten to the data route like every other object of the root. Run it from the candidate's
+  worktree (its render holds the held dataset's numbers and is never committed), before the build.
 - **Access modes**: `link` (default since 2026-11-03, token in the URL, Caddy vhost
   `preview.calcofi.io` → Cloud Run) or `iap` (Google sign-in, `access.csv`); README "Switching the
   mode". The calcofi-admin SA cannot deploy the service: Ben deploys from Cloud Shell.

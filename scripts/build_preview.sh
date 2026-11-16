@@ -53,8 +53,32 @@ OUT="$(mktemp -d)/$BUILD"
 mkdir -p "$OUT"
 echo "preview $KEY ($ACCESS, $URLBASE/): candidate release $VERSION, build $BUILD"
 
+# 0. the dataset page's Download button: the zips publish_to-zip.qmd's PREVIEW run built from this candidate and
+# uploaded beside it (gs://$BUCKET/$ROOT/publish/zip/, served by the data route). The site reads ONE zip manifest, so it
+# gets the public one with this dataset's entry from the candidate root's; without a preview manifest the public one
+# stands and the held dataset's page has no Download button (said here, never an error)
+ZTMP="$(mktemp -d)"; ZIP_MAN=""
+if gcloud storage cat "gs://$BUCKET/$ROOT/publish/zip/manifest.json" > "$ZTMP/preview.json" 2>/dev/null; then
+  curl -fsS "https://storage.googleapis.com/calcofi-db/publish/zip/manifest.json" -o "$ZTMP/public.json" 2>/dev/null ||
+    echo '{"schema_version": "1.1", "datasets": []}' > "$ZTMP/public.json"
+  python3 - "$KEY" "$ZTMP/public.json" "$ZTMP/preview.json" "$ZTMP/manifest.json" <<'PY'
+import json, sys
+key, pub, prv, out = sys.argv[1:5]
+p, v = json.load(open(pub)), json.load(open(prv))
+mine = [d for d in v.get("datasets") or [] if d.get("dataset_key") == key]
+if not mine:
+    sys.exit(f"the candidate root's zip manifest has no {key}")
+ds = sorted([d for d in p.get("datasets") or [] if d.get("dataset_key") != key] + mine, key=lambda d: d["dataset_key"])
+json.dump({**p, "schema_version": v.get("schema_version", p.get("schema_version")), "release": v.get("release"), "datasets": ds}, open(out, "w"), indent=1)
+print(f"zip manifest: {key} from the candidate root ({sum(1 for b in mine[0].get('bundles') or [] if b.get('written'))} zips) beside {len(ds) - 1} public datasets")
+PY
+  ZIP_MAN="$ZTMP/manifest.json"
+else
+  echo "no zip manifest under gs://$BUCKET/$ROOT/publish/zip/: $KEY's page gets no Download button (publish_to-zip.qmd preview run first)"
+fi
+
 # 1. calcofi.io ----
-(cd "$SITE_DIR" && PREVIEW_URLBASE="$URLBASE" scripts/build_preview.sh "$KEY" "https://storage.googleapis.com/$BUCKET/$REL" "$OUT/site")
+(cd "$SITE_DIR" && PREVIEW_URLBASE="$URLBASE" ZIP_MANIFEST_URL="$ZIP_MAN" scripts/build_preview.sh "$KEY" "https://storage.googleapis.com/$BUCKET/$REL" "$OUT/site")
 
 # 2. the Explorer: data through the service's /d/{key}/data/ (same origin, behind the same sign-in) ----
 (cd "$EXPLORE_DIR" &&

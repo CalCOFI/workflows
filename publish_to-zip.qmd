@@ -123,30 +123,69 @@ stopifnot("calcofi4db >= 4.40.0 (bundle_plan) is required" = exists("bundle_plan
 # reads the staging release, writes under data/zip-staging/ and uploads nothing
 RELEASE_PREFIX <- Sys.getenv("CALCOFI_RELEASE_PREFIX", "ducklake/releases")
 STAGING        <- grepl("staging", RELEASE_PREFIX, fixed = TRUE)
-BASE_HTTPS     <- "https://storage.googleapis.com/calcofi-db"
-RELEASE_VERSION <- Sys.getenv("CALCOFI_RELEASE_VERSION", "")
-if (!nzchar(RELEASE_VERSION))
-  RELEASE_VERSION <- trimws(readLines(glue("{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt"), warn = FALSE)[1])
-Sys.setenv(CALCOFI_RELEASE_VERSION = RELEASE_VERSION)   # calcofi4r::cc_catalog() resolves the same one
 
 # comma-separated dataset_keys to restrict a run while iterating; empty = every public dataset
 ONLY <- Filter(nzchar, trimws(strsplit(Sys.getenv("CALCOFI_DATASETS", ""), ",")[[1]]))
 
+# a PREVIEW run (the preview-release skill): a held dataset's zips for its private preview, read from
+# its candidate release in the private bucket (CALCOFI_RELEASE_BUCKET=calcofi-preview,
+# CALCOFI_RELEASE_PREFIX=ducklake-preview-<short>/releases, CALCOFI_DATASETS=<key>) with the caller's
+# gcloud token, built whatever the record's visibility (a held record is `internal`), written under
+# the stage root only (never data/zip/, the public manifest in git) and, with CALCOFI_PUBLISH_ZIP=true,
+# uploaded beside the candidate at gs://calcofi-preview/<root>/publish/zip/, which the preview's data
+# route serves. Nothing of it can reach calcofi-db: every path below is the candidate root's.
+RELEASE_BUCKET <- Sys.getenv("CALCOFI_RELEASE_BUCKET", "calcofi-db")
+PREVIEW        <- !identical(RELEASE_BUCKET, "calcofi-db")
+PREVIEW_ROOT   <- sub("/releases$", "", RELEASE_PREFIX)
+if (PREVIEW) stopifnot(
+  "a preview zip run reads the private preview bucket only" =
+    identical(RELEASE_BUCKET, Sys.getenv("CALCOFI_PREVIEW_BUCKET", "calcofi-preview")) &&
+    !RELEASE_BUCKET %in% c("calcofi-db", "calcofi-files-public"),
+  "a preview zip run names its candidate root (CALCOFI_RELEASE_PREFIX=ducklake-preview-<short>/releases)" =
+    grepl("^ducklake-preview[a-z0-9-]*/releases$", RELEASE_PREFIX),
+  "a preview zip run names the held dataset(s) it builds (CALCOFI_DATASETS)" = length(ONLY) > 0)
+BASE_HTTPS <- glue("https://storage.googleapis.com/{RELEASE_BUCKET}")
+# the private bucket answers only an authenticated read; the public one is read as before
+GCS_TOKEN  <- if (PREVIEW) system2("gcloud", c("auth", "print-access-token"), stdout = TRUE)[1] else ""
+gcs_handle <- function() {
+  h <- curl::new_handle()
+  if (nzchar(GCS_TOKEN)) curl::handle_setheaders(h, Authorization = paste("Bearer", GCS_TOKEN))
+  h
+}
+get_text <- function(u) {
+  if (!PREVIEW) return(paste(readLines(u, warn = FALSE), collapse = "\n"))
+  r <- curl::curl_fetch_memory(u, handle = gcs_handle())
+  if (r$status_code != 200) stop(glue("{u}: HTTP {r$status_code}"), call. = FALSE)
+  rawToChar(r$content)
+}
+
+RELEASE_VERSION <- Sys.getenv("CALCOFI_RELEASE_VERSION", "")
+if (!nzchar(RELEASE_VERSION))
+  RELEASE_VERSION <- trimws(strsplit(get_text(glue("{BASE_HTTPS}/{RELEASE_PREFIX}/latest.txt")), "\n")[[1]][1])
+Sys.setenv(CALCOFI_RELEASE_VERSION = RELEASE_VERSION)   # calcofi4r::cc_catalog() resolves the same one
+
 PUBLISH    <- identical(Sys.getenv("CALCOFI_PUBLISH_ZIP"), "true") && !STAGING   # opt-in upload
 NO_PUBLISH <- !PUBLISH
 
-# bulk under the stage root, never in the git tree; the small manifests beside the notebook
-STAGE_DIR <- cc_stage_path("publish", if (STAGING) "zip-staging" else "zip", create = TRUE)
+# bulk under the stage root, never in the git tree; the small manifests beside the notebook (a
+# preview run keeps its manifests under the stage root too: data/zip/ is the public one)
+STAGE_DIR <- if (PREVIEW) cc_stage_path("publish", "zip-preview", PREVIEW_ROOT, create = TRUE) else
+  cc_stage_path("publish", if (STAGING) "zip-staging" else "zip", create = TRUE)
 OBJ_CACHE <- cc_stage_path("publish", "objects", create = TRUE)   # release objects, content-addressed
-OUT_DIR   <- here(if (STAGING) "data/zip-staging" else "data/zip")
+OUT_DIR   <- if (PREVIEW) STAGE_DIR else here(if (STAGING) "data/zip-staging" else "data/zip")
 dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
-ZIP_GCS   <- "gs://calcofi-db/publish/zip"
+ZIP_GCS   <- if (PREVIEW) glue("gs://{RELEASE_BUCKET}/{PREVIEW_ROOT}/publish/zip") else "gs://calcofi-db/publish/zip"
+# where the manifest says each zip is: the public bucket's, or the candidate root's (the preview's
+# site build rewrites that to its data route)
+BUNDLE_BASE <- if (PREVIEW) glue("https://storage.googleapis.com/{RELEASE_BUCKET}/{PREVIEW_ROOT}/publish/zip") else CC_BUNDLE_BASE_URL
+if (PREVIEW) stopifnot("a preview run's zips stay in the preview bucket" =
+  startsWith(ZIP_GCS, glue("gs://{RELEASE_BUCKET}/ducklake-preview")) && !grepl("calcofi-db", ZIP_GCS, fixed = TRUE))
 # the code the bundles are a function of: a change here rebuilds them
 LIC_DIR    <- file.path(PKG_DIR, "inst", "licenses")
 CODE_FILES <- c(here("publish_to-zip.qmd"), file.path(PKG_DIR, "R", "bundle.R"),
                 sort(list.files(LIC_DIR, full.names = TRUE)))
 
-cat(glue("release prefix : {RELEASE_PREFIX}{if (STAGING) ' (STAGING)' else ''}"), "\n")
+cat(glue("release prefix : {RELEASE_BUCKET}/{RELEASE_PREFIX}{if (STAGING) ' (STAGING)' else if (PREVIEW) ' (PREVIEW: a held dataset, never public)' else ''}"), "\n")
 cat(glue("release        : {RELEASE_VERSION}"), "\n")
 cat(glue("calcofi4db     : {PKG_DIR} ({as.character(utils::packageVersion('calcofi4db'))})"), "\n")
 cat(glue("stage (zips)   : {STAGE_DIR}"), "\n")
@@ -158,8 +197,9 @@ if (length(ONLY)) cat(glue("restricted to  : {paste(ONLY, collapse = ', ')}"), "
 ```{r}
 #| label: fetch-release-json
 rel_url  <- function(f) glue("{BASE_HTTPS}/{RELEASE_PREFIX}/{RELEASE_VERSION}/{f}")
-read_j   <- function(u) jsonlite::fromJSON(u, simplifyVector = FALSE)
-catalog  <- calcofi4r::cc_catalog(RELEASE_VERSION)
+read_j   <- function(u) jsonlite::fromJSON(if (PREVIEW) get_text(u) else u, simplifyVector = FALSE)
+# a preview's catalog is in the private bucket, which cc_catalog() cannot read unauthenticated
+catalog  <- if (PREVIEW) read_j(rel_url("catalog.json")) else calcofi4r::cc_catalog(RELEASE_VERSION)
 ds_json  <- read_j(rel_url("datasets.json"))
 meta     <- read_j(rel_url("metadata.json"))
 release  <- list(version = RELEASE_VERSION, release_date = catalog$release_date %||% NA,
@@ -167,12 +207,21 @@ release  <- list(version = RELEASE_VERSION, release_date = catalog$release_date 
                  concept_doi = catalog$concept_doi %||% NA)
 records  <- setNames(ds_json$datasets, vapply(ds_json$datasets, `[[`, "", "dataset_key"))
 public   <- names(records)[vapply(records, function(r) identical(r$visibility %||% "public", "public"), TRUE)]
-keys     <- if (length(ONLY)) intersect(public, ONLY) else public
+# a preview builds the held dataset(s) it names, whose record is not public by definition
+keys     <- if (PREVIEW) intersect(names(records), ONLY) else if (length(ONLY)) intersect(public, ONLY) else public
+if (PREVIEW) stopifnot("every dataset a preview names is in its candidate release" = length(keys) == length(ONLY))
 if (length(ONLY) && length(setdiff(ONLY, public)))
   cat(glue("NOTE requested but not a public dataset of {RELEASE_VERSION}: {paste(setdiff(ONLY, public), collapse = ', ')}"), "\n")
 cat(glue("{length(keys)} dataset(s) of {length(records)} in the release; ",
          "{length(ds_json$holdings %||% list())} holding(s) have no release data and get no bundle"), "\n")
 ```
+
+**A held dataset's preview** (the preview-release skill): with `CALCOFI_RELEASE_BUCKET=calcofi-preview`,
+`CALCOFI_RELEASE_PREFIX=ducklake-preview-<short>/releases` and `CALCOFI_DATASETS=<key>` the notebook reads that
+candidate release from the private bucket (the caller's gcloud token), builds the named dataset whatever its
+record's visibility, keeps every manifest under the stage root (never `data/zip/`, the public one) and uploads
+only to `gs://calcofi-preview/<root>/publish/zip/`, where the preview's data route serves it; the preview's
+site build reads that manifest. Such a render shows a held dataset's numbers: it is never committed.
 
 ## Read the release
 
@@ -203,7 +252,7 @@ fetch_local <- function(src) {
     if (file.exists(paths[i])) next
     dir.create(dirname(paths[i]), recursive = TRUE, showWarnings = FALSE)
     part <- paste0(paths[i], ".part")
-    curl::curl_download(src$urls[i], part, quiet = TRUE)
+    curl::curl_download(src$urls[i], part, quiet = TRUE, handle = gcs_handle())
     file.rename(part, paths[i])
   }
   paths
@@ -246,7 +295,8 @@ kable(plan_tbl |> filter(!included | source == "record") |> select(dataset_key, 
 # is new content to this scheme once.
 read_prior <- function() {
   p <- file.path(OUT_DIR, "manifest.json")
-  m <- if (file.exists(p)) tryCatch(read_j(p), error = function(e) NULL) else if (!STAGING) fetch_bundle_manifest()
+  m <- if (file.exists(p)) tryCatch(jsonlite::fromJSON(p, simplifyVector = FALSE), error = function(e) NULL) else
+    if (!STAGING && !PREVIEW) fetch_bundle_manifest()
   setNames(m$datasets %||% list(), vapply(m$datasets %||% list(), `[[`, "", "dataset_key"))
 }
 prior_all  <- read_prior()
@@ -288,7 +338,8 @@ for (k in keys) {
                       meta_columns = cols_meta, meta_tables = tbls_meta, licenses_dir = LIC_DIR)
     lic <- bundle_license(rec, LIC_DIR); cit <- bundle_citation(rec, release)
     e <- bundle_manifest_entry(rec, RELEASE_VERSION, release$release_date, RELEASE_VERSION, fp, built, plan, w,
-                               license_kind = lic$kind, has_provider_citation = cit$has_provider_citation)
+                               license_kind = lic$kind, has_provider_citation = cit$has_provider_citation,
+                               base_url = BUNDLE_BASE)
     action <- "upload"
     why <- if (is.null(prior)) "no previous package" else if (is.null(prior$content_hash))
       "first content-addressed build" else if (identical(prior$data_hash %||% "", fp$data_hash))
@@ -318,7 +369,7 @@ holds those bytes.
 ```{r}
 #| label: manifest
 manifest <- list(schema_version = "1.1", generated_by = "publish_to-zip.qmd",
-                 release = RELEASE_VERSION, base_url = CC_BUNDLE_BASE_URL,
+                 release = RELEASE_VERSION, base_url = BUNDLE_BASE,
                  datasets = unname(entries[sort(names(entries))]))
 man_json <- jsonlite::toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null", digits = NA)
 writeLines(man_json, file.path(OUT_DIR, "manifest.json"))
@@ -329,7 +380,9 @@ dir.create(file.path(STAGE_DIR, "releases", RELEASE_VERSION), recursive = TRUE, 
 writeLines(man_json, file.path(STAGE_DIR, "releases", RELEASE_VERSION, "manifest.json"))
 
 # what the bucket holds now, for the upload status
-remote <- if (STAGING) NULL else fetch_bundle_manifest()
+remote <- if (STAGING) NULL else if (PREVIEW)
+  tryCatch(read_j(glue("https://storage.googleapis.com/{sub('^gs://', '', ZIP_GCS)}/manifest.json")), error = function(e) NULL) else
+  fetch_bundle_manifest()
 remote_of <- function(k, f) {
   e <- Filter(function(x) identical(x$dataset_key, k), remote$datasets %||% list())
   if (!length(e)) return(list(sha256 = NA_character_, version = NA_character_))
@@ -411,7 +464,7 @@ say when it was current.
 up <- man_tbl |> filter(written)
 for (i in seq_len(nrow(up))) {
   b <- Filter(function(x) identical(x$format, up$format[i]), entries[[up$dataset_key[i]]]$bundles)[[1]]
-  put_gcs_file(file.path(STAGE_DIR, sub("^publish/zip/", "", b$path)), glue("gs://calcofi-db/{b$path}"),
+  put_gcs_file(file.path(STAGE_DIR, sub("^publish/zip/", "", b$path)), glue("{ZIP_GCS}/{sub('^publish/zip/', '', b$path)}"),
                content_type = "application/zip")
   cat(glue("uploaded {b$path}"), "\n")
 }
