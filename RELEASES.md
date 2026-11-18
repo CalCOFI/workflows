@@ -13,6 +13,41 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## Fall cruise 2611 grows from 36 to 53 casts: lines 83.3 and 80, without three Seabird-derived series on the new casts
+
+The CalCOFI technicians re-issued `20-2611_CTDCast.zip` on 2026-11-18 (Ben Gire) with the
+preliminary bottle-corrected casts 1–53, 31 October to 10 November. The 17 new casts (37–53, 7–10
+November) finish line 83.3 offshore to station 90 and inshore to 39.4, run line 80 from station
+100 to 51, and add 81.8 46.9 and 81.7 43.5. Cruise `2026-11-33P4` goes from 80,945 to 113,983
+headline observations (`obs_env`, 37 measurement types) and from 1,133,895 to 1,614,109 in
+`obs_ctd_full`. `calcofi_ctd-derived` gains the same casts' `sigma_theta_ave`, `spiciness0` and
+`buoyancy_n2` (7,996 to 11,473 rows for the cruise). The tier is still `preliminary_with_bottle`,
+with no nutrients yet.
+
+**Left out on casts 37–53, at the provider's request.** For these casts the ship's Seabird
+processing mangled several column names, so the file carries no `dynamic_height`,
+`potential_temperature_2` or `specific_volume_anomaly`. Ben Gire advised against publishing until
+a corrected file is posted, and Rasmus Swalethorp asked that the cruise be ingested with these
+components left out in the meantime. The release carries none of the three on casts 37–53 and
+fills nothing in for them. The derived values the file does carry for those casts were checked
+against TEOS-10 from the casts' own temperature, salinity and pressure. On all 53 casts,
+`potential_temperature_1` agrees to within 0.0003 °C and `sigma_theta_1` to within 0.012 kg/m³,
+and the oxygen saturations match the sensor oxygen. They ship as published. The corrected file
+will be ingested the same way when the technicians post it.
+
+The re-issue also refits the corrections on casts 1–36 over more bottles. Corrected salinity
+moves by at most 0.0018, the averaged station-corrected oxygen by at most 0.015 mL/L
+(0.68 µmol/kg), and the cruise-corrected chlorophyll estimate by up to 0.027 µg/L. No flag
+changes. As before, dynamic height stays downcast only for this cruise, because it is blank on
+every upcast in the source.
+
+No other cruise changed in `obs_env` or `calcofi_ctd-derived`: every other cruise × measurement
+type has the same row count, sum and flags as v2026.11.14. In `obs_ctd_full`, one 1 m bin of
+cruise 2006-04 drops out (cast `0604_014u`, 403 m), in five station-corrected series (oxygen,
+and the nitrate estimate). The source writes that bin twice, and only one copy carries those
+series. The ingest's de-duplication cannot tell the copies apart, so which one survives can
+differ between runs (workflows#278).
+
 ## Published files are content-addressed, as the release's tables are
 
 No table changes. The four publishers (download zips, CF netCDF, EDI staging, Darwin Core
