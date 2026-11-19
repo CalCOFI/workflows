@@ -13,6 +13,8 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+# v2026.11.18
+
 ## Fall cruise 2611 grows from 36 to 53 casts: lines 83.3 and 80, without three Seabird-derived series on the new casts
 
 The CalCOFI technicians re-issued `20-2611_CTDCast.zip` on 2026-11-18 (Ben Gire) with the
