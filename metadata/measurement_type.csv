@@ -1,5 +1,5 @@
 measurement_type,description,units,valid_min,valid_max,valid_depth_min_m,valid_depth_max_m,derivation,is_canonical,_source_column,_source_table,_source_datasets,_qual_column,_prec_column,grain,denominator,category,variable,nerc_p01,units_nerc_p06
-abundance,Specimen count per net tow (headline occurrence; standardize via std_haul_factor),count,0,,,,,TRUE,tally,ichthyo,swfsc_ichthyo;sio_mesopelagic-fish,,,obs,none,Fish Eggs & Larvae,,,http://vocab.nerc.ac.uk/collection/P06/current/UCNT/
+abundance,"Number of specimens counted in one net tow. Multiply by the standard haul factor to compare tows.",count,0,,,,"the headline occurrence value; standardize with std_haul_factor",TRUE,tally,ichthyo,swfsc_ichthyo;sio_mesopelagic-fish,,,obs,none,Fish Eggs & Larvae,,,http://vocab.nerc.ac.uk/collection/P06/current/UCNT/
 acoustic_presence,"Presence (1) or absence (0) of the taxon's calls in one hour of sonobuoy recording, scanned as 60-s spectrogram windows (headline occurrence; the call types heard are obs_attribute call_type)",dimensionless,0,1,,,,TRUE,Blue B; Blue D; Fin 20Hz Singular; Fin 20Hz Song; Fin C.C.; Fin H.C.; Humpback Song; Humpback Non-song,sonobuoy_scan,sio_cetacean-sonobuoy,Quality,,obs,none,Seabirds & Marine Mammals,,,http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
 air_temp_c,Air temperature,deg_C,-50,60,,,,TRUE,air_temp_c,mets_measurement,calcofi_mets,,,obs,,Meteorology & Sea State,,,
 alkalinity,Total alkalinity,umol/kg,0,5000,,,,TRUE,TA,dic_measurement,calcofi_dic,ta_flag,,obs,,Carbonate System,,http://vocab.nerc.ac.uk/collection/P01/current/MDMAP014/,http://vocab.nerc.ac.uk/collection/P06/current/KGUM/
@@ -13,7 +13,7 @@ barometric_pressure,Barometric pressure,millibars,,,,,,TRUE,barometer,casts,calc
 beam_attenuation,Beam attenuation coefficient,1/m,,,,,,TRUE,bat,ctd_raw,calcofi_ctd-cast,batq,,obs,,Physical Oceanography,,http://vocab.nerc.ac.uk/collection/P01/current/ATTNXXZZ/,http://vocab.nerc.ac.uk/collection/P06/current/UPRM/
 beaufort,"Beaufort sea state at a cetacean sighting (obs_attribute, bin_value)",Beaufort,0,12,,,,TRUE,Bft,cetacean_sighting,sio_cetacean-sightings,,,attribute,,Meteorology & Sea State,,,
 behavior,"Seabird/marine-mammal behavior category (obs_attribute; e.g. Flying, Feeding)",,,,,,,TRUE,behavior,bird_mammal_observation,farallon_bird-mammal;sio_cetacean-sightings,,,attribute,,Seabirds & Marine Mammals,,,
-body_length,Larva body length (obs_freq binned attribute),mm,,,,,,TRUE,,ichthyo,swfsc_ichthyo,,,attribute,,Fish Eggs & Larvae,,http://vocab.nerc.ac.uk/collection/P01/current/OBSINDLX/,http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
+body_length,"Body length of larvae, counted by length class",mm,,,,,"binned attribute, from obs_freq",TRUE,,ichthyo,swfsc_ichthyo,,,attribute,,Fish Eggs & Larvae,,http://vocab.nerc.ac.uk/collection/P01/current/OBSINDLX/,http://vocab.nerc.ac.uk/collection/P06/current/UXMM/
 bottom_depth,Water depth at the sampling event (sea floor depth beneath the cast),m,,,,,,FALSE,bottom_depth_m,casts,calcofi_bottle,,,sample,,Physical Oceanography,,,http://vocab.nerc.ac.uk/collection/P06/current/ULAA/
 bottom_depth_m,Bottom depth (single-beam),m,0,11000,,,,TRUE,bottom_depth_m,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 bottom_depth_mb_m,Bottom depth (multibeam),m,,,,,,FALSE,bottom_depth_mb_m,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
@@ -247,7 +247,7 @@ sss_psu,Sea surface salinity (raw),PSU,0,45,,,,TRUE,sss_psu,mets_measurement,cal
 sss_psu_corrected,Corrected sea surface salinity,PSU,0,45,,,,FALSE,sss_psu_corrected,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 sst_c,Sea surface temperature (raw),deg_C,-2,40,,,,TRUE,sst_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 sst_c_corrected,Corrected sea surface temperature,deg_C,,,,,,FALSE,sst_c_corrected,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
-stage,Egg or larva developmental stage (obs_freq binned attribute; labeled via lookup),,,,,,,TRUE,,ichthyo,swfsc_ichthyo,,,attribute,,Fish Eggs & Larvae,,,
+stage,"Developmental stage of eggs or larvae, counted by stage",,,,,,"binned attribute, from obs_freq; labels from lookup",TRUE,,ichthyo,swfsc_ichthyo,,,attribute,,Fish Eggs & Larvae,,,
 std_haul_factor,Standardized haul factor (Smith & Richardson 1977; event-level effort),dimensionless,,,,,,TRUE,standard_haul_factor,net,swfsc_ichthyo,,,sample,,Fish Eggs & Larvae,,,http://vocab.nerc.ac.uk/collection/P06/current/UUUU/
 sw_ph,Seawater pH,,6,9,,,,TRUE,sw_ph,mets_measurement,calcofi_mets,,,obs,,Carbonate System,,,
 synechococcus,Synechococcus abundance (FCM),number/ml,0,,,,,TRUE,Synechococcus (number/ml),picoplankton_bacteria_measurement,cce-lter_picoplankton-bacteria,,,obs,,Picoplankton & Bacteria,,http://vocab.nerc.ac.uk/collection/P01/current/P700A90Z/,http://vocab.nerc.ac.uk/collection/P06/current/UCML/
@@ -266,21 +266,21 @@ tsg1_density,TSG unit 1 density,kg/m3,,,,,,FALSE,tsg1_density,mets_measurement,c
 tsg1_salinity_psu,TSG unit 1 salinity,PSU,0,45,,,,TRUE,tsg1_salinity_psu,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg1_salinity_psu_calibrated,Calibrated salinity,PSU,0,45,,,,FALSE,tsg1_salinity_psu_calibrated,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg1_sound_velocity,TSG unit 1 sound velocity,m/s,,,,,,FALSE,tsg1_sound_velocity,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
-tsg1_temp_c,TSG unit 1 temperature (physical sensor unconfirmed -- mets_03),deg_C,-2,40,,,,TRUE,tsg1_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
+tsg1_temp_c,Thermosalinograph unit 1 temperature; which physical sensor this unit is has not been confirmed,deg_C,-2,40,,,,TRUE,tsg1_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg1_temp_c_calibrated,Calibrated temperature,deg_C,-2,40,,,,FALSE,tsg1_temp_c_calibrated,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg2_conductivity,TSG unit 2 conductivity,S/m,0,10,,,,FALSE,tsg2_conductivity,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg2_density,TSG unit 2 density,kg/m3,,,,,,FALSE,tsg2_density,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg2_salinity_psu,TSG unit 2 salinity,PSU,,,,,,FALSE,tsg2_salinity_psu,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg2_sound_velocity,TSG unit 2 sound velocity,m/s,,,,,,FALSE,tsg2_sound_velocity,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
-tsg2_temp_c,TSG unit 2 temperature (physical sensor unconfirmed -- mets_03),deg_C,,,,,,FALSE,tsg2_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
+tsg2_temp_c,Thermosalinograph unit 2 temperature; which physical sensor this unit is has not been confirmed,deg_C,,,,,,FALSE,tsg2_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg2b_temp_c,A SECOND unit-2 temperature appearing alongside TSG_Temp_2 in one file,deg_C,-2,40,,,,FALSE,tsg2b_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg3_conductivity,TSG unit 3 conductivity,S/m,,,,,,FALSE,tsg3_conductivity,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg3_density,TSG unit 3 density,kg/m3,900,1100,,,,FALSE,tsg3_density,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg3_salinity_psu,TSG unit 3 salinity,PSU,0,45,,,,FALSE,tsg3_salinity_psu,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg3_sound_velocity,TSG unit 3 sound velocity,m/s,,,,,,FALSE,tsg3_sound_velocity,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
-tsg3_temp_c,TSG unit 3 temperature (physical sensor unconfirmed -- mets_03),deg_C,-2,40,,,,FALSE,tsg3_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
+tsg3_temp_c,Thermosalinograph unit 3 temperature; which physical sensor this unit is has not been confirmed,deg_C,-2,40,,,,FALSE,tsg3_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 tsg5_salinity_psu,TSG unit 5 salinity,PSU,0,45,,,,FALSE,tsg5_salinity_psu,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
-tsg5_temp_c,TSG unit 5 temperature (physical sensor unconfirmed -- mets_03),deg_C,-2,40,,,,FALSE,tsg5_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
+tsg5_temp_c,Thermosalinograph unit 5 temperature; which physical sensor this unit is has not been confirmed,deg_C,-2,40,,,,FALSE,tsg5_temp_c,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
 unknown_measurement_1,Unidentified measurement (NaN in every file inspected),,,,,,,FALSE,unknown_measurement_1,mets_measurement,calcofi_mets,,,obs,,,,,
 unknown_measurement_2,Unidentified measurement (NaN in every file inspected),,,,,,,FALSE,unknown_measurement_2,mets_measurement,calcofi_mets,,,obs,,,,,
 uws_flow,Underway seawater flow rate,L/min,0,,,,,TRUE,uws_flow,mets_measurement,calcofi_mets,,,obs,,Physical Oceanography,,,
