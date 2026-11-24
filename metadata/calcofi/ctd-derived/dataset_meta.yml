@@ -29,9 +29,17 @@
   # a derived product inherits its source's terms, and the source states none yet:
   # calcofi_ctd-cast's license is empty pending its Q28 (proposed CC-BY-4.0). Left
   # empty here too, see questions.csv Q06 -- never invented
-  license: ""
+  # Betty Huang, 2026-11-21: CC BY 4.0, as calcofi_ctd-cast
+  license: CC-BY-4.0
   # the source states no PI; follows calcofi_ctd-cast Q29, see questions.csv Q06
   pi_names: ""
+  # Betty Huang, 2026-11-21: Rasmus Swalethorp (the release names no creator; the site was adding him)
+  creators:
+    - name: Rasmus Swalethorp
+      organization: UCSD SIO
+      email: rswalethorp@ucsd.edu
+  # Betty Huang, 2026-11-21: Rasmus Swalethorp, as for CTD Cast and METS (CalOOS sheet)
+  contact: rswalethorp@ucsd.edu
   methods_md: |
     **Input.** The full-resolution 1 m bins of the CalCOFI CTD Cast Files, as the
     `calcofi_ctd-cast` ingest stages them (`obs_ctd_full`), for the cast of each
@@ -143,3 +151,13 @@
     - "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > OXYGEN"
     - "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > NITRATE"
     - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > PYCNOCLINE"
+  # display words (datasets.json `display`, calcofi4db >= 4.42.0). Moved 2026-11-24 from the site's
+  # _data/dataset_extras.yml, where Betty Huang drafted them 2026-11-18..21 from this dataset's own
+  # description and the CalOOS CalCOFI list; a provider may correct any of them in the Sheet.
+  description_short: "Values worked out from the CTD profiles, not measured. Per depth, spiciness and density; per cast, the mixed-layer, chlorophyll-maximum, low-oxygen, nitracline and pycnocline depths."
+  description_lede: "Hydrographic products derived from the CalCOFI CTD cast profiles rather than measured: spiciness and sigma-theta at every published CTD depth, and, per cast, the mixed-layer depth, chlorophyll-a maximum and integral, hypoxic boundary depths, nitracline depth and pycnocline depth."
+  notes_md: "Mixed-layer depth follows the CalCOFI legacy definition, with two alternative criteria beside it. The hypoxic boundaries are where oxygen falls to 2.4, 1.4 and 0.5 mL/L; the nitracline is where nitrate reaches 1 µmol/L; the pycnocline is the maximum of the buoyancy frequency (N²). Everything is computed from the full-resolution 1 m bins of the CTD Cast Files after the provider’s quality flags are applied, by the definitions of the CalCOFI CTD team."
+  collection: "Calculated from the CTD Cast Files"
+  analysis: "TEOS-10 for spiciness and density; CalCOFI’s definitions for the mixed-layer, low-oxygen, nitracline and pycnocline depths"
+  analysis_org: "CalCOFI"
+  collection_status: ongoing

@@ -13,6 +13,42 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## Every dataset now says in plain words what it is, how it was collected and whether it continues
+
+The record a release publishes for each dataset (`datasets.json`, now schema 1.2) gains a
+`display` block: a plain name ("Fish Egg and Larva Counts" beside "Ichthyoplankton"), one line each
+on how the samples were collected and how they were analysed and by whom, a collection method
+(net tow, ship's pump, CTD sensors, water samples, underway sensors, visual survey, derived),
+whether collection is `ongoing` or `ended`, a short description for a list, the notes a reader
+needs before using the data, method references, and notes on individual columns. The record also
+gains `browse`, the eleven groups calcofi.io/datasets shows as tiles, and
+`attribution.associated_parties`, so a data provider or curator named beside the creators reaches a
+page and not only EML.
+
+These words were drafted by Betty Huang for calcofi.io on 18 to 21 November from each dataset's own
+description and the CalOOS CalCOFI list, and were kept in the website's repository. They now live
+with the rest of each dataset's metadata: the plain name, method and group in the ingest notebook,
+the sentences in the dataset's `dataset_meta.yml` (where its provider can correct them through the
+Sheet), and the vocabularies in `metadata/collection_method.csv`, `metadata/browse_group.csv` and
+`metadata/browse_realm.csv`. Nothing in the data tables changes.
+
+**Attribution corrected against the CalOOS CalCOFI list** (workflows#282): citations for the bottle,
+CTD cast, CUFES and ichthyoplankton datasets; a licence where none was stated (`CC-BY-4.0` for
+`calcofi_ctd-cast`, `calcofi_ctd-derived` and `calcofi_mets`; `CC0-1.0` for `swfsc_ichthyo` and
+`swfsc_cufes`, which replaces `custom` on the latter); creators and contacts for the bottle and CTD
+datasets, CUFES, ichthyoplankton, the mesopelagic fish and the Dungeness crab megalopae; and two
+corrected email addresses. These came from the list and not yet from each provider, so the
+question on each stays open and the dataset's page says so. The Farallon seabird and marine mammal
+dataset gets a drafted citation, also with an open question.
+
+Two short names change: `calcofi_dic` is "Dissolved Inorganic Carbon" (was "Carbonate Chemistry /
+DIC") and `calcofi_mets` is "Underway Meteorology (METS)" (was "Underway Meteorological (METS)").
+
+**Consumers:** `datasets.json` `schema_version` is `1.2`. The change is additive: `display` on every
+dataset (each key null where nothing is declared), `browse` at the top level, and
+`associated_parties` inside `attribution`. A reader that matches on `dataset_name_short` for
+`calcofi_dic` or `calcofi_mets` sees the new text.
+
 ## `sio_cetacean-sightings` (held): the fourth preview reads the lab's 2026-11-18 delivery
 
 No public table changes. The ingest reads the Scripps Whale Acoustics Lab's repository at commit

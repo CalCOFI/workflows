@@ -31,6 +31,13 @@
   license: CC-BY-4.0
   # the source states no PI; follows calcofi_bottle Q11, see questions.csv Q01
   pi_names: ""
+  # Betty Huang, 2026-11-21: Rasmus Swalethorp (the release names no creator; the site was adding him)
+  creators:
+    - name: Rasmus Swalethorp
+      organization: UCSD SIO
+      email: rswalethorp@ucsd.edu
+  # Betty Huang, 2026-11-21: Rasmus Swalethorp, as for CTD Cast and METS (CalOOS sheet)
+  contact: rswalethorp@ucsd.edu
   methods_md: |
     **Input.** The CalCOFI Bottle Database as the `calcofi_bottle` ingest stages it:
     each bottle's temperature (`T_degC`) and practical salinity (`Salnty`) with their
@@ -90,3 +97,13 @@
     - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY"
     - "EARTH SCIENCE > OCEANS > OCEAN TEMPERATURE > WATER TEMPERATURE"
     - "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > OCEAN SALINITY"
+  # display words (datasets.json `display`, calcofi4db >= 4.42.0). Moved 2026-11-24 from the site's
+  # _data/dataset_extras.yml, where Betty Huang drafted them 2026-11-18..21 from this dataset's own
+  # description and the CalOOS CalCOFI list; a provider may correct any of them in the Sheet.
+  description_short: "Values worked out from the bottle data, not measured. At every bottle, spiciness and density (sigma-theta); per cast, the nitracline depth."
+  description_lede: "Hydrographic values derived from the CalCOFI Bottle Database rather than measured: spiciness (at 0 dbar) and the TEOS-10 sigma-theta at every bottle with a temperature and a salinity, and, per cast, the nitracline depth."
+  notes_md: "Computed from each bottle’s own temperature and salinity after the provider’s quality flags are applied, from the start of the record in 1949. The nitracline is where nitrate reaches 1 µmol/L, interpolated between the bracketing bottles. The Bottle Database’s own sigma-theta stays in that dataset beside it."
+  collection: "Calculated from the Hydrographic Bottle data"
+  analysis: "TEOS-10 for spiciness and density; nitracline interpolated between bottles"
+  analysis_org: "CalCOFI"
+  collection_status: ongoing
