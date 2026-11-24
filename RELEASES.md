@@ -49,6 +49,19 @@ dataset (each key null where nothing is declared), `browse` at the top level, an
 `associated_parties` inside `attribution`. A reader that matches on `dataset_name_short` for
 `calcofi_dic` or `calcofi_mets` sees the new text.
 
+## Fall cruise 2611: the three series left out on casts 37–53 are now in
+
+The CalCOFI technicians posted a corrected `20-2611_CTDCast.zip` late on 2026-11-18 (Ben Gire),
+with the column names the ship's Seabird processing had mangled put right. v2026.11.18 left
+`dynamic_height`, `potential_temperature_2` and `specific_volume_anomaly` off casts 37–53 at the
+provider's request; this release carries all three on all 53 casts. Cruise `2026-11-33P4` goes
+from 113,983 to 116,337 headline observations (`obs_env`): `dynamic_height` and
+`specific_volume_anomaly` each go from 2,703 rows on 36 casts to 3,880 on 53. `obs_ctd_full`
+goes from 1,614,109 to 1,646,545 rows for the cruise, where `potential_temperature_2` now also
+covers every cast. No value published in v2026.11.18 for the cruise changed (compared row by
+row on cast, measurement and depth). The tier is still `preliminary_with_bottle`, with no
+nutrients yet.
+
 ## `sio_cetacean-sightings` (held): the fourth preview reads the lab's 2026-11-18 delivery
 
 No public table changes. The ingest reads the Scripps Whale Acoustics Lab's repository at commit
