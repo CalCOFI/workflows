@@ -6,9 +6,10 @@
 # Source: the lab's PRIVATE GitHub repository
 # MarineBioAcousticsRC/CalCOFI_visual_survey_data_2004_2025 (Michaela Alksne,
 # 2026-11-13; Ben has read access), at a pinned commit so a re-render reads the
-# same bytes. Five files: the on-effort sightings and effort segments (CSV), the
+# same bytes. Six files: the on-effort sightings and effort segments (CSV), the
 # lab's code list (`codes.csv`: species, behaviour, cue, sighting conditions),
-# its data dictionary and the CountCOFI field manual.
+# its data dictionary, the CountCOFI field manual and the visual observation
+# protocol (PDF, added 2026-11-18).
 #
 # The repository is private, so the files are fetched with the GitHub CLI (`gh`)
 # under the caller's own login, never an anonymous URL, and land in the CalCOFI
@@ -25,7 +26,8 @@ SIO_SIGHTINGS_FILES <- c(
   segments   = "CalCOFI_cetacean_effort_segments_2004-2025.csv",
   codes      = "codes.csv",
   dictionary = "data_dictionary.csv",
-  manual     = "CountCOFI_Manual.docx")
+  manual     = "CountCOFI_Manual.docx",
+  protocol   = "CalCOFI_Visual_Observation_Protocol.pdf")
 
 #' Download the lab's cetacean visual-survey files from its private GitHub repo
 #'
@@ -59,12 +61,14 @@ download_sio_cetacean_sightings <- function(
   }
 
   # gh writes the API's JSON error body on a failure that still exits 0 for some
-  # proxies: assert we got the CSV header / a docx (zip) rather than JSON
+  # proxies: assert we got the CSV header / a docx (zip) / a PDF rather than JSON
   hdr <- readLines(paths[["sightings"]], n = 1, warn = FALSE)
   stopifnot(
     "sightings CSV header not found (got an error page?)" = grepl("^\"?Cruise\"?,", hdr),
     "the manual is a docx (zip)" =
-      identical(readBin(paths[["manual"]], "raw", 2), as.raw(c(0x50, 0x4b))))
+      identical(readBin(paths[["manual"]], "raw", 2), as.raw(c(0x50, 0x4b))),
+    "the protocol is a PDF" =
+      identical(rawToChar(readBin(paths[["protocol"]], "raw", 4)), "%PDF"))
 
   commit <- jsonlite::fromJSON(system2(
     gh, c("api", shQuote(sprintf("repos/%s/commits/%s", repo, ref))), stdout = TRUE))

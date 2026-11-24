@@ -13,6 +13,23 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## `sio_cetacean-sightings` (held): the fourth preview reads the lab's 2026-11-18 delivery
+
+No public table changes. The ingest reads the Scripps Whale Acoustics Lab's repository at commit
+`44019d2` (Michaela Alksne, 2026-11-18): 5,425 on-effort sightings on 3,431 segments over 78
+cruises (5,090 and 3,241 before), with sightings an earlier timestamp-format problem had dropped
+restored (CC2009-11 and CC2010-07 among them; Q25). Times are converted to UTC with the lab's own
+per-cruise `UTC_offset_h` (−8 PST, −7 PDT; Q04), which replaces `cruise_utc_offset.csv`: 305
+sightings and 161 segments on 8 cruises move by one hour. One behaviour codebook now covers every
+year, and the two behaviours the CountCOFI app wrote as text are codes (Q31); four values stay
+outside it, unpublished. 5,318 sightings are placed at the animal (4,996 before) and 107 stay at
+the ship. The lab's visual observation protocol (PDF) joins the archived sources. Seven provider
+questions are answered; the publish decision, licence and citation (Q15, Q01, Q02) wait on the PIs,
+and three new questions (Q32–Q34) cover the November daylight-saving offsets, pre-2016 secondary
+behaviour codes and four restored sightings. The held dataset's NULL-`cruise_key` ratchet goes from
+64 to 80 segments: the restored effort on the two cruises the crosswalk cannot yet key (CC2023-03,
+CC2024-07).
+
 # v2026.11.18
 
 ## Fall cruise 2611 grows from 36 to 53 casts: lines 83.3 and 80, without three Seabird-derived series on the new casts
