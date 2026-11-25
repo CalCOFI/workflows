@@ -13,6 +13,8 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+# v2026.11.25
+
 ## Every dataset now says in plain words what it is, how it was collected and whether it continues
 
 The record a release publishes for each dataset (`datasets.json`, now schema 1.2) gains a
