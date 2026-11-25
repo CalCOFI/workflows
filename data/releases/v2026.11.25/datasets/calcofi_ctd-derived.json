@@ -1,0 +1,474 @@
+{
+  "schema_version": "1.2",
+  "release": {
+    "version": "v2026.11.25",
+    "release_date": "2026-11-25",
+    "doi": null,
+    "concept_doi": "10.5281/zenodo.22281994",
+    "citation": "CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.25 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.11.25",
+    "n_tables": 27,
+    "total_rows": 386215174,
+    "total_size": 2892246102,
+    "url": "https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.11.25/",
+    "catalog_url": "https://storage.googleapis.com/calcofi-db/ducklake/releases/v2026.11.25/catalog.json",
+    "schema_url": "https://calcofi.io/db-schema/?v=v2026.11.25"
+  },
+  "dataset": {
+    "dataset_key": "calcofi_ctd-derived",
+    "provider": {
+      "key": "calcofi",
+      "short": "CalCOFI",
+      "name": "California Cooperative Oceanic Fisheries Investigations",
+      "url": "https://calcofi.org",
+      "registered": true
+    },
+    "dataset": "ctd-derived",
+    "dataset_name": "CalCOFI CTD Derived Hydrographic Products",
+    "dataset_name_short": "CTD Derived Products",
+    "category": {
+      "name": "Physical Oceanography",
+      "realm": "env",
+      "icon": "cat-physical",
+      "order": 1,
+      "description": "Temperature, salinity, density, oxygen, pressure and dynamic height from bottles and CTD casts",
+      "registered": true
+    },
+    "color": "#0f7a5a",
+    "visibility": "public",
+    "description_md": "Hydrographic products DERIVED from the CalCOFI CTD cast profiles rather than measured: spice (spiciness at 0 dbar, TEOS-10) and the sensor-pair averaged sigma-theta at every published CTD depth; and, per cast, the mixed-layer depth (the CalCOFI legacy definition, with two alternative criteria beside it), the depth and value of the chlorophyll-a maximum, the chlorophyll-a integrated over the top 200 m, the hypoxic boundary depths (where oxygen falls to 2.4, 1.4 and 0.5 mL/L), the nitracline depth (where nitrate reaches 1 umol/L), the pycnocline depth (the maximum of the TEOS-10 buoyancy frequency N2, also published per depth), by the definitions of the CalCOFI CTD team. Computed from the full-resolution 1 m bins of the CalCOFI CTD Cast Files after the provider's quality flags are applied.\n",
+    "keywords": ["EARTH SCIENCE > OCEANS > SALINITY/DENSITY > DENSITY", "EARTH SCIENCE > OCEANS > OCEAN CIRCULATION > OCEAN MIXED LAYER", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > CHLOROPHYLL", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > OXYGEN", "EARTH SCIENCE > OCEANS > OCEAN CHEMISTRY > NITRATE", "EARTH SCIENCE > OCEANS > SALINITY/DENSITY > PYCNOCLINE"],
+    "display": {
+      "name_plain": "Calculated from Sensor Profiles: Mixed-Layer Depth, Low-Oxygen Depths, Spiciness",
+      "description_short": "Values worked out from the CTD profiles, not measured. Per depth, spiciness and density; per cast, the mixed-layer, chlorophyll-maximum, low-oxygen, nitracline and pycnocline depths.",
+      "description_lede": "Hydrographic products derived from the CalCOFI CTD cast profiles rather than measured: spiciness and sigma-theta at every published CTD depth, and, per cast, the mixed-layer depth, chlorophyll-a maximum and integral, hypoxic boundary depths, nitracline depth and pycnocline depth.",
+      "notes_md": "Mixed-layer depth follows the CalCOFI legacy definition, with two alternative criteria beside it. The hypoxic boundaries are where oxygen falls to 2.4, 1.4 and 0.5 mL/L; the nitracline is where nitrate reaches 1 µmol/L; the pycnocline is the maximum of the buoyancy frequency (N²). Everything is computed from the full-resolution 1 m bins of the CTD Cast Files after the provider’s quality flags are applied, by the definitions of the CalCOFI CTD team.",
+      "collection": "Calculated from the CTD Cast Files",
+      "analysis": "TEOS-10 for spiciness and density; CalCOFI’s definitions for the mixed-layer, low-oxygen, nitracline and pycnocline depths",
+      "analysis_org": "CalCOFI",
+      "collection_method": {
+        "key": "calc",
+        "label": "Derived"
+      },
+      "collection_status": "ongoing",
+      "browse_group": "ctd-bottle",
+      "spatial_note": null,
+      "references": [],
+      "column_notes": {
+        "cruise_key": "CalCOFI cruise, as year-month-ship code (YYYY-MM-NODC). Cruise_ID in the original cast file.",
+        "line": "CalCOFI line number: the first number of site_key, for example 090.0.",
+        "site_key": "CalCOFI line and station, for example 090.0 060.0 (Sta_ID in the original files).",
+        "station": "CalCOFI station number along the line: the second number of site_key, for example 060.0."
+      }
+    },
+    "attribution": {
+      "citation_main": "CalCOFI. (2026). CalCOFI CTD Derived Hydrographic Products (from the CalCOFI CTD Cast Files). CalCOFI.io. https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html",
+      "citation_others": [],
+      "doi": null,
+      "license": "CC-BY-4.0",
+      "license_name": "Creative Commons Attribution 4.0 International",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "acknowledgement": null,
+      "contact": "rswalethorp@ucsd.edu",
+      "pi_names": [],
+      "creators": [
+        {
+          "name": "Rasmus Swalethorp",
+          "organization": "UCSD SIO",
+          "orcid": null,
+          "email": "rswalethorp@ucsd.edu",
+          "role": null
+        }
+      ],
+      "associated_parties": [],
+      "funding": null,
+      "source_accessed": "2026-11-19"
+    },
+    "links": {
+      "calcofi_org": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+      "data_source": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+      "workflow": "https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html",
+      "page": "https://calcofi.io/datasets/calcofi_ctd-derived/"
+    },
+    "coverage": {
+      "realm": "env",
+      "temporal": "1993-08 to 2026-11",
+      "year_min": 1993,
+      "year_max": 2026,
+      "years": [
+        {
+          "year": 1993,
+          "n_obs": 31995,
+          "n_roots": 131
+        },
+        {
+          "year": 1994,
+          "n_obs": 65083,
+          "n_roots": 264
+        },
+        {
+          "year": 1995,
+          "n_obs": 62210,
+          "n_roots": 272
+        },
+        {
+          "year": 1996,
+          "n_obs": 68146,
+          "n_roots": 313
+        },
+        {
+          "year": 1997,
+          "n_obs": 65613,
+          "n_roots": 281
+        },
+        {
+          "year": 1998,
+          "n_obs": 95602,
+          "n_roots": 414
+        },
+        {
+          "year": 1999,
+          "n_obs": 59843,
+          "n_roots": 262
+        },
+        {
+          "year": 2000,
+          "n_obs": 58293,
+          "n_roots": 257
+        },
+        {
+          "year": 2001,
+          "n_obs": 57541,
+          "n_roots": 257
+        },
+        {
+          "year": 2002,
+          "n_obs": 58242,
+          "n_roots": 260
+        },
+        {
+          "year": 2003,
+          "n_obs": 71715,
+          "n_roots": 323
+        },
+        {
+          "year": 2004,
+          "n_obs": 73371,
+          "n_roots": 334
+        },
+        {
+          "year": 2005,
+          "n_obs": 60649,
+          "n_roots": 294
+        },
+        {
+          "year": 2006,
+          "n_obs": 66264,
+          "n_roots": 321
+        },
+        {
+          "year": 2007,
+          "n_obs": 63682,
+          "n_roots": 299
+        },
+        {
+          "year": 2008,
+          "n_obs": 62751,
+          "n_roots": 287
+        },
+        {
+          "year": 2009,
+          "n_obs": 70210,
+          "n_roots": 320
+        },
+        {
+          "year": 2010,
+          "n_obs": 66452,
+          "n_roots": 307
+        },
+        {
+          "year": 2011,
+          "n_obs": 68994,
+          "n_roots": 318
+        },
+        {
+          "year": 2012,
+          "n_obs": 55832,
+          "n_roots": 279
+        },
+        {
+          "year": 2013,
+          "n_obs": 65174,
+          "n_roots": 326
+        },
+        {
+          "year": 2014,
+          "n_obs": 51737,
+          "n_roots": 256
+        },
+        {
+          "year": 2015,
+          "n_obs": 61320,
+          "n_roots": 311
+        },
+        {
+          "year": 2016,
+          "n_obs": 70439,
+          "n_roots": 348
+        },
+        {
+          "year": 2017,
+          "n_obs": 62976,
+          "n_roots": 333
+        },
+        {
+          "year": 2018,
+          "n_obs": 54976,
+          "n_roots": 294
+        },
+        {
+          "year": 2019,
+          "n_obs": 44744,
+          "n_roots": 241
+        },
+        {
+          "year": 2020,
+          "n_obs": 48036,
+          "n_roots": 250
+        },
+        {
+          "year": 2021,
+          "n_obs": 51118,
+          "n_roots": 268
+        },
+        {
+          "year": 2022,
+          "n_obs": 45796,
+          "n_roots": 229
+        },
+        {
+          "year": 2023,
+          "n_obs": 64766,
+          "n_roots": 323
+        },
+        {
+          "year": 2024,
+          "n_obs": 52642,
+          "n_roots": 270
+        },
+        {
+          "year": 2025,
+          "n_obs": 44779,
+          "n_roots": 232
+        },
+        {
+          "year": 2026,
+          "n_obs": 25539,
+          "n_roots": 125
+        }
+      ],
+      "spatial": "29.8–37.8°N, 126.5–117.3°W",
+      "bbox": {
+        "lat_min": 29.8268,
+        "lat_max": 37.8491,
+        "lon_min": -126.4843,
+        "lon_max": -117.2734
+      },
+      "bbox_robust": {
+        "lat_min": 30.18013,
+        "lat_max": 36.37574,
+        "lon_min": -124.32273,
+        "lon_max": -117.531062729177,
+        "n_positions": 2026530
+      },
+      "months": [360692, 129088, 78447, 404114, 21440, 24795, 338402, 156406, 29002, 214140, 264757, 5247],
+      "n_obs": 2026530,
+      "n_roots": 9599,
+      "n_stations": 113,
+      "n_variables": 3,
+      "n_taxa": 0,
+      "depth_min_m": 1,
+      "depth_max_m": 3630,
+      "variables": [
+        {
+          "name": "buoyancy_n2",
+          "units": "1/s2",
+          "uri": null,
+          "category": "Physical Oceanography"
+        },
+        {
+          "name": "sigma_theta_ave",
+          "units": "kg/m3",
+          "uri": null,
+          "category": "Physical Oceanography"
+        },
+        {
+          "name": "spiciness0",
+          "units": "kg/m3",
+          "uri": null,
+          "category": "Physical Oceanography"
+        }
+      ],
+      "taxa": [],
+      "life_stages": [],
+      "contributes_to": []
+    },
+    "tables": ["obs", "sample_measurement", "measurement_type"],
+    "objects": [
+      {
+        "table": "obs",
+        "scope": "partition",
+        "shared": false,
+        "path": "ducklake/tables/obs/dataset_key=calcofi_ctd-derived/3194458a9113ae7bad20cc73/data_0.parquet",
+        "url": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_ctd-derived/3194458a9113ae7bad20cc73/data_0.parquet",
+        "table_description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together.",
+        "bytes": 27764566,
+        "sha256": "4325633b6fb9dbfc54d05b12f16e2bcab2c4577c9bfd7ea09efd450ed5150af8",
+        "since": "v2026.11.25"
+      }
+    ],
+    "since_version": "v2026.10.01",
+    "distributions": [
+      {
+        "kind": "service",
+        "url": "https://storage.googleapis.com/calcofi-db/stac/collections/calcofi_ctd-derived/collection.json",
+        "format": "stac",
+        "id": "calcofi_ctd-derived",
+        "title": "STAC collection",
+        "status": "current"
+      },
+      {
+        "kind": "download",
+        "url": "https://storage.googleapis.com/calcofi-db/ducklake/tables/obs/dataset_key=calcofi_ctd-derived/3194458a9113ae7bad20cc73/data_0.parquet",
+        "format": "parquet",
+        "table": "obs",
+        "scope": "partition",
+        "shared": false,
+        "title": "obs (this dataset's rows)",
+        "table_description": "The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together.",
+        "bytes": 27764566,
+        "sha256": "4325633b6fb9dbfc54d05b12f16e2bcab2c4577c9bfd7ea09efd450ed5150af8",
+        "since": "v2026.11.25",
+        "status": "current"
+      },
+      {
+        "kind": "bundle",
+        "url": "https://storage.googleapis.com/calcofi-db/publish/zip/calcofi_ctd-derived/44accf7c01b46d105f3d734d/calcofi_ctd-derived_v2026.11.14_csv.zip",
+        "format": "csv",
+        "id": "calcofi_ctd-derived_v2026.11.14_csv",
+        "title": "CSV tables (zip)",
+        "media_type": "application/zip",
+        "bytes": 46871953,
+        "sha256": "21eaacb99c406edfbe5116476ccd2784c7cecac9ffee56c5c5b34c15b9e41ca2",
+        "release": "v2026.11.14",
+        "excel_openable": false,
+        "rows": {
+          "obs": 2023053,
+          "sample": 9900,
+          "sample_measurement": 107573,
+          "measurement_type": 16,
+          "cruise": 143
+        },
+        "note": "obs (2,023,053 rows) has more rows than a spreadsheet can open (Excel stops at 1,048,576): open it with R, Python, a database, or a text editor, or take a subset from the Explorer.",
+        "status": "current",
+        "skipped": [
+          {
+            "format": "xlsx",
+            "reason": "Not offered as an Excel workbook: its largest table, obs, has 2,023,053 rows, more than an Excel sheet holds (1,048,576 rows including the header row). Use the CSV download, or take a subset from the Explorer."
+          }
+        ]
+      },
+      {
+        "kind": "bundle",
+        "url": "https://storage.googleapis.com/calcofi-db/publish/zip/calcofi_ctd-derived/44accf7c01b46d105f3d734d/calcofi_ctd-derived_v2026.11.14_parquet.zip",
+        "format": "parquet",
+        "id": "calcofi_ctd-derived_v2026.11.14_parquet",
+        "title": "Parquet tables (zip)",
+        "media_type": "application/zip",
+        "bytes": 32171451,
+        "sha256": "528cb8f6ccb70816478db7380a5c6e7ea34521dccd591056be0e187b4f53d387",
+        "release": "v2026.11.14",
+        "excel_openable": false,
+        "rows": {
+          "obs": 2023053,
+          "sample": 9900,
+          "sample_measurement": 107573,
+          "measurement_type": 16,
+          "cruise": 143
+        },
+        "status": "current"
+      },
+      {
+        "kind": "notebook",
+        "url": "https://calcofi.io/workflows/ingest_calcofi_ctd-derived.html",
+        "format": "html",
+        "title": "ingest notebook",
+        "status": "current"
+      },
+      {
+        "kind": "page",
+        "url": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+        "portal": "calcofi.org",
+        "title": "calcofi.org data page",
+        "status": "external"
+      },
+      {
+        "kind": "source",
+        "url": "https://calcofi.org/data/oceanographic-data/ctd-cast-files/",
+        "portal": "calcofi.org",
+        "title": "source",
+        "status": "external"
+      }
+    ],
+    "registrations": [
+      {
+        "portal": "erddap",
+        "status": "n/a",
+        "issues": []
+      },
+      {
+        "portal": "obis",
+        "status": "n/a",
+        "issues": []
+      },
+      {
+        "portal": "edi",
+        "status": "n/a",
+        "issues": []
+      },
+      {
+        "portal": "ncei",
+        "status": "n/a",
+        "issues": []
+      },
+      {
+        "portal": "caloos",
+        "status": "n/a",
+        "issues": []
+      },
+      {
+        "portal": "zenodo",
+        "status": "published",
+        "url": "https://doi.org/10.5281/zenodo.22281994",
+        "id": "10.5281/zenodo.22281994",
+        "title": "CalCOFI Integrated Database (the release deposit)",
+        "note": "as part of the integrated database release"
+      }
+    ],
+    "status": {
+      "stage": null,
+      "priority": null,
+      "gh_issue": null,
+      "blockers": null,
+      "publish_policy": null,
+      "updated": null,
+      "questions_open": 5,
+      "questions_dataset": [
+        {
+          "label": "Q06",
+          "field": null,
+          "status": "proposed"
+        }
+      ]
+    }
+  }
+}
