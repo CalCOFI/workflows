@@ -13,6 +13,45 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+## A row's id now changes only when its own dataset changes
+
+`obs_id`, `obs_attribute_id`, `sample_measurement_id` and `root_id` were each one running number
+over a whole table, across every dataset. So when one dataset gained rows, every dataset sorted
+after it was renumbered. The 17 CTD casts added to cruise 2611 in v2026.11.25 gave all 487,616
+ichthyoplankton observations an `obs_id` 2,354 higher although no other column of those rows
+changed, and the same happened to fifteen datasets. Because a published file is named for the
+content of its rows, ids included, every dataset's `obs` file was written again at each release,
+and the download zips would all have been rebuilt.
+
+Each dataset now owns a block of numbers, listed in `metadata/id_block.csv` and never changed or
+reused:
+
+- `obs_id`, `obs_attribute_id` and `sample_measurement_id` are `id_block × 10,000,000,000 + n`,
+  where `n` counts that dataset's own rows from 1 (still `BIGINT`, every value below 2^53);
+- `root_id` is `id_block × 5,000,000 + n` over that dataset's own root samples (still `INTEGER`).
+
+Within a dataset the rows are numbered in a fixed order: by time for `obs`, by cruise for the
+full-resolution `obs_ctd_full` and `obs_mets_full`, then by every other column. A later cruise
+therefore takes the next numbers and leaves the earlier ones alone, and rebuilding unchanged data
+gives the same ids. The release stops if any id is outside its dataset's block
+(`calcofi4db::check_id_blocks()`, calcofi4db 4.43.0), and the release test checks the published
+files the same way.
+
+**Consumers:** every id changes once, in this release. From here an id changes only when its own
+dataset's rows change, so it is still not a permanent identifier for a row: use `sample_key` with
+the measurement, taxon and depth to follow a row across releases. Ids no longer start at 1 or run
+without gaps across a table, and the largest `obs_id` is no longer the row count.
+
+## Every published output is brought up to date with each release
+
+The download zips, Darwin Core Archives, netCDF files and staged EDI packages are built by
+notebooks that sit after the release test, and a release was cut without running them:
+v2026.11.18 and v2026.11.25 were both promoted with the zips still built from v2026.11.14. They
+are now a step of the deploy that follows every promotion (`scripts/publish_all.sh`, called by
+`scripts/deploy_consumers.sh` before calcofi.io rebuilds). Each output is named for its content,
+so a dataset the release did not change is checked and left as it is, and only a changed dataset
+is rebuilt and uploaded. Creating or revising a package on EDI itself stays a person's decision.
+
 # v2026.11.25
 
 ## Every dataset now says in plain words what it is, how it was collected and whether it continues

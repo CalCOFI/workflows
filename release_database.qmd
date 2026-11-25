@@ -493,8 +493,9 @@ This step **concatenates, it does not derive.** Each ingest projects itself into
 the core in its own notebook ("Emit Core Tables") — the single authoritative
 projection, owned by the notebook that owns the dataset — and writes its slice as
 parquet. `assemble_core()` unions those
-shards, renumbers the surrogate ids globally (every ingest numbers from 1 within
-its own shard) and merges the `taxon` slices by source priority. Deriving the
+shards, numbers each surrogate id inside its own dataset's block
+(`metadata/id_block.csv`: an id changes only when its own dataset's rows do) and
+merges the `taxon` slices by source priority. Deriving the
 core here as well is what let the two projections drift apart, so that
 duplication is gone.
 
@@ -554,8 +555,8 @@ stopifnot(
 # --- assemble the core from the per-dataset shards --------------------------
 # Each ingest emits its own slice from its own notebook, which is the single
 # authoritative projection (calcofi4db holds only the generic shapes). This step only concatenates: it UNIONs the
-# shards, renumbers the surrogate ids globally (each ingest numbers from 1 within
-# its own shard), merges the `taxon` slices with source priority, and asserts
+# shards, numbers each surrogate id inside its dataset's block (each ingest numbers from 1
+# within its own shard), merges the `taxon` slices with source priority, and asserts
 # `sample_key` is globally unique. Nothing is re-derived here — that duplication
 # is exactly what let the release and the ingests drift apart.
 # Supplemental full-resolution tables are DISCOVERED from the ingests' YAML, not
@@ -714,7 +715,7 @@ per-dataset tables (`net`, `casts`, `ctd_cast`, …), which the ingests no longe
 publish — and which was only meaningful while the core was re-derived here.
 Now that each ingest emits its own slice, the checks that matter are
 **conservation** (no shard silently dropped by the union), **global key
-uniqueness** after renumbering, and **referential integrity**. A break fails the
+uniqueness** and block membership, and **referential integrity**. A break fails the
 render. See `design_env-bio-consolidation.md` Verification.
 
 ```{r}
@@ -749,7 +750,7 @@ conservation <- tibble(
 print(as.data.frame(conservation))
 stopifnot("every ingest shard must survive the union" = all(conservation$ok))
 
-# (B) surrogate ids must be globally unique after renumbering ----------------
+# (B) surrogate ids must be globally unique ---------------------------------
 id_dups <- c(
   "obs.obs_id" = q("SELECT COUNT(*) n FROM (SELECT obs_id FROM obs GROUP BY 1 HAVING COUNT(*) > 1)"),
   "obs_attribute.obs_attribute_id" = if ("obs_attribute" %in% dbListTables(con_wdl))
@@ -757,6 +758,15 @@ id_dups <- c(
   "sample.sample_key" = q("SELECT COUNT(*) n FROM (SELECT sample_key FROM sample GROUP BY 1 HAVING COUNT(*) > 1)"))
 if (any(id_dups > 0)) print(id_dups[id_dups > 0])
 stopifnot("core surrogate keys must be globally unique" = all(id_dups == 0))
+
+# (B2) every surrogate id sits in its own dataset's block (metadata/id_block.csv): an id changes only
+# when its own dataset's rows do. Through v2026.11.25 an id was one row number over the whole table,
+# so 17 new CTD casts renumbered every row of fifteen other datasets and each release re-uploaded
+# every dataset's `obs` object. calcofi4db::check_id_blocks() is the invariant (>= 4.43.0).
+id_blocks <- check_id_blocks(con_wdl, read_id_blocks(here()))
+print(as.data.frame(id_blocks[, c("table", "dataset_key", "id_block", "n", "ok", "why")]))
+stopifnot("every surrogate id must be numbered inside its dataset's block" = all(id_blocks$ok),
+          "the id tables must have been checked" = nrow(id_blocks) > 0)
 
 # (C) FK validity — every core row resolves against its reference, INCLUDING the
 # unified taxon (obs/obs_attribute/dataset_taxon all key into taxon.taxon_key) ---
@@ -2014,7 +2024,7 @@ pattern.
 #| label: browser_objects
 # --- browser-shaped release objects (CalCOFI Explorer plan D4; calcofi4db >= 3.24.0) ----------------
 # One object per lens, fetched whole by the browser and aggregated there: `obs_bio` (the bio realm,
-# ~22 MB), `obs_env/measurement_type=*` (one variable = one object), `sample_root` (the dense integer
+# ~22 MB), `obs_env/measurement_type=*` (one variable = one object), `sample_root` (the integer
 # join key + the cruise tracks) and `sample_spatial` (exact polygon membership per root sample,
 # computed ONCE here, chunked per layer, instead of per app on the 16 GB server), plus
 # `coverage.json` for the first paint before DuckDB-WASM wakes up. The quality predicate and the
@@ -2037,7 +2047,12 @@ dens_sql <- calcofi4r::cc_density_sql()
 stopifnot("hex7 on sample needs calcofi4db with add_sample_hex7() / check_sample_hex7(); pull ../calcofi4db" =
             exists("add_sample_hex7") && exists("check_sample_hex7"))
 n_hex7 <- add_sample_hex7(con_wdl)
-n_root <- build_sample_root(con_wdl)
+# root_id in its dataset's block (metadata/id_block.csv), as the core's ids are: a new cast in one
+# dataset must not renumber the roots, and so obs_bio / obs_env / sample_spatial, of another
+n_root <- build_sample_root(con_wdl, id_blocks = read_id_blocks(here()))
+root_blocks <- check_id_blocks(con_wdl, read_id_blocks(here()), tables = c(sample_root = "root_id"))
+stopifnot("every root_id must be numbered inside its dataset's block" =
+            nrow(root_blocks) > 0 && all(root_blocks$ok))
 n_bio  <- build_obs_slim(con_wdl, "bio", qual_ok_sql = qual_sql, density_sql = dens_sql)
 n_env  <- build_obs_slim(con_wdl, "env", qual_ok_sql = qual_sql, density_sql = dens_sql)
 # hex7 is present exactly where the position is finite (so count(hex7) = the count of finite positions,

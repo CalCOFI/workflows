@@ -371,6 +371,19 @@ rp1 <- function(t) calcofi4r::cc_read_parquet_sql(calcofi4r::cc_release_sources(
 has_obs_view <- "obs" %in% names(calcofi4r::cc_catalog_views(rel_cat))
 stopifnot(has_obs_view)   # the catalog must carry the view: consumers read obs through it
 
+# a surrogate id sits in its own dataset's block (metadata/id_block.csv, calcofi4db >= 4.43.0): zero
+# datasets whose ids are not exactly the block's first n numbers. Read from the PUBLISHED object, so
+# what a consumer downloads is what is checked.
+id_block_values <- with(calcofi4db::read_id_blocks(here::here()), paste(sprintf(
+  "('%s', %.0f)", dataset_key, id_block), collapse = ", "))
+id_block_sql <- function(tbl, id, size = calcofi4db::CC_ID_BLOCK_SIZE) glue(
+  "SELECT count(*) n FROM (
+     SELECT dataset_key, count(*) n, min({id}) lo, max({id}) hi, count(DISTINCT {id}) nd
+     FROM {rp(tbl)} GROUP BY 1) t
+   LEFT JOIN (SELECT dataset_key, block * {sprintf('%.0f', size)} AS base
+              FROM (VALUES {id_block_values}) v(dataset_key, block)) b USING (dataset_key)
+   WHERE b.base IS NULL OR nd <> n OR lo <> base + 1 OR hi <> base + n")
+
 # the rows that read obs, parameterised on HOW obs is read (R = rp or rpv) and tagged
 obs_rows <- function(R, tag) tibble::tribble(
   ~name, ~expect, ~sql,
@@ -512,6 +525,13 @@ contract <- tibble::tribble(
      WHERE effort_class = 'raw_count_no_effort' AND (density_per_10m2 IS NOT NULL OR density_per_1000m3 IS NOT NULL)"),
   "consumer: one env variable is one object (temperature, quality-filtered)", "nonzero", glue(
     "SELECT count(*) n FROM {rp('obs_env')} WHERE measurement_type = 'temperature' AND qual_ok"),
+  "integrity: obs_id is numbered inside its dataset's block", "zero", id_block_sql("obs", "obs_id"),
+  "integrity: obs_attribute_id is numbered inside its dataset's block", "zero",
+    id_block_sql("obs_attribute", "obs_attribute_id"),
+  "integrity: sample_measurement_id is numbered inside its dataset's block", "zero",
+    id_block_sql("sample_measurement", "sample_measurement_id"),
+  "integrity: root_id is numbered inside its dataset's block", "zero",
+    id_block_sql("sample_root", "root_id", calcofi4db::CC_ROOT_ID_BLOCK_SIZE),
   "integrity: every sample_spatial root resolves to sample_root", "zero", glue(
     "SELECT count(*) n FROM {rp('sample_spatial')} ss
      WHERE NOT EXISTS (SELECT 1 FROM {rp('sample_root')} r WHERE r.root_id = ss.root_id)"),

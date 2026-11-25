@@ -18,7 +18,7 @@ sample,tow_type,Tow Type,,"Net gear code where the dataset records one (C1/CB/CV
 sample,data_stage,Data Stage,,"The source's own processing state for this event: `final` (post-cruise calibrations applied) or `preliminary` (**not for publication** — the source warns that oxygen, nitrate and chlorophyll may change significantly once calibrated). Populated by `calcofi_ctd-cast`; NULL where the dataset draws no such distinction, which is not a claim that the data are final."
 sample,geom,Geometry,,Point geometry minted from `longitude`/`latitude` (OGC:CRS84).
 obs,,Observation,,"The occurrence-headline long table: one scalar measurement per row, environmental (`realm = 'env'`) and biological (`realm = 'bio'`) together. Biological taxon is the global `taxon_key`; sub-occurrence detail (length/stage bins, behavior) lives in `obs_attribute`, and event-level effort in `sample_measurement`."
-obs,obs_id,Observation ID,,"Surrogate key, renumbered globally when the release concatenates the per-dataset shards."
+obs,obs_id,Observation ID,,"Surrogate key, numbered inside its dataset's block (`metadata/id_block.csv`) when the release concatenates the per-dataset shards: it changes only when its own dataset's rows change."
 obs,realm,Realm,,"`env` for physical/chemical measurements, `bio` for organism observations."
 obs,dataset_key,Dataset Key,,Provenance stamp: `provider_dataset`.
 obs,sample_key,Sample Key,,The sampling event this observation came from; joins `sample`.

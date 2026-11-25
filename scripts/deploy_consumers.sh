@@ -2,7 +2,7 @@
 # deploy_consumers.sh — bring every server-side consumer onto the promoted release.
 #
 # Run from the workflows repo AFTER latest.txt has been promoted:
-#   bash scripts/deploy_consumers.sh [--release vYYYY.MM.DD] [--skip-prep] [--skip-media]
+#   bash scripts/deploy_consumers.sh [--release vYYYY.MM.DD] [--skip-prep] [--skip-media] [--skip-publish]
 #
 # Step 7 (the species and measurement faces) needs the landing-site checkout beside this repo
 # (CALCOFI_SITE_DIR, default ../CalCOFI.github.io) and, only when a release added keys, gcloud
@@ -36,11 +36,13 @@ GH="/share/github/CalCOFI"
 RELEASE=""
 SKIP_PREP=0
 SKIP_MEDIA=0
+SKIP_PUBLISH=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --release)    RELEASE="$2"; shift 2 ;;
     --skip-prep)  SKIP_PREP=1; shift ;;
     --skip-media) SKIP_MEDIA=1; shift ;;
+    --skip-publish) SKIP_PUBLISH=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -158,6 +160,19 @@ done
 echo "    h3t open file:"
 curl -s --max-time 60 https://h3t.calcofi.io/h3t/health | sed 's/^/      /'
 [ "$fail" -eq 0 ] || { echo "==> FAILED: a consumer is not answering 200" >&2; exit 1; }
+
+# 5b. the published outputs -------------------------------------------------
+# The download zips, Darwin Core Archives, netCDF files, the staged EDI packages and ERDDAP's
+# config, each content-addressed: a dataset the release did not change is checked and left alone.
+# BEFORE the hosted consumers, because calcofi.io reads the zip manifest when it rebuilds. A
+# failed leg does not stop the rest of the deploy; it fails the script at the end.
+publish_fail=0
+if [ "$SKIP_PUBLISH" -eq 1 ]; then
+  echo "==> 5b skipping the publishers (--skip-publish)"
+else
+  echo "==> 5b the published outputs (scripts/publish_all.sh)"
+  bash "$(dirname "$0")/publish_all.sh" || publish_fail=1
+fi
 
 # 6. hosted consumers ------------------------------------------------------
 # Not on the CalCOFI server: these rebuild themselves on GitHub Actions, so all
@@ -332,4 +347,5 @@ else
 fi
 
 echo "==> consumers deployed for $RELEASE"
-[ "$site_fail" -eq 0 ] && [ "$media_fail" -eq 0 ] || exit 1
+[ "$publish_fail" -eq 0 ] || echo "    but a publisher leg failed: see scripts/publish_all.sh's log lines above" >&2
+[ "$site_fail" -eq 0 ] && [ "$media_fail" -eq 0 ] && [ "$publish_fail" -eq 0 ] || exit 1

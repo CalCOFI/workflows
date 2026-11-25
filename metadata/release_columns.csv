@@ -30,7 +30,7 @@ spatial_attribute,val_int,Value (integer),,Value when the source column was inte
 spatial_attribute,val_chr,Value (text),,Value when the source column was character or factor; NULL otherwise. Also the fallback for any type with no dedicated column.
 spatial_attribute,val_date,Value (date),,Value when the source column was a Date; NULL otherwise.
 spatial_attribute,val_lgl,Value (logical),,Value when the source column was logical; NULL otherwise.
-sample_root,root_id,Root ID,,"Dense integer id of a root sampling event (`sample` with no parent), numbered deterministically over `sample_key`; the join key shared by `obs_bio`, `obs_env` and `sample_spatial`."
+sample_root,root_id,Root ID,,"Integer id of a root sampling event (`sample` with no parent), numbered inside its dataset's block (`metadata/id_block.csv`) by time and `sample_key`, so it changes only when its own dataset's roots change; the join key shared by `obs_bio`, `obs_env` and `sample_spatial`."
 sample_root,root_sample_key,Root Sample Key,,The `sample.sample_key` this root id stands for.
 sample_root,seafloor_depth_m,Seafloor Depth,m,"GEBCO seafloor depth at the root sample's position (positive down), from `sample`."
 sample_root,hex7,H3 Cell (res 7),,"The root sample's own `sample.hex7`, carried unchanged: one `UBIGINT` H3 cell at resolution 7, the parent of the resolution-10 cell of the root's position; NULL without a finite position. Coarser parents are bit arithmetic (`calcofi4db::h3_parent_sql()`), no extension needed."
