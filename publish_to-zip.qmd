@@ -471,6 +471,13 @@ for (i in seq_len(nrow(up))) {
 put_gcs_file(file.path(STAGE_DIR, "releases", RELEASE_VERSION, "manifest.json"),
              glue("{ZIP_GCS}/releases/{RELEASE_VERSION}/manifest.json"), content_type = "application/json")
 put_gcs_file(file.path(STAGE_DIR, "manifest.json"), glue("{ZIP_GCS}/manifest.json"), content_type = "application/json")
+# the pointer calcofi.io reads at build time is rewritten in place, so it must not be cached: with
+# the bucket's default (public, max-age=3600) the site build that followed the v2026.11.26 upload by
+# 36 minutes read the previous manifest and kept linking the v2026.11.14 zips. Set on every run
+# (metadata only), since an unchanged manifest is not uploaded again and would keep its old header.
+rc <- system2("gcloud", c("storage", "objects", "update", glue("{ZIP_GCS}/manifest.json"),
+                          "--cache-control=no-cache,max-age=0"), stdout = FALSE, stderr = FALSE)
+stopifnot("could not set Cache-Control on the zip manifest" = rc == 0)
 ```
 
 ```{r}
