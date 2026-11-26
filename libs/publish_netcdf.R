@@ -182,10 +182,14 @@ cc_release_parquet <- function(table, version = NULL) {
 #'
 #' @return list(sha256, content_hash, identical_to = <version or NA>, since,
 #'   canonical_url, upload, published)
-cc_netcdf_plan <- function(local_file, dataset, version, content_hash) {
-  stopifnot(nchar(content_hash) >= 24)
+cc_netcdf_plan <- function(local_file, dataset, version, content_hash,
+                           prior = cc_netcdf_history(dataset)) {
+  # a bare string: the notebook hands over one element of a vector named by dataset, and
+  # identical() counts the name, so no recorded hash ever matched and every run uploaded every
+  # file again (19 files, about 4 GB, three times on 2026-11-26)
+  content_hash <- unname(as.character(content_hash))
+  stopifnot(length(content_hash) == 1, nchar(content_hash) >= 24)
   sha <- digest::digest(local_file, algo = "sha256", file = TRUE)
-  prior <- cc_netcdf_history(dataset)
   rel <- prior$releases %||% list()
   hit <- Find(function(r) identical(r$content_hash %||% "", content_hash), rel)
   this <- Filter(function(r) identical(r$version, version), rel)

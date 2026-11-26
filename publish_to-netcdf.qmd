@@ -955,10 +955,11 @@ built only when its content is new, is the release its content first appeared in
 
 ```{r}
 #| label: upload-plan
+# USE.NAMES = FALSE: a named hash is not identical() to the one the site records (cc_netcdf_plan())
 built$content_hash <- vapply(built$dataset_key, function(d)
-  if (d == "calcofi_ctd-cast_full") fp_full$content_hash else fps[[d]]$content_hash, "")
+  if (d == "calcofi_ctd-cast_full") fp_full$content_hash else fps[[d]]$content_hash, "", USE.NAMES = FALSE)
 built$data_hash <- vapply(built$dataset_key, function(d)
-  if (d == "calcofi_ctd-cast_full") fp_full$data_hash else fps[[d]]$data_hash, "")
+  if (d == "calcofi_ctd-cast_full") fp_full$data_hash else fps[[d]]$data_hash, "", USE.NAMES = FALSE)
 up_plan <- bind_rows(lapply(seq_len(nrow(built)), function(i) {
   p <- cc_netcdf_plan(built$path[i], built$dataset_key[i], RELEASE, built$content_hash[i])
   tibble(dataset_key = built$dataset_key[i], MB = round(built$bytes[i] / 1e6, 1),
