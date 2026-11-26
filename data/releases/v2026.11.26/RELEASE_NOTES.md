@@ -83,7 +83,7 @@ is rebuilt and uploaded. Creating or revising a package on EDI itself stays a pe
 
 ## How to cite
 
-> CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.26 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://calcofi.io/db-schema/?v=v2026.11.26
+> CalCOFI (2026). CalCOFI Integrated Database, release v2026.11.26 [Data set]. Scripps Institution of Oceanography, NOAA Fisheries, and California Department of Fish and Wildlife. https://doi.org/10.5281/zenodo.24562907
 
 Cite the source datasets you use alongside the release:
 
