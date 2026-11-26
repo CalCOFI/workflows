@@ -161,8 +161,10 @@ erddap_splice_config <- function(repo_dir, generated_xml) {
     stats::setNames(m, vapply(m, function(x) ids(x)[1], ""))
   }
   ob <- blocks_of(old_gen); nb <- blocks_of(gen)
-  changed <- names(nb)[names(nb) %in% names(ob) &
-                       vapply(names(nb), function(i) !identical(trimws(nb[[i]]), trimws(ob[[i]])), logical(1))]
+  # only ids on both sides are compared: `ob[[i]]` for an added id is a subscript out of bounds,
+  # which stopped the first deploy that added a dataset (2026-11-26)
+  both    <- intersect(names(nb), names(ob))
+  changed <- both[vapply(both, function(i) !identical(trimws(nb[[i]]), trimws(ob[[i]])), logical(1))]
   out <- paste0(substr(txt, 1, b - 1), ERDDAP_BEGIN, "\n", gen, "\n",
                 substr(txt, e, nchar(txt)))
   writeLines(out, cfg_path)
