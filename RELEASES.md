@@ -13,6 +13,8 @@ empty). Conventions: `CLAUDE.md` § "Release rules" and the `release-run` skill.
 
 # Unreleased
 
+# v2026.11.26
+
 ## A row's id now changes only when its own dataset changes
 
 `obs_id`, `obs_attribute_id`, `sample_measurement_id` and `root_id` were each one running number

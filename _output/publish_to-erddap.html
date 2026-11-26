@@ -2,19 +2,25 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.8.25">
+<meta name="generator" content="quarto-1.10.18">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="CalCOFI">
-<meta name="dcterms.date" content="2026-09-11">
+<meta name="dcterms.date" content="2026-11-26">
 
 <title>Publish every dataset to ERDDAP</title>
 <style>
-code{white-space: pre-wrap;}
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
 span.smallcaps{font-variant: small-caps;}
-div.columns{display: flex; gap: min(4vw, 1.5em);}
-div.column{flex: auto; overflow-x: auto;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
 div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
 ul.task-list{list-style: none;}
 ul.task-list li input[type="checkbox"] {
@@ -63,15 +69,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="publish_to-erddap_files/libs/clipboard/clipboard.min.js"></script>
 <script src="publish_to-erddap_files/libs/quarto-html/quarto.js" type="module"></script>
 <script src="publish_to-erddap_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="publish_to-erddap_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
 <script src="publish_to-erddap_files/libs/quarto-html/popper.min.js"></script>
 <script src="publish_to-erddap_files/libs/quarto-html/tippy.umd.min.js"></script>
 <script src="publish_to-erddap_files/libs/quarto-html/anchor.min.js"></script>
 <link href="publish_to-erddap_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="publish_to-erddap_files/libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="publish_to-erddap_files/libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="publish_to-erddap_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="publish_to-erddap_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="publish_to-erddap_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="publish_to-erddap_files/libs/bootstrap/bootstrap-917079515d91bccb85b543faf8aa8bb6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <!-- cc-brand v2 — the calcofi.io brand contract (https://calcofi.io/brand/v2/; the SIO look,
      light by default, in force 2026-09-04) for a rendered Quarto notebook. Included by
      _quarto.yml (include-in-header) on every render, and injected into (or swapped into, for a
@@ -175,7 +180,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">2026-09-11</p>
+      <p class="date">2026-11-26</p>
     </div>
   </div>
   
@@ -299,21 +304,21 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"release       : {RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>release       : v2026.09.11</code></pre>
+<pre><code>release       : v2026.11.26</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"local parquet : {PQ_LOCAL} ({ifelse(dir_exists(PQ_LOCAL), 'present', 'MISSING')})</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>local parquet : /Users/bbest/_big/calcofi/releases/v2026.09.11/parquet (present)</code></pre>
+<pre><code>local parquet : /Users/bbest/_big/calcofi/releases/v2026.11.26/parquet (present)</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"server parquet: {PQ_SERVER}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>server parquet: /share/data/erddap-duckdb/datasets/release/v2026.09.11/parquet</code></pre>
+<pre><code>server parquet: /share/data/erddap-duckdb/datasets/release/v2026.11.26/parquet</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -367,7 +372,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>  <span class="st">"`obs` objects — no effort/density columns for this run.</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>v2026.09.11 catalog carries obs_bio + obs_env: the {dataset_key} grain reads the bifurcated pair (adds tow_type, std_haul_factor, prop_sorted, volume_sampled_m3, density_per_10m2, density_per_1000m3, effort_class, units, qual_ok to the existing columns).</code></pre>
+<pre><code>v2026.11.26 catalog carries obs_bio + obs_env: the {dataset_key} grain reads the bifurcated pair (adds tow_type, std_haul_factor, prop_sorted, volume_sampled_m3, density_per_10m2, density_per_1000m3, effort_class, units, qual_ok to the existing columns).</code></pre>
 </div>
 </div>
 </section>
@@ -391,7 +396,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>Core rows per dataset in v2026.09.11</caption>
+<caption>Core rows per dataset in v2026.11.26</caption>
 <colgroup>
 <col style="width: 35%">
 <col style="width: 7%">
@@ -412,30 +417,54 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </thead>
 <tbody>
 <tr class="odd">
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: right;">47</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">536</td>
+<td style="text-align: right;">148</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">calcofi_bottle</td>
-<td style="text-align: right;">931015</td>
+<td style="text-align: right;">930997</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">268876</td>
+<td style="text-align: right;">268871</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">11135581</td>
+<td style="text-align: right;">11135334</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_bottle-derived</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">13357</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1683308</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_ctd-cast</td>
-<td style="text-align: right;">19242</td>
+<td style="text-align: right;">19834</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">18126607</td>
+<td style="text-align: right;">19064356</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">calcofi_dic</td>
-<td style="text-align: right;">3261</td>
+<td style="text-align: left;">calcofi_ctd-derived</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
+<td style="text-align: right;">107747</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">3708</td>
+<td style="text-align: right;">2026530</td>
 </tr>
 <tr class="even">
+<td style="text-align: left;">calcofi_dic</td>
+<td style="text-align: right;">3263</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">16389</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">calcofi_mets</td>
 <td style="text-align: right;">77791</td>
 <td style="text-align: right;">0</td>
@@ -443,7 +472,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">511395</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td style="text-align: left;">calcofi_phyllosoma</td>
 <td style="text-align: right;">1859</td>
 <td style="text-align: right;">369</td>
@@ -451,15 +480,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">1859</td>
 <td style="text-align: right;">0</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;">calcofi_phytoplankton</td>
 <td style="text-align: right;">409</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">159804</td>
+<td style="text-align: right;">155553</td>
 <td style="text-align: right;">0</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td style="text-align: left;">cce-lter_euphausiids</td>
 <td style="text-align: right;">7482</td>
 <td style="text-align: right;">0</td>
@@ -467,13 +496,21 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">100505</td>
 <td style="text-align: right;">0</td>
 </tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">170</td>
+</tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_picoplankton-bacteria</td>
 <td style="text-align: right;">16017</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">0</td>
 <td style="text-align: right;">60802</td>
+<td style="text-align: right;">0</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">cce-lter_zoodb</td>
@@ -525,18 +562,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: right;">49572</td>
+<td style="text-align: right;">47989</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
-<td style="text-align: right;">284097</td>
+<td style="text-align: right;">550162</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_ichthyo</td>
-<td style="text-align: right;">213122</td>
-<td style="text-align: right;">369978</td>
-<td style="text-align: right;">320110</td>
-<td style="text-align: right;">482250</td>
+<td style="text-align: right;">212249</td>
+<td style="text-align: right;">367094</td>
+<td style="text-align: right;">324284</td>
+<td style="text-align: right;">487616</td>
 <td style="text-align: right;">0</td>
 </tr>
 </tbody>
@@ -678,7 +715,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tr class="odd">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">obs_ctd_full</td>
-<td style="text-align: right;">275231999</td>
+<td style="text-align: right;">286046006</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">carries its own time/lat/lon</td>
@@ -910,7 +947,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb17-65"><a href="#cb17-65" aria-hidden="true" tabindex="-1"></a>         <span class="st">"sdn_parameter_urn set only for those).</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>nerc_p01 in metadata/measurement_type.csv: 83 of 200 types (sdn_parameter_urn set only for those).</code></pre>
+<pre><code>nerc_p01 in metadata/measurement_type.csv: 85 of 304 types (sdn_parameter_urn set only for those).</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -981,7 +1018,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </details>
 <div class="cell-output-display">
 <table class="caption-top table table-sm table-striped small">
-<caption>37 ERDDAP datasets planned</caption>
+<caption>43 ERDDAP datasets planned</caption>
 <colgroup>
 <col style="width: 21%">
 <col style="width: 26%">
@@ -1002,10 +1039,26 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </thead>
 <tbody>
 <tr class="odd">
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: left;">obs</td>
+<td style="text-align: right;">148</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">calcofi_2022_edna</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: left;">calcofi_2022-edna_sample</td>
+<td style="text-align: left;">sample</td>
+<td style="text-align: right;">47</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">calcofi_2022_edna_sample</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">obs</td>
-<td style="text-align: right;">11135581</td>
+<td style="text-align: right;">11135334</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_bottle</td>
 </tr>
@@ -1013,39 +1066,55 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">calcofi_bottle_sample</td>
 <td style="text-align: left;">sample</td>
-<td style="text-align: right;">931015</td>
+<td style="text-align: right;">930997</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_bottle_sample</td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;">calcofi_bottle-derived</td>
+<td style="text-align: left;">calcofi_bottle-derived</td>
+<td style="text-align: left;">obs</td>
+<td style="text-align: right;">1683308</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">calcofi_bottle_derived</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">calcofi_ctd-cast_full</td>
 <td style="text-align: left;">full</td>
-<td style="text-align: right;">275231999</td>
+<td style="text-align: right;">286046006</td>
 <td style="text-align: left;">obs_ctd_full</td>
 <td style="text-align: left;">calcofi_ctd_cast_full</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">obs</td>
-<td style="text-align: right;">18126607</td>
+<td style="text-align: right;">19064356</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_ctd_cast</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">calcofi_ctd-cast_sample</td>
 <td style="text-align: left;">sample</td>
-<td style="text-align: right;">19242</td>
+<td style="text-align: right;">19834</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_ctd_cast_sample</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_ctd-derived</td>
+<td style="text-align: left;">calcofi_ctd-derived</td>
+<td style="text-align: left;">obs</td>
+<td style="text-align: right;">2026530</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">calcofi_ctd_derived</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_dic</td>
 <td style="text-align: left;">calcofi_dic</td>
 <td style="text-align: left;">obs</td>
-<td style="text-align: right;">3708</td>
+<td style="text-align: right;">16389</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_dic</td>
 </tr>
@@ -1053,7 +1122,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">calcofi_dic</td>
 <td style="text-align: left;">calcofi_dic_sample</td>
 <td style="text-align: left;">sample</td>
-<td style="text-align: right;">3261</td>
+<td style="text-align: right;">3263</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_dic_sample</td>
 </tr>
@@ -1109,7 +1178,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">calcofi_phytoplankton</td>
 <td style="text-align: left;">calcofi_phytoplankton</td>
 <td style="text-align: left;">obs</td>
-<td style="text-align: right;">159804</td>
+<td style="text-align: right;">155553</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">calcofi_phytoplankton</td>
 </tr>
@@ -1136,6 +1205,22 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">7482</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">cce_lter_euphausiids_sample</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: left;">obs</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">cce_lter_iron</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: left;">cce-lter_iron_sample</td>
+<td style="text-align: left;">sample</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">cce_lter_iron_sample</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">cce-lter_picoplankton-bacteria</td>
@@ -1261,7 +1346,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">swfsc_cufes</td>
 <td style="text-align: left;">swfsc_cufes</td>
 <td style="text-align: left;">obs</td>
-<td style="text-align: right;">284097</td>
+<td style="text-align: right;">550162</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">swfsc_cufes</td>
 </tr>
@@ -1269,7 +1354,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">swfsc_cufes</td>
 <td style="text-align: left;">swfsc_cufes_sample</td>
 <td style="text-align: left;">sample</td>
-<td style="text-align: right;">49572</td>
+<td style="text-align: right;">47989</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">swfsc_cufes_sample</td>
 </tr>
@@ -1277,7 +1362,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">swfsc_ichthyo</td>
 <td style="text-align: left;">swfsc_ichthyo</td>
 <td style="text-align: left;">obs</td>
-<td style="text-align: right;">482250</td>
+<td style="text-align: right;">487616</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">swfsc_ichthyo</td>
 </tr>
@@ -1285,7 +1370,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">swfsc_ichthyo</td>
 <td style="text-align: left;">swfsc_ichthyo_attribute</td>
 <td style="text-align: left;">obs_attribute</td>
-<td style="text-align: right;">369978</td>
+<td style="text-align: right;">367094</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">swfsc_ichthyo_attribute</td>
 </tr>
@@ -1293,7 +1378,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">swfsc_ichthyo</td>
 <td style="text-align: left;">swfsc_ichthyo_sample</td>
 <td style="text-align: left;">sample</td>
-<td style="text-align: right;">213122</td>
+<td style="text-align: right;">212249</td>
 <td style="text-align: left;">NA</td>
 <td style="text-align: left;">swfsc_ichthyo_sample</td>
 </tr>
@@ -1374,8 +1459,28 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </thead>
 <tbody>
 <tr class="odd">
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: right;">148</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: left;">2022-10-13 20:50:00</td>
+<td style="text-align: left;">2022-10-19 03:50:00</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_2022-edna_sample</td>
+<td style="text-align: right;">47</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: left;">2022-10-13 20:50:00</td>
+<td style="text-align: left;">2022-10-19 03:50:00</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">calcofi_bottle</td>
-<td style="text-align: right;">11135581</td>
+<td style="text-align: right;">11135334</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1949-02-28 22:42:00</td>
@@ -1385,7 +1490,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_bottle_sample</td>
-<td style="text-align: right;">931015</td>
+<td style="text-align: right;">930997</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1949-02-28 22:42:00</td>
@@ -1394,48 +1499,68 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">NA</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">calcofi_ctd-cast_full</td>
-<td style="text-align: right;">275231999</td>
+<td style="text-align: left;">calcofi_bottle-derived</td>
+<td style="text-align: right;">1683308</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
-<td style="text-align: left;">1993-08-11 12:05:46</td>
-<td style="text-align: left;">2026-07-13 15:11:54</td>
+<td style="text-align: left;">1949-02-28 22:42:00</td>
+<td style="text-align: left;">2021-02-03 21:18:31</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">NA</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">calcofi_ctd-cast</td>
-<td style="text-align: right;">18126607</td>
+<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: right;">286046006</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1993-08-11 12:05:46</td>
-<td style="text-align: left;">2026-07-13 15:05:32</td>
+<td style="text-align: left;">2026-11-10 08:18:44</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">NA</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">calcofi_ctd-cast_sample</td>
-<td style="text-align: right;">19242</td>
+<td style="text-align: left;">calcofi_ctd-cast</td>
+<td style="text-align: right;">19064356</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1993-08-11 12:05:46</td>
-<td style="text-align: left;">2026-07-13 15:05:36</td>
+<td style="text-align: left;">2026-11-10 08:15:55</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_ctd-cast_sample</td>
+<td style="text-align: right;">19834</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: left;">1993-08-11 12:05:46</td>
+<td style="text-align: left;">2026-11-10 08:16:07</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">calcofi_ctd-derived</td>
+<td style="text-align: right;">2026530</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: left;">1993-08-11 12:05:46</td>
+<td style="text-align: left;">2026-11-10 08:15:55</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">NA</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_dic</td>
-<td style="text-align: right;">3708</td>
+<td style="text-align: right;">16389</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1983-03-19</td>
-<td style="text-align: left;">2021-01-20</td>
+<td style="text-align: left;">2021-07-20</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">NA</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_dic_sample</td>
-<td style="text-align: right;">3261</td>
+<td style="text-align: right;">3263</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1983-06-15</td>
@@ -1505,7 +1630,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="even">
 <td style="text-align: left;">calcofi_phytoplankton</td>
-<td style="text-align: right;">159804</td>
+<td style="text-align: right;">155553</td>
 <td style="text-align: right;">0.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">NA</td>
@@ -1540,6 +1665,26 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1951-01-18 04:11:00</td>
 <td style="text-align: left;">2019-04-17 11:11:00</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: left;">2002-11-11 07:23:00</td>
+<td style="text-align: left;">2004-07-27 19:47:00</td>
+<td style="text-align: left;">TRUE</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_iron_sample</td>
+<td style="text-align: right;">170</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: right;">100.0</td>
+<td style="text-align: left;">2002-11-11 07:23:00</td>
+<td style="text-align: left;">2004-07-27 19:47:00</td>
 <td style="text-align: left;">TRUE</td>
 <td style="text-align: left;">NA</td>
 </tr>
@@ -1695,9 +1840,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: right;">284097</td>
+<td style="text-align: right;">550162</td>
 <td style="text-align: right;">100.0</td>
-<td style="text-align: right;">96.9</td>
+<td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1996-03-15 23:40:00</td>
 <td style="text-align: left;">2022-04-27 10:00:04</td>
 <td style="text-align: left;">TRUE</td>
@@ -1705,9 +1850,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_cufes_sample</td>
-<td style="text-align: right;">49572</td>
+<td style="text-align: right;">47989</td>
 <td style="text-align: right;">100.0</td>
-<td style="text-align: right;">96.8</td>
+<td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1996-03-15 23:40:00</td>
 <td style="text-align: left;">2022-04-27 10:00:04</td>
 <td style="text-align: left;">TRUE</td>
@@ -1715,7 +1860,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_ichthyo</td>
-<td style="text-align: right;">482250</td>
+<td style="text-align: right;">487616</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1951-01-09 18:16:00</td>
@@ -1725,7 +1870,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="even">
 <td style="text-align: left;">swfsc_ichthyo_attribute</td>
-<td style="text-align: right;">369978</td>
+<td style="text-align: right;">367094</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1951-01-10 03:40:00</td>
@@ -1735,7 +1880,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td style="text-align: left;">swfsc_ichthyo_sample</td>
-<td style="text-align: right;">213122</td>
+<td style="text-align: right;">212249</td>
 <td style="text-align: right;">98.5</td>
 <td style="text-align: right;">100.0</td>
 <td style="text-align: left;">1951-01-09 18:16:00</td>
@@ -1794,7 +1939,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </tr>
 <tr class="odd">
 <td style="text-align: left;">calcofi_phytoplankton</td>
-<td style="text-align: right;">159804</td>
+<td style="text-align: right;">155553</td>
 <td style="text-align: right;">0.0</td>
 <td style="text-align: right;">100.0</td>
 </tr>
@@ -1823,20 +1968,8 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: right;">98.9</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">swfsc_cufes</td>
-<td style="text-align: right;">284097</td>
-<td style="text-align: right;">100.0</td>
-<td style="text-align: right;">96.9</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">swfsc_cufes_sample</td>
-<td style="text-align: right;">49572</td>
-<td style="text-align: right;">100.0</td>
-<td style="text-align: right;">96.8</td>
-</tr>
-<tr class="even">
 <td style="text-align: left;">swfsc_ichthyo_sample</td>
-<td style="text-align: right;">213122</td>
+<td style="text-align: right;">212249</td>
 <td style="text-align: right;">98.5</td>
 <td style="text-align: right;">100.0</td>
 </tr>
@@ -1875,14 +2008,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb24-23"><a href="#cb24-23" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"validated views: {length(v_local)}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>validated views: 37</code></pre>
+<pre><code>validated views: 43</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"duckdb engine  : {readLines(file.path(dir_erddap, 'BUILD_VERSION.txt'))[1]}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>duckdb engine  : v1.5.5</code></pre>
+<pre><code>duckdb engine  : v2.0.0</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -1940,7 +2073,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb29-46"><a href="#cb29-46" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wrote {basename(script_path)} ({length(script)} lines, parses clean)</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>wrote build_erddap_db.R (67 lines, parses clean)</code></pre>
+<pre><code>wrote build_erddap_db.R (73 lines, parses clean)</code></pre>
 </div>
 </div>
 </section>
@@ -2106,7 +2239,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb31-156"><a href="#cb31-156" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <ul>
-<li><code>calcofi_bottle</code>: 2 cols, 11135581 rows- <code>calcofi_bottle_sample</code>: 2 cols, 931015 rows- <code>calcofi_ctd-cast_full</code>: 2 cols, 275231999 rows- <code>calcofi_ctd-cast</code>: 2 cols, 18126607 rows- <code>calcofi_ctd-cast_sample</code>: 2 cols, 19242 rows- <code>calcofi_dic</code>: 2 cols, 3708 rows- <code>calcofi_dic_sample</code>: 2 cols, 3261 rows- <code>calcofi_mets_full</code>: 2 cols, 19926523 rows- <code>calcofi_mets</code>: 2 cols, 511395 rows- <code>calcofi_mets_sample</code>: 2 cols, 77791 rows- <code>calcofi_phyllosoma</code>: 2 cols, 1859 rows- <code>calcofi_phyllosoma_attribute</code>: 2 cols, 369 rows- <code>calcofi_phyllosoma_sample</code>: 2 cols, 1859 rows- <code>calcofi_phytoplankton</code>: 2 cols, 159804 rows- <code>calcofi_phytoplankton_sample</code>: 2 cols, 409 rows- <code>cce-lter_euphausiids</code>: 2 cols, 100505 rows- <code>cce-lter_euphausiids_sample</code>: 2 cols, 7482 rows- <code>cce-lter_picoplankton-bacteria</code>: 2 cols, 60802 rows- <code>cce-lter_picoplankton-bacteria_sample</code>: 2 cols, 16017 rows- <code>cce-lter_zoodb</code>: 2 cols, 30948 rows- <code>cce-lter_zoodb_sample</code>: 2 cols, 506 rows- <code>cce-lter_zooscan</code>: 2 cols, 126692 rows- <code>cce-lter_zooscan_sample</code>: 2 cols, 1483 rows- <code>cdfw_dungeness-crab</code>: 2 cols, 1456 rows- <code>cdfw_dungeness-crab_attribute</code>: 2 cols, 24 rows- <code>cdfw_dungeness-crab_sample</code>: 2 cols, 526 rows- <code>farallon_bird-mammal</code>: 2 cols, 69661 rows- <code>farallon_bird-mammal_attribute</code>: 2 cols, 87813 rows- <code>farallon_bird-mammal_sample</code>: 2 cols, 64421 rows- <code>sio_mesopelagic-fish</code>: 2 cols, 1393 rows- <code>sio_mesopelagic-fish_sample</code>: 2 cols, 102 rows- <code>sio_pic-zooplankton_sample</code>: 2 cols, 82343 rows- <code>swfsc_cufes</code>: 2 cols, 284097 rows- <code>swfsc_cufes_sample</code>: 2 cols, 49572 rows- <code>swfsc_ichthyo</code>: 2 cols, 482250 rows- <code>swfsc_ichthyo_attribute</code>: 2 cols, 369978 rows- <code>swfsc_ichthyo_sample</code>: 2 cols, 213122 rows</li>
+<li><code>calcofi_2022-edna</code>: 2 cols, 148 rows- <code>calcofi_2022-edna_sample</code>: 2 cols, 47 rows- <code>calcofi_bottle</code>: 2 cols, 11135334 rows- <code>calcofi_bottle_sample</code>: 2 cols, 930997 rows- <code>calcofi_bottle-derived</code>: 2 cols, 1683308 rows- <code>calcofi_ctd-cast_full</code>: 2 cols, 286046006 rows- <code>calcofi_ctd-cast</code>: 2 cols, 19064356 rows- <code>calcofi_ctd-cast_sample</code>: 2 cols, 19834 rows- <code>calcofi_ctd-derived</code>: 2 cols, 2026530 rows- <code>calcofi_dic</code>: 2 cols, 16389 rows- <code>calcofi_dic_sample</code>: 2 cols, 3263 rows- <code>calcofi_mets_full</code>: 2 cols, 19926523 rows- <code>calcofi_mets</code>: 2 cols, 511395 rows- <code>calcofi_mets_sample</code>: 2 cols, 77791 rows- <code>calcofi_phyllosoma</code>: 2 cols, 1859 rows- <code>calcofi_phyllosoma_attribute</code>: 2 cols, 369 rows- <code>calcofi_phyllosoma_sample</code>: 2 cols, 1859 rows- <code>calcofi_phytoplankton</code>: 2 cols, 155553 rows- <code>calcofi_phytoplankton_sample</code>: 2 cols, 409 rows- <code>cce-lter_euphausiids</code>: 2 cols, 100505 rows- <code>cce-lter_euphausiids_sample</code>: 2 cols, 7482 rows- <code>cce-lter_iron</code>: 2 cols, 170 rows- <code>cce-lter_iron_sample</code>: 2 cols, 170 rows- <code>cce-lter_picoplankton-bacteria</code>: 2 cols, 60802 rows- <code>cce-lter_picoplankton-bacteria_sample</code>: 2 cols, 16017 rows- <code>cce-lter_zoodb</code>: 2 cols, 30948 rows- <code>cce-lter_zoodb_sample</code>: 2 cols, 506 rows- <code>cce-lter_zooscan</code>: 2 cols, 126692 rows- <code>cce-lter_zooscan_sample</code>: 2 cols, 1483 rows- <code>cdfw_dungeness-crab</code>: 2 cols, 1456 rows- <code>cdfw_dungeness-crab_attribute</code>: 2 cols, 24 rows- <code>cdfw_dungeness-crab_sample</code>: 2 cols, 526 rows- <code>farallon_bird-mammal</code>: 2 cols, 69661 rows- <code>farallon_bird-mammal_attribute</code>: 2 cols, 87813 rows- <code>farallon_bird-mammal_sample</code>: 2 cols, 64421 rows- <code>sio_mesopelagic-fish</code>: 2 cols, 1393 rows- <code>sio_mesopelagic-fish_sample</code>: 2 cols, 102 rows- <code>sio_pic-zooplankton_sample</code>: 2 cols, 82343 rows- <code>swfsc_cufes</code>: 2 cols, 550162 rows- <code>swfsc_cufes_sample</code>: 2 cols, 47989 rows- <code>swfsc_ichthyo</code>: 2 cols, 487616 rows- <code>swfsc_ichthyo_attribute</code>: 2 cols, 367094 rows- <code>swfsc_ichthyo_sample</code>: 2 cols, 212249 rows</li>
 </ul>
 <div class="cell">
 <details class="code-fold">
@@ -2125,7 +2258,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"wrote {length(blocks)} dataset blocks to data/erddap/datasets_calcofi.xml</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>wrote 37 dataset blocks to data/erddap/datasets_calcofi.xml</code></pre>
+<pre><code>wrote 43 dataset blocks to data/erddap/datasets_calcofi.xml</code></pre>
 </div>
 </div>
 </section>
@@ -2165,7 +2298,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"1. synced {n_pq} parquet files to {ERDDAP_ROOT}/datasets/release/{RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>1. synced 386 parquet files to /share/data/erddap-duckdb/datasets/release/v2026.09.11</code></pre>
+<pre><code>1. synced 424 parquet files to /share/data/erddap-duckdb/datasets/release/v2026.11.26</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -2173,7 +2306,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"2. built view db ({sum(grepl('rows$', built))} views, none empty)</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>2. built view db (37 views, none empty)</code></pre>
+<pre><code>2. built view db (43 views, none empty)</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -2182,7 +2315,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb40-3"><a href="#cb40-3" aria-hidden="true" tabindex="-1"></a>         <span class="st">"added {length(ids$added)}, changed {length(ids$changed)}, retiring {length(ids$retired)}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>3. spliced 37 generated + 8 hand-maintained; added 0, changed 37, retiring 0</code></pre>
+<pre><code>3. spliced 43 generated + 8 hand-maintained; added 0, changed 0, retiring 0</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -2202,7 +2335,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb42-14"><a href="#cb42-14" aria-hidden="true" tabindex="-1"></a>} <span class="cf">else</span> <span class="fu">cat</span>(<span class="st">"4. no dataset definition changed — nothing flagged</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>4. flagged 37 for reload</code></pre>
+<pre><code>4. no dataset definition changed — nothing flagged</code></pre>
 </div>
 <details class="code-fold">
 <summary>Code</summary>
@@ -2230,6 +2363,20 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </thead>
 <tbody>
 <tr class="odd">
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: left;">calcofi_2022-edna</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: left;">TRUE</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_2022-edna_sample</td>
+<td style="text-align: left;">calcofi_2022-edna_sample</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: left;">TRUE</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: left;">calcofi_bottle</td>
 <td style="text-align: right;">200</td>
@@ -2244,22 +2391,36 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <td style="text-align: left;">TRUE</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">calcofi_ctd-cast_full</td>
-<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: left;">calcofi_bottle-derived</td>
+<td style="text-align: left;">calcofi_bottle-derived</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: left;">TRUE</td>
 </tr>
 <tr class="even">
+<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: left;">calcofi_ctd-cast_full</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: left;">TRUE</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: left;">calcofi_ctd-cast</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: left;">TRUE</td>
 </tr>
+<tr class="even">
+<td style="text-align: left;">calcofi_ctd-cast_sample</td>
+<td style="text-align: left;">calcofi_ctd-cast_sample</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: left;">TRUE</td>
+</tr>
 <tr class="odd">
-<td style="text-align: left;">calcofi_ctd-cast_sample</td>
-<td style="text-align: left;">calcofi_ctd-cast_sample</td>
+<td style="text-align: left;">calcofi_ctd-derived</td>
+<td style="text-align: left;">calcofi_ctd-derived</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: left;">TRUE</td>
@@ -2344,6 +2505,20 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tr class="odd">
 <td style="text-align: left;">cce-lter_euphausiids_sample</td>
 <td style="text-align: left;">cce-lter_euphausiids_sample</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: left;">TRUE</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: left;">cce-lter_iron</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: left;">TRUE</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">cce-lter_iron_sample</td>
+<td style="text-align: left;">cce-lter_iron_sample</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: right;">200</td>
 <td style="text-align: left;">TRUE</td>
@@ -2513,7 +2688,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb46-12"><a href="#cb46-12" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">glue</span>(<span class="st">"erddap.calcofi.io serves {st$deployed_release %||% 'an unknown release'}; the release is {RELEASE}</span><span class="sc">\n</span><span class="st">"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>erddap.calcofi.io serves v2026.09.11; the release is v2026.09.11</code></pre>
+<pre><code>erddap.calcofi.io serves v2026.11.26; the release is v2026.11.26</code></pre>
 </div>
 </div>
 <div class="callout callout-style-default callout-note callout-titled" title="What deploying does, and the traps it encodes">
@@ -2656,16 +2831,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     }
     function toggleCodeHandler(show) {
       return function(e) {
-        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
-        for (let i=0; i<detailsSrc.length; i++) {
-          const details = detailsSrc[i].parentElement;
+        const cellDetails = window.document.querySelectorAll(".cell details.code-fold");
+        for (let i=0; i<cellDetails.length; i++) {
+          const details = cellDetails[i];
           if (show) {
             details.open = true;
           } else {
             details.removeAttribute("open");
           }
         }
-        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const cellCodeDivs = window.document.querySelectorAll(".cell div.sourceCode.cell-code");
         const fromCls = show ? "hidden" : "unhidden";
         const toCls = show ? "unhidden" : "hidden";
         for (let i=0; i<cellCodeDivs.length; i++) {
