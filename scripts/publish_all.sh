@@ -50,6 +50,16 @@ RELEASE=$(curl -sf --max-time 60 https://storage.googleapis.com/calcofi-db/duckl
 [ -n "$RELEASE" ] || { echo "could not resolve the promoted release" >&2; exit 1; }
 echo "==> publishing for $RELEASE (dry run: $DRY; legs: $ONLY; logs: $LOG_DIR)"
 
+# the ERDDAP leg splices its config into a checkout of the erddap repo beside this one and pushes
+# it; with no checkout it failed at "erddap config not found" after syncing 424 objects
+# (2026-11-26). Clone it from the same remote this repo came from, and bring it up to date.
+case ",$ONLY," in *",erddap,"*)
+  E="$(cd .. && pwd)/erddap"
+  [ -d "$E/.git" ] || git clone -q "$(git remote get-url origin | sed -E 's#/workflows(\.git)?$#/erddap.git#')" "$E" ||
+    { echo "could not clone the erddap repo to $E" >&2; exit 1; }
+  git -C "$E" pull -q --ff-only || { echo "the erddap checkout at $E would not fast-forward" >&2; exit 1; } ;;
+esac
+
 fail=0
 leg() { # name, flag (or -), notebook
   local name=$1 flag=$2 nb=$3 log="$LOG_DIR/publish_${1}_${RELEASE}.log" start rc

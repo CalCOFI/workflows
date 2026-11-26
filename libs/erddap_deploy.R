@@ -96,7 +96,10 @@ erddap_sync_parquet <- function(host, erddap_root, release, gcs_bucket = "calcof
     # mkdir its partition dir and copy; 8 in flight
     "&& (while read -r src dst; do",
     "     [ -s \"$dst\" ] && continue; mkdir -p \"$(dirname \"$dst\")\"; echo \"$src $dst\"; done < %s",
-    "   | xargs -P 8 -n 2 sh -c 'gsutil -q cp \"$0\" \"$1\"')",
+    # -r: with every object already in place the loop prints nothing, and GNU xargs would
+    # otherwise run the copy once with no arguments ("No URLs matched: sh") and fail a
+    # deploy that had nothing to do (seen 2026-11-26, the second publisher pass)
+    "   | xargs -r -P 8 -n 2 sh -c 'gsutil -q cp \"$0\" \"$1\"')",
     "&& gsutil -m cp -r gs://%s/ingest/calcofi_mets %s/datasets/ingest/"),
     erddap_root, release, remote, gcs_bucket, erddap_root)
   ssh_run(host, cmd, sprintf("parquet sync (%d objects)", length(pairs)))
